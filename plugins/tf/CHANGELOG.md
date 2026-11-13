@@ -13,6 +13,11 @@ All notable changes to the `tf` plugin are documented here. The format follows
 - Setup leaves the app servers running for the whole run instead of smoke-and-stop.
 
 ### Added
+- `/tf:feedback <ticket|PR> [--check]`: the team's review on our PRs. `scripts/pr-feedback.mjs` fetches
+  unresolved threads (stable ids `R<n>`), reviews and conversation comments; the PM triages each point
+  (fix / discuss / answered / out-of-scope), fixes only `fix` points on the same PR (tester only for flows the
+  fix touches, `close.noTest` for non-behaviour fixes) and drafts one reply per thread; the orchestrator posts
+  and resolves after approval. `/tf:qc` no longer folds PR reviews in.
 - `scripts/serve.mjs`: start/reuse/stop the task's app servers from the workspace config `## Servers`
   (task ports, DB, cache filled in, health-checked, logs in `<task>/logs/`), ad-hoc processes via `run`;
   servers are `run-end` resources, so `end-run` stops them. Devs and testers use it instead of hand-made commands.

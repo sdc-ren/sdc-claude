@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](https://code.claude.com/docs/en/plugins/install.md)
 
-`/tf:build` · `/tf:qc` · `/tf:review` · `/tf:e2e`
+`/tf:build` · `/tf:qc` · `/tf:feedback` · `/tf:review` · `/tf:e2e`
 
 </div>
 
@@ -60,13 +60,14 @@ Then, in your workspace (the folder that holds your repos):
 
 ## Commands
 
-Six commands. The four task commands take a **ticket key** (`PROJ-123`), a **PR URL**
+Seven commands. The five task commands take a **ticket key** (`PROJ-123`), a **PR URL**
 (`https://github.com/org/repo/pull/12`) or, for `build`, plain text. Everything after the input is optional.
 
 | Command | Use it to |
 |---|---|
 | [`/tf:build`](#tfbuild) | Do a new task end to end |
-| [`/tf:qc`](#tfqc) | Answer a QC report or PR review points on a task tf already did |
+| [`/tf:qc`](#tfqc) | Answer a QC report on a task tf already did |
+| [`/tf:feedback`](#tffeedback) | Check and answer the team's review on the PRs tf pushed |
 | [`/tf:review`](#tfreview) | Review a teammate's PR (e2e + risk report, no code changes) |
 | [`/tf:e2e`](#tfe2e) | Run e2e only, or the regression suite |
 | [`/tf:status`](#tfstatus) | See what tasks hold; check the machine |
@@ -77,8 +78,9 @@ Six commands. The four task commands take a **ticket key** (`PROJ-123`), a **PR 
 | Option | Works with | Effect |
 |---|---|---|
 | `--attach` | build · qc · review · e2e | Before the PM starts, show a checkbox list of this workspace's artifacts and design systems; ticked items are read into `specs/` and used by the PM, devs and testers |
-| `--lang <code>` | build · qc · review · e2e | Report language for this run (`vi`, `en`, …); overrides the workspace config |
+| `--lang <code>` | build · qc · feedback · review · e2e | Report language for this run (`vi`, `en`, …); overrides the workspace config |
 | `--approve` | build · qc | Stop after the PM writes the plan and wait for your approval |
+| `--check` | feedback | Only fetch and triage the review points — no code, nothing posted |
 | `--draft` | build · qc | Allow a draft PR. Without it every PR is opened ready, and agents never choose draft |
 | pasted `https://claude.ai/artifact/…` | build · qc · review · e2e | Attach that artifact directly (same as ticking it) |
 
@@ -106,13 +108,39 @@ with a **ready PR per changed repo**, e2e evidence and a ticket-comment draft.
 /tf:qc <ticket> [--attach] [--approve] [--draft] [--lang <code>]
 ```
 
-Next round of a ticket tf already did: re-reads the ticket (new or edited QC comments) and the human review
-comments on its PRs, reproduces the reported cases with the saved flows, fixes only those, re-tests, and
-pushes to the same PR (or opens a new one if the old PR was merged). Ends with a QC-reply draft.
-Attachments from earlier rounds are reused.
+Next round of a ticket tf already did: re-reads the ticket (new or edited QC comments), reproduces the
+reported cases with the saved flows, fixes only those, re-tests, and pushes to the same PR (or opens a new
+one if the old PR was merged). Ends with a QC-reply draft. Attachments from earlier rounds are reused.
+Review comments from teammates on the PRs go through `/tf:feedback`.
 
 ```
 /tf:qc PROJ-123
+```
+
+### `/tf:feedback`
+
+```
+/tf:feedback <ticket | PR url> [--check] [--lang <code>]
+```
+
+After a teammate reviewed a PR tf pushed. Fetches every **unresolved** review thread (ids `R1`, `R2`… stable
+across runs), the reviews and the conversation comments of the task's open PRs — no Jira re-read. The PM
+triages each point (a long review comment is split into points):
+
+| Verdict | Meaning |
+|---|---|
+| `fix` | Fixed on the same PR branch: dev → reviewer gate → tester (only the flows the fix touches; none for naming/comments/types) → push |
+| `discuss` | We disagree — with a concrete reason (ticket, decision, workspace rule, code) |
+| `answered` | A question; reply only |
+| `out-of-scope` | Belongs to another ticket |
+
+Ends with `feedback-triage.md` and one reply draft per thread (`feedback-replies.md`). Nothing is posted until
+you approve the text; fixed threads are resolved, discussed ones stay open for the reviewer.
+
+```
+/tf:feedback PROJ-123 --check     # what did the team say? triage only
+/tf:feedback PROJ-123             # fix, push, draft replies
+/tf:feedback https://github.com/org/api/pull/665
 ```
 
 ### `/tf:review`

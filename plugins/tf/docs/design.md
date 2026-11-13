@@ -51,6 +51,7 @@ The roster is a menu. The PM uses the fewest roles that satisfy the hard rules.
 |---|---|---|---|
 | `/tf:build <ticket|text>` | build | setup, dev, tester, reviewer | PR(s) ready |
 | `/tf:qc <ticket>` | qc | setup, dev, tester, reviewer | existing PR updated (or new PR if merged) |
+| `/tf:feedback <ticket|PR> [--check]` | feedback | setup, dev, tester, reviewer (none with `--check`) | triage, fixes pushed to the same PR, reply drafts |
 | `/tf:review <PR|ticket>` | review | setup, tester, reviewer | review report + PR/ticket comment drafts |
 | `/tf:e2e <PR|ticket> [--cases a,b]` | e2e | setup, tester | EVD + ticket comment draft |
 
@@ -64,6 +65,8 @@ Flags: `--approve` (stop for the user after the first plan), `--draft` (user all
 3. Code modes cannot close until, for every repo a dev touched: every tester after the last dev job
    passed (and one covers the repo), and a reviewer `PACKAGE` job that started after that PASS reported
    `SHIP` with a PR URL. `close.noChange` still needs a tester PASS.
+3a. feedback mode: no dev job → `close.noChange`; a fix with no behaviour change may close with
+   `close.noTest` (no tester ran) but still needs a PACKAGE after the last dev; `--check` allows no jobs at all.
 3b. When a job in a group is not `done`, or a reviewer gate returns `NEEDS-WORK`/`BLOCK`, the later groups of that
    dispatch are skipped and the PM decides.
 3c. Gate before test (build/qc): a reviewer gate and the tester it precedes never share a group — a
