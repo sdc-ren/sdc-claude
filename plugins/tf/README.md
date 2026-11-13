@@ -73,6 +73,9 @@ Then, in your workspace (the folder that holds your repos):
 | `/tf:legacy` | Fold old suffixed folders (`-e2e`, `-qc`, `-r2`…) into one folder per ticket | Dry run, then apply on your yes |
 | `/tf:regression [--target local\|dev]` | Run flows promoted from merged tickets | PASS/FAIL per case |
 
+**Attach with `@`** — type `@` and pick this workspace's artifacts / design systems (listed by the plugin's
+`artifacts` MCP server), e.g. `/tf:build PROJ-12 @Checkout redesign @Brand DS`.
+
 **Flags** — `--attach`: pick this workspace's artifacts / design system for the task · `--approve`: stop after the first plan for your approval · `--draft`: allow a draft PR (agents
 never choose draft on their own) · `--lang <code>`: report language for this run.
 

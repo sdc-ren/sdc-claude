@@ -12,6 +12,8 @@ All notable changes to the `tf` plugin are documented here. The format follows
   automatically from what was created in this workspace's sessions (`scripts/artifacts-local.mjs`), what
   earlier tasks attached, and titles matching the workspace (folder name, ticket prefixes, optional
   `Match:`). Other projects' artifacts never appear.
+- `artifacts` MCP server: this workspace's artifacts and design systems appear in the `@` mention list;
+  mentioning them in a `/tf:*` command attaches them to the task.
 - Picked items are read into `.pipeline/<TICKET>/specs/` and recorded in `attachments.json`; the PM plans
   from them, devs use the design system's tokens and components, testers check UI against it. Later rounds
   reuse them.

@@ -55,7 +55,8 @@ language; `writingLang` = `Writing language` → a `Writing language:` line in t
    (`gh pr view <url> --comments` and `gh api repos/<o>/<r>/pulls/<n>/comments`) under `## PR review comments`,
    new ones marked — the PM treats P0–P2 review points like QC bugs. PR input: add `gh pr view <url> --json title,body,headRefName,baseRefName,files`
    and the PR URL to ticket.md. No ticket → write the user's text.
-6b. **Attachments** — `--attach` given → run `<PLUGIN>/docs/attach.md` for this task now. Otherwise, if
+6b. **Attachments** — `artifact://` resources mentioned with `@` in the command are attached directly
+   (attach.md, `@` mentions). `--attach` given → run `<PLUGIN>/docs/attach.md` for this task now. Otherwise, if
    `<dir>/attachments.json` exists from an earlier round, reuse it silently. Never show artifacts that do
    not belong to this workspace (see attach.md).
 7. **Session title** — `<SLUG> · <3–6 word summary>` via `mcp__ccd_session_mgmt__set_session_title`
