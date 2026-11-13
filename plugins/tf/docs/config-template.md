@@ -43,6 +43,19 @@ Keep sections short; link to longer docs instead of copying them.
 - Project helper module flows may import: <path, or "none">.
 - Web viewport: <e.g. 1440x900>. Android: AVD `<name>`, appId `<id>`. iOS: <recipe or "out of scope">.
 
+## Servers (`serve.mjs` starts them once per run; jobs reuse them; `end-run` stops them)
+Placeholders: `{port}` `{port:<server>}` `{db}` `{cache}` `{wt}` `{root}` `{slug}` `{dir}` (from the task's
+resources). `"optional": true` = only when named. Put every env override the local app needs here
+(feature flags off, dry-run senders) so no job composes a start command by hand.
+```json
+{
+  "be": { "dir": "<backend dir>", "port": true, "cmd": "<dev command>", "timeout": 120,
+          "env": { "PORT": "{port}", "<DB env>": "{db}" }, "health": "http://localhost:{port}/health" },
+  "fe": { "dir": "<frontend dir>", "port": true, "cmd": "<dev command> --port {port}",
+          "env": { "<API url env>": "http://localhost:{port:be}" }, "health": "http://localhost:{port}/" }
+}
+```
+
 ## Provisioning (setup job follows this; register every resource with `resources.mjs add`)
 | kind | allocate | `--release` | `--stop` |
 |---|---|---|---|

@@ -44,11 +44,18 @@ Never edit repo code, never checkout/commit, never post anything anywhere.
 No new unit tests unless the config `Test policy` allows them; verification is the e2e flows.
 
 ## Dispatch rules
-- Use the fewest roles that work. Typical build: group 1 dev(s) → group 2 tester ∥ reviewer (gate) →
-  next turn, after PASS + clean gate: one reviewer job per repo whose brief starts with `PACKAGE`
-  (sonnet or haiku) → close. The executor only accepts a PR from a reviewer job that started after the
-  tester PASS. Devs on different repos run in parallel (same group) once the contract is in plan.md.
+- Use the fewest roles that work. Typical build: group 1 dev(s) → group 2 reviewer gate per repo →
+  group 3 tester → next turn, after clean gate + PASS: one reviewer job per repo whose brief starts with
+  `PACKAGE` (sonnet or haiku) → close. The executor only accepts a PR from a reviewer job that started
+  after the tester PASS. Devs on different repos run in parallel (same group) once the contract is in plan.md.
   Judges (tester, reviewer) always go in a later group than the dev they judge.
+- Gate before test (build/qc, enforced): a reviewer gate never shares a group with the tester. A gate
+  `NEEDS-WORK`/`BLOCK` makes the executor skip the tester and hand you the report — fold its P0–P2 into
+  the fix job, then gate → test again. P3/INFO never trigger another dev or test cycle: list them for the
+  PACKAGE brief (fix only if trivial and the same dev job is already running) or under Open issues.
+- Plan every case with the data it needs (`C2c — needs a ROSTER_IMPORT tournament in status CANCELLED`),
+  so the tester seeds it instead of testing whatever the DB clone happens to hold. Fold every branch a
+  reviewer or an earlier round flagged into the cases up front — a branch nobody tested costs a round.
 - If a group fails (a job blocked or failed), the executor skips the later groups of that dispatch and
   hands you the reports — re-plan from there.
 - Branch names, commit messages, PR titles follow `${CLAUDE_PLUGIN_ROOT}/guidelines/git.md`
@@ -58,9 +65,11 @@ No new unit tests unless the config `Test policy` allows them; verification is t
 - Pick each job's model: sonnet by default; opus for risky logic (money, auth, permissions,
   concurrency, migrations) or hard judgement; haiku only for mechanical work.
 - `setup` only when the task lacks resources it needs (worktree, DB, ports, emulator/APK). Reuse first.
+  The app servers stay up for the whole run (`serve.mjs`, config `## Servers`): with resources already
+  held, no setup job is needed just to start them — the first dev/tester job's `serve.mjs start` does it.
 - Briefs are short and point at `plan.md#<repo>` / cases instead of repeating them. Give `reads`.
-- Fix rounds: send the dev only the open issue ids; then the tester re-runs only the failing cases
-  (`flow-run.mjs --failed`) plus a smoke case. Merge tester bugs and reviewer P0–P2 points into ONE
+- Fix rounds: send the dev only the open issue ids; then a gate on the fix; then the tester re-runs only
+  the failing cases (`flow-run.mjs --failed`) plus a smoke case — never the whole suite again. Merge tester bugs and reviewer P0–P2 points into ONE
   fix job per repo. Same issue failing after 3 fix attempts → escalate.
 - qc mode: `ticket.md` also carries human PR review comments; P0–P2 points are in scope like QC bugs.
   First job is usually the tester reproducing the reported cases with the existing flows

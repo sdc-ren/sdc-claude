@@ -138,6 +138,13 @@ const compact = (r) => ({
 })
 
 // ── Guards ───────────────────────────────────────────────────────────────────
+const isPackage = (j) => /^\s*PACKAGE\b/.test(j.brief || '')
+// A job that did not finish, or a reviewer gate asking for changes: later groups (the tester) would judge
+// code that is about to change, so they are skipped and the PM re-plans.
+const stopsLaterGroups = (r) =>
+  !r.report || r.report.status !== 'done' ||
+  (r.job.role === 'reviewer' && !isPackage(r.job) && mode !== 'review' && ['NEEDS-WORK', 'BLOCK'].includes(r.report.verdict))
+
 function checkDispatch(d) {
   const jobs = d.jobs || []
   if (!jobs.length) return 'decision=dispatch needs at least one job'
@@ -160,6 +167,12 @@ function checkDispatch(d) {
     const devRepos = new Set(g.filter((j) => j.role === 'dev').map((j) => j.repo))
     const judge = g.find((j) => (j.role === 'tester' || j.role === 'reviewer') && (devRepos.has(j.repo) || (j.repo === 'all' && devRepos.size)))
     if (judge) return `${judge.id} (${judge.role}) runs in the same group as a dev job on ${judge.repo} — put judges in a later group`
+    // Gate before test (build/qc): a NEEDS-WORK gate in parallel with the tester throws the test run away.
+    if (mode === 'build' || mode === 'qc') {
+      const gate = g.find((j) => j.role === 'reviewer' && !isPackage(j))
+      const tester = gate && g.find((j) => j.role === 'tester' && (j.repo === 'all' || gate.repo === 'all' || j.repo === gate.repo))
+      if (tester) return `${tester.id} (tester) runs in the same group as reviewer gate ${gate.id} — put the gate in an earlier group; the tester runs only on code that passed it`
+    }
   }
   return ''
 }
@@ -207,7 +220,12 @@ function jobPrompt(j) {
         (mode === 'review' || mode === 'e2e'
           ? `Mode ${mode}: check out the code under test (the PR head, \`git fetch origin pull/<n>/head\`, or its branch) DETACHED in the task worktree — never create a branch, never commit. `
           : '') +
-        `Smoke-check what later jobs need (backend answers, frontend serves, emulator + APK when the plan needs the App), then stop what you started.\n`
+        `Start the app servers the plan needs with node ${S}/serve.mjs start ${root} ${slug} (config "## Servers"; it waits for each health check) and LEAVE THEM RUNNING — ` +
+        `later jobs reuse them and the orchestrator stops them at run end. A config without "## Servers": smoke-check backend/frontend by hand, then stop what you started. ` +
+        `Emulator + APK only when the plan needs the App (stop the emulator when done).\n`
+      : '') +
+    (j.role === 'dev' || j.role === 'tester'
+      ? `App servers: node ${S}/serve.mjs start ${root} ${slug} (reuses running ones; status/restart/run per its header) — never start or kill them by hand.\n`
       : '') +
     `Write your report to ${dir}/jobs/${j.id}-${j.role}-${j.repo}.md (heredoc) and append one line: node ${S}/task.mjs journal ${dir} "${j.id} ${j.role} ${j.repo}: <one-line result>". ` +
     `Return the structured report; reportFile = that path.`
@@ -272,12 +290,12 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
         const recs = (await parallel(batch.map((j) => () => runJob(j, turn)))).filter(Boolean)
         last.push(...recs)
         // A later group usually depends on this one (judges after devs): stop and let the PM decide.
-        const broken = recs.filter((r) => !r.report || r.report.status !== 'done')
+        const broken = recs.filter(stopsLaterGroups)
         const skipped = groups.filter((x) => x > g)
         if (broken.length && skipped.length) {
           const left = d.jobs.filter((j) => skipped.includes(j.group)).map((j) => j.id)
-          log(`group ${g}: ${broken.map((r) => r.job.id).join(', ')} not done → skipped ${left.join(', ')}`)
-          last.push(...d.jobs.filter((j) => skipped.includes(j.group)).map((j) => ({ job: j, report: { status: 'failed', verdict: 'NONE', summary: 'not run: an earlier group in this dispatch did not finish' }, turn, seq })))
+          log(`group ${g}: ${broken.map((r) => `${r.job.id}${r.report && r.report.status === 'done' ? ` ${r.report.verdict}` : ' not done'}`).join(', ')} → skipped ${left.join(', ')}`)
+          last.push(...d.jobs.filter((j) => skipped.includes(j.group)).map((j) => ({ job: j, report: { status: 'failed', verdict: 'NONE', summary: 'not run: an earlier group in this dispatch did not finish or its reviewer gate asked for changes' }, turn, seq })))
           left.forEach((id) => seenIds.delete(id))
           break
         }

@@ -13,7 +13,7 @@ You never write, test, or review repo code yourself. Design and rationale: `docs
 
 | Command | Mode | What happens |
 |---|---|---|
-| `/tf:build <ticket or text>` | build | PM plans → devs → tester ∥ reviewer → ready PR(s), EVD, ticket-comment draft |
+| `/tf:build <ticket or text>` | build | PM plans → devs → reviewer gate → tester → ready PR(s), EVD, ticket-comment draft |
 | `/tf:qc <ticket>` | qc | Next round on the same folder/branches: reproduce QC cases with saved flows, fix, re-test, update the PR |
 | `/tf:review <PR url or ticket>` | review | e2e of the ticket's acceptance criteria + risk report (risk, impact, UI change, AC coverage, build). No code changes |
 | `/tf:e2e <PR url or ticket> [--cases a,b]` | e2e | Tester only: run/save flows, EVD, ticket-comment draft. `--regression`: run `.pipeline/_regression` flows instead (no workflow) |
@@ -87,7 +87,9 @@ The user watches `/workflows`. Do not poll.
 2. PRs from the result, plus the input PR in review/e2e mode → `node $S/resources.mjs prs <cwd> <slug> <urls…>`
    (reap frees resources once all are merged/closed; without a PR they stay until prune).
 3. Warm pool (background, `run_in_background`): for each repo the run touched, refill its pool —
-   `node $S/pool.mjs fill <cwd> <key> <repoPath> --base <base> --lock <lockfile> --dirs <dirs>` (values from `C`).
+   `node $S/pool.mjs fill <cwd> <key> <repoPath> --base <base> --lock <lockfile> --dirs <dirs> --install "<install cmd>"`
+   (values from `C`; the install command is the one the Provisioning row uses when fastdeps cannot clone).
+   Do not skip it: an empty pool makes the next setup create and install a worktree from scratch.
 4. Act on the status:
 
 | status | Action |

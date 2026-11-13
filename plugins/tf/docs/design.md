@@ -64,7 +64,10 @@ Flags: `--approve` (stop for the user after the first plan), `--draft` (user all
 3. Code modes cannot close until, for every repo a dev touched: every tester after the last dev job
    passed (and one covers the repo), and a reviewer `PACKAGE` job that started after that PASS reported
    `SHIP` with a PR URL. `close.noChange` still needs a tester PASS.
-3b. When a job in a group is not `done`, the later groups of that dispatch are skipped and the PM decides.
+3b. When a job in a group is not `done`, or a reviewer gate returns `NEEDS-WORK`/`BLOCK`, the later groups of that
+   dispatch are skipped and the PM decides.
+3c. Gate before test (build/qc): a reviewer gate and the tester it precedes never share a group — a
+   NEEDS-WORK gate next to a running tester throws the test run away (RVD-293 round 3: ~16 min).
 4. PR is ready. A reviewer report with `prDraft: true` is a violation unless the user passed `--draft`.
 5. Caps: PM turns ≤ 10, jobs per dispatch ≤ 6, fix cycles per issue id ≤ 3 (PM must escalate), token
    reserve 80k → handoff.
@@ -77,9 +80,9 @@ workspace config and every agent reads them.
 
 | Size | Typical task | Typical staffing |
 |---|---|---|
-| XS | text, colour, spacing, show/hide | PM (short) → dev → tester ∥ reviewer gate → reviewer PACKAGE |
+| XS | text, colour, spacing, show/hide | PM (short) → dev → reviewer gate → tester → reviewer PACKAGE |
 | S | add a field/column, one screen, one repo | same, tester writes 1 flow |
-| M | 2 repos or API change | devs in parallel per repo → tester(s) ∥ reviewer |
+| M | 2 repos or API change | devs in parallel per repo → reviewer gates → tester(s) |
 | L | new feature, migration, money, permissions | M + opus where risky |
 
 Model per job: haiku < sonnet < opus. Default sonnet; opus only for risky logic or judgement.
@@ -177,7 +180,12 @@ archives are slimmed (not deleted) to HANDOFF, journal, flows, ticket, plan, boa
   cloned, `.env` copied). Setup moves it into the task path and switches branch; the orchestrator refills
   it in the background after a run. Prune never removes `_pool/`. `task.mjs migrate-worktrees` moves the old flat `<slug>-<key>` worktrees.
 - `fastdeps.mjs` clones `node_modules` / `.dart_tool` from the main checkout with `cp -c` when the
-  lockfile matches.
+  lockfile matches and the main checkout's direct dependencies are actually installed at the locked
+  versions (`stale-deps` otherwise — its owner pulled without installing). `pool.mjs fill --install` then
+  installs inside the pool, in the background.
+- `serve.mjs` starts the task's app servers once per run from the config `## Servers` (task ports, DB,
+  cache filled in), waits for their health checks, and keeps them up across jobs; jobs call `start`
+  again (a no-op when they answer). Each is a `server` run-end resource, so `end-run` stops it.
 
 ## Maintenance commands
 
