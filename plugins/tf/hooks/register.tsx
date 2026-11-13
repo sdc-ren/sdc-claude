@@ -85,21 +85,33 @@ export const register: Register = on => {
       )
     }
 
+    const CANVAS = ['design', 'whiteboard']
     const designs = list.filter(a => a.kind === 'design system').slice(0, SHOWN)
-    const others = list.filter(a => a.kind !== 'design system').slice(0, SHOWN)
+    const canvases = list.filter(a => CANVAS.includes(a.kind)).slice(0, SHOWN)
+    const others = list.filter(a => a.kind !== 'design system' && !CANVAS.includes(a.kind)).slice(0, SHOWN)
+    const isTerminal = e.surface === 'terminal'
+    // A light chip: border only; a picked one gets an accent border and a check, never a filled background.
     const chip = (a: TfArtifact, showKind: boolean) => {
       const isPicked = ids.includes(a.id)
-      return (
-        <Button key={`tf-${a.id}`} variant={isPicked ? 'primary' : 'secondary'} onPress={toggle(a.id)}>
+      const label = (
+        <Button key={`tf-${a.id}`} plain onPress={toggle(a.id)}>
           {isPicked ? '✓ ' : ''}{short(nameOf(a))}{showKind ? <Text dimColor> · {a.kind}</Text> : ''}
         </Button>
+      )
+      if (isTerminal) return label
+      return (
+        <Box key={`tf-box-${a.id}`} borderStyle="round" borderColor={isPicked ? 'green' : undefined} borderDimColor={!isPicked} paddingX={1}>
+          {label}
+        </Box>
       )
     }
     const section = (title: string, items: TfArtifact[], showKind: boolean) =>
       items.length > 0 && (
         <Box flexDirection="column">
-          <Text dimColor>{title}</Text>
-          <Box flexDirection="row" flexWrap="wrap" gap={1}>
+          <Box marginBottom={1}>
+            <Text bold>{title}</Text>
+          </Box>
+          <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1}>
             {items.map(a => chip(a, showKind))}
           </Box>
         </Box>
@@ -108,7 +120,8 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column" gap={1}>
         {section('Design system', designs, false)}
-        {section('Artifacts', others, true)}
+        {section('Canvases', canvases, true)}
+        {section('Docs & pages', others, true)}
         <Box flexDirection="row" gap={2}>
           <Text dimColor>
             {ids.length ? `${ids.length} picked · sent with your next message` : 'Pick, then send e.g. /tf:build PROJ-12'}
