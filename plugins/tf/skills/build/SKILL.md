@@ -1,7 +1,7 @@
 ---
 name: build
 description: Run a new development task end to end with the SDC PM-led team (PM plans and staffs dev/tester/reviewer agents, ready PR + e2e evidence + ticket-comment draft). Workspace rules live in <workspace>/.claude/task-flow.md.
-argument-hint: "<ticket key|text> [--approve] [--draft] [--lang vi]"
+argument-hint: "<ticket key|text> [--approve] [--draft] [--lang vi] [--attach]"
 disable-model-invocation: true
 ---
 

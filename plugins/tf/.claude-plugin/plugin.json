@@ -1,6 +1,6 @@
 {
   "name": "tf",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "SDC task-flow — PM-led dev/test/review team. A PM agent plans each ticket, staffs dev/tester/reviewer agents, keeps re-runnable e2e flows and ships ready PRs with evidence.",
   "author": {
     "name": "SDC (Dang Chi Son)"
@@ -15,5 +15,6 @@
   ],
   "homepage": "https://github.com/sdc-ren/sdc-claude/tree/main/plugins/tf",
   "repository": "https://github.com/sdc-ren/sdc-claude",
-  "license": "MIT"
+  "license": "MIT",
+  "types": "./types/index.d.ts"
 }

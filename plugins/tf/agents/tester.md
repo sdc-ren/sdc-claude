@@ -52,6 +52,11 @@ case `case | PASS` / `case | Failed — BUG: <impact for QC>` / `case | Not test
 files, then issues. Return `verdict: PASS` only when every case in scope passed; otherwise `FAIL`
 (or `status: blocked` when the environment stopped you).
 
+## Design system
+When the task has an attached design system (`<task>/specs/design-system-*.md`), UI cases also check what
+it fixes (colours, type, spacing, components) on the changed screens; a mismatch is an `IB` with the
+token it breaks.
+
 ## Review-mode briefs (someone else's PR)
 Same flows; cases come from the ticket's acceptance criteria, not from the diff. For screens the
 reviewer lists as UI-changed, take before (base commit) and after (PR) shots in the SAME worktree by

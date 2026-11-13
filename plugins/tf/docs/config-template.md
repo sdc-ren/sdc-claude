@@ -28,6 +28,9 @@ Keep sections short; link to longer docs instead of copying them.
 - Ticket tracker: <URL> — `browser.mjs auth <name> --url <URL> --playwright <package.json>`
 - Spec sources the PM may query: <NotebookLM notebook, docs paths, Figma>
 
+## Design & artifacts (optional — the `@` list already finds this workspace's items itself)
+- Design system: <title — https://claude.ai/artifact/…>   (pin a default, also listed under `@`)
+
 ## Knowledge (PM reads first; orchestrator updates at close-out)
 - Known bugs: <path> · Verified env recipes: <path> · Decisions: <path>
 - Review lessons: <path> — rules learned from human PR reviews; devs and reviewers read it before every job.
@@ -50,7 +53,7 @@ Keep sections short; link to longer docs instead of copying them.
 
 Forbidden: <ports / databases / checkouts nobody may touch>.
 
-## Doctor (checked by `/tf:doctor`; add `(optional)` to only warn)
+## Doctor (checked by `/tf:status --doctor`; add `(optional)` to only warn)
 - `<shell command>` — <label>
 
 ## Hard rules

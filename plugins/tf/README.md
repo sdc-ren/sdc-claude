@@ -4,7 +4,7 @@
 
 **A PM-led agent team for Claude Code: plan the ticket, build it, test it end to end, ship a ready PR.**
 
-[![Version](https://img.shields.io/badge/version-1.0.0-2ea44f)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.0-2ea44f)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](https://code.claude.com/docs/en/plugins/install.md)
 
@@ -35,6 +35,7 @@ everything. **tf** organises the work like a small team:
 
 - [Quick start](#quick-start)
 - [Commands](#commands)
+- [Attaching artifacts and design systems](#attaching-artifacts-and-design-systems)
 - [How it works](#how-it-works)
 - [Workspace configuration](#workspace-configuration)
 - [Files tf creates](#files-tf-creates)
@@ -53,30 +54,155 @@ everything. **tf** organises the work like a small team:
 Then, in your workspace (the folder that holds your repos):
 
 ```
-/tf:doctor            # checks tools, gh login, config, repos, Playwright, devices
+/tf:status --doctor   # checks tools, gh login, config, repos, Playwright, devices
 /tf:build PROJ-123    # first run offers to create .claude/task-flow.md if it is missing
 ```
 
 ## Commands
 
-| Command | What it does | Ends with |
-|---|---|---|
-| `/tf:build <ticket\|text> [--approve] [--draft]` | New task end to end | Ready PR per changed repo, e2e evidence, ticket-comment draft |
-| `/tf:qc <ticket>` | Answer a QC report or human PR review points: next round on the same branches and flows | Existing PR updated (or a new one if the old PR was merged), QC reply draft |
-| `/tf:review <PR url\|ticket>` | Review a teammate's PR: e2e of the ticket's acceptance criteria + risk report | `review.md`, PR-comment and ticket-comment drafts — nothing posted |
-| `/tf:e2e <PR url\|ticket> [--cases 21,22]` | E2E only, no code changes | Evidence + ticket-comment draft |
-| `/tf:doctor` | Check this machine and workspace | Pass/fail table with fixes |
-| `/tf:status` | What every task holds (worktrees, DBs, ports, PRs) | Table + what the reaper would free |
-| `/tf:cleanup <slug>` | Free one task's resources (asks first) | Resources released, folder archived |
-| `/tf:migrate` | Move old flat worktrees into `.worktrees/<TICKET>/<repo>/` | Moves + ledgers rewritten (asks first) |
-| `/tf:legacy` | Fold old suffixed folders (`-e2e`, `-qc`, `-r2`…) into one folder per ticket | Dry run, then apply on your yes |
-| `/tf:regression [--target local\|dev]` | Run flows promoted from merged tickets | PASS/FAIL per case |
+Six commands. The four task commands take a **ticket key** (`PROJ-123`), a **PR URL**
+(`https://github.com/org/repo/pull/12`) or, for `build`, plain text. Everything after the input is optional.
 
-**Flags** — `--approve`: stop after the first plan for your approval · `--draft`: allow a draft PR (agents
-never choose draft on their own) · `--lang <code>`: report language for this run.
+| Command | Use it to |
+|---|---|
+| [`/tf:build`](#tfbuild) | Do a new task end to end |
+| [`/tf:qc`](#tfqc) | Answer a QC report or PR review points on a task tf already did |
+| [`/tf:review`](#tfreview) | Review a teammate's PR (e2e + risk report, no code changes) |
+| [`/tf:e2e`](#tfe2e) | Run e2e only, or the regression suite |
+| [`/tf:status`](#tfstatus) | See what tasks hold; check the machine |
+| [`/tf:clean`](#tfclean) | Free a task, migrate old layouts |
+
+### Options shared by the task commands
+
+| Option | Works with | Effect |
+|---|---|---|
+| `--attach` | build · qc · review · e2e | Before the PM starts, show a checkbox list of this workspace's artifacts and design systems; ticked items are read into `specs/` and used by the PM, devs and testers |
+| `--lang <code>` | build · qc · review · e2e | Report language for this run (`vi`, `en`, …); overrides the workspace config |
+| `--approve` | build · qc | Stop after the PM writes the plan and wait for your approval |
+| `--draft` | build · qc | Allow a draft PR. Without it every PR is opened ready, and agents never choose draft |
+| pasted `https://claude.ai/artifact/…` | build · qc · review · e2e | Attach that artifact directly (same as ticking it) |
+
+You can also pick artifacts with the **Artifacts (n)** band above the chat input before sending the command
+(see [Attaching artifacts](#attaching-artifacts-and-design-systems)).
+
+### `/tf:build`
+
+```
+/tf:build <ticket | text> [--attach] [--approve] [--draft] [--lang <code>]
+```
+
+New task end to end: the PM reads the ticket, plans micro-tasks, staffs devs / tester / reviewer, and closes
+with a **ready PR per changed repo**, e2e evidence and a ticket-comment draft.
+
+```
+/tf:build PROJ-123
+/tf:build PROJ-123 --attach --approve
+/tf:build "Add an export button to the orders page" --lang en
+```
+
+### `/tf:qc`
+
+```
+/tf:qc <ticket> [--attach] [--approve] [--draft] [--lang <code>]
+```
+
+Next round of a ticket tf already did: re-reads the ticket (new or edited QC comments) and the human review
+comments on its PRs, reproduces the reported cases with the saved flows, fixes only those, re-tests, and
+pushes to the same PR (or opens a new one if the old PR was merged). Ends with a QC-reply draft.
+Attachments from earlier rounds are reused.
+
+```
+/tf:qc PROJ-123
+```
+
+### `/tf:review`
+
+```
+/tf:review <PR url | ticket> [--attach] [--lang <code>]
+```
+
+Review someone else's PR without touching its code: e2e of the ticket's acceptance criteria with evidence,
+plus a report on **risk**, **impact on other features**, **UI changes**, **acceptance-criteria coverage**
+and **typecheck/build**. Ends with `review.md`, a PR-comment draft and a ticket-comment draft — nothing is
+posted until you approve the text.
+
+```
+/tf:review https://github.com/org/web/pull/720
+/tf:review PROJ-123 --attach
+```
+
+### `/tf:e2e`
+
+```
+/tf:e2e <PR url | ticket> [--cases <ids>] [--attach] [--lang <code>]
+/tf:e2e --regression [--target local | dev]
+```
+
+E2E only, no code changes: re-runs saved flows, writes flows for cases that have none, saves evidence, and
+drafts the ticket comment.
+
+| Option | Effect |
+|---|---|
+| `--cases 21,22` | Only these case ids (QC case numbers or plan case ids) |
+| `--regression` | Instead of a ticket, run `.pipeline/_regression/` — the passing flows of merged tickets |
+| `--target local\|dev` | With `--regression`: run against the task's local ports (default) or the shared dev environment from the config |
+
+```
+/tf:e2e PROJ-123 --cases 21,22
+/tf:e2e https://github.com/org/app/pull/213
+/tf:e2e --regression --target dev
+```
+
+### `/tf:status`
+
+```
+/tf:status [--doctor]
+```
+
+What every task of the workspace holds — worktrees, databases, cache dbs, ports, PRs — and what cleanup would
+free right now.
+
+| Option | Effect |
+|---|---|
+| `--doctor` | Also check this machine and workspace: Node, git, `gh` login, plugin agents and guidelines, workspace config, repos and their base branches, Playwright, and the config's own `## Doctor` checks (DB containers, SDKs, devices…) — with how to fix each failure. Run it once on a new machine. |
+
+### `/tf:clean`
+
+```
+/tf:clean <slug>
+/tf:clean --migrate
+/tf:clean --legacy
+/tf:clean
+```
+
+Every form shows a **dry run first** and changes nothing until you say yes.
+
+| Form | Effect |
+|---|---|
+| `<slug>` | Free one task's resources (worktrees, DB, cache, ports) and archive its folder. Worktrees with uncommitted or unpushed work are kept |
+| `--migrate` | Move old flat worktrees (`.worktrees/proj-123-fe`) into `.worktrees/PROJ-123/frontend/` and update the ledgers |
+| `--legacy` | Fold old suffixed task folders (`PROJ-123-e2e`, `-qc`, `-r2`…) into `.pipeline/PROJ-123/history/legacy/` |
+| *(nothing)* | Dry-run all of the above and say what each would do |
 
 Nothing is ever posted to the tracker or GitHub as a comment without your approval of the exact text.
 tf never merges, approves, force-pushes, or enables auto-merge.
+
+## Attaching artifacts and design systems
+
+Claude artifacts, canvases and design systems belong to your account, not to a folder; tf shows only the ones
+that belong to the **current workspace** — created in its Claude Code sessions, attached to its earlier tasks,
+or pinned in its config. No setup, and other projects' items never appear.
+
+| Way | Where | How |
+|---|---|---|
+| **Artifacts (n)** band | Above the chat input (desktop app and terminal) | Open it, press items (grouped *Design system*, *Artifacts*, *Canvases*); picked ones show ✓ and are appended to your next message, e.g. `/tf:build PROJ-123` |
+| `--attach` | Any task command | A checkbox question before the PM starts |
+| Pasted link | Any task command | `https://claude.ai/artifact/…` in the command; use it for artifacts made in the claude.ai web app |
+| `@` mention | Terminal CLI only | The plugin's `artifacts` MCP server lists them in `@` autocomplete |
+
+Attached items are saved to `.pipeline/<TICKET>/specs/` and `attachments.json`: the PM plans from them, devs
+use the design system's tokens and components, testers check the UI against it, and later rounds reuse them.
+The band appears once the session has started (after your first message in a new session).
 
 ## How it works
 
@@ -238,7 +364,7 @@ node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --cases 21 --target dev # 
 | Per workspace | Whatever the config's provisioning needs: Docker DBs, Android SDK + AVD, Flutter… |
 | macOS (recommended) | `cp -c` (APFS clone) for fast dependency copies, launchd for the reaper, Chrome cookie import for tracker login. Elsewhere tf falls back to normal copies and manual cleanup. |
 
-Run `/tf:doctor` to see what is missing.
+Run `/tf:status --doctor` to see what is missing.
 
 ## Troubleshooting
 
@@ -246,9 +372,9 @@ Run `/tf:doctor` to see what is missing.
 |---|---|
 | `lock-conflict` / "another run holds it" | A run is active, or one crashed less than 90 min ago. Check `/workflows`; remove `.pipeline/<slug>/.lock` only when nothing runs. |
 | PM escalates "rejected twice by the hard rules" | Read the rule in the message; usually a judge was put in the same group as a dev, or a PR was a draft. |
-| Tester says `blocked-env` | The environment is missing something (DB, port, emulator, login). `/tf:doctor`, then fix the config's provisioning. |
+| Tester says `blocked-env` | The environment is missing something (DB, port, emulator, login). `/tf:status --doctor`, then fix the config's provisioning. |
 | Flow fails after an intended UI change | The tester marks it `flow-broken`, fixes the selector and re-runs — not an app bug. |
-| Old `-e2e` / `-qc` folders or flat worktrees | `/tf:legacy`, `/tf:migrate`. |
+| Old `-e2e` / `-qc` folders or flat worktrees | `/tf:clean --legacy`, `/tf:clean --migrate`. |
 | Plugin update not picked up | `claude plugin marketplace update sdc && claude plugin update tf@sdc`, then restart. Re-run `install-reaper.sh` after updates. |
 
 ## FAQ

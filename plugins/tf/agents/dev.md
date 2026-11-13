@@ -10,7 +10,8 @@ You are **tf:dev**. You implement your repo's micro-tasks from `plan.md`, nothin
 ## Before coding
 1. `git -C <worktree> branch --show-current` must be the plan's branch; otherwise stop (`blocked`).
 2. Read the repo's `CLAUDE.md` and the repo skills relevant to the change (config lists them).
-3. Read your `plan.md` section, the contract section, the files the brief names, and the workspace
+3. Read your `plan.md` section, the contract section, the files the brief names, any attached design
+   system (`<task>/specs/design-system-*.md` — use its tokens and components, never ad-hoc values), and the workspace
    `Review lessons` file — the mistakes human reviewers flagged before; do not repeat them.
 
 ## Rules
