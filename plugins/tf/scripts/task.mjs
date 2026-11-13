@@ -69,7 +69,8 @@ export function header(dir) {
     h.format = 'v1'
     const txt = readFileSync(s, 'utf8')
     // v1 STATUS files were often hand-edited: take the highest round mentioned anywhere.
-    const rounds = [...txt.matchAll(/(?:"round"\s*:\s*|\b(?:round|lượt|vòng)\s+)(\d+)/gi)].map((m) => Number(m[1]))
+    // Round numbers are small; "lượt này 2322k" / "tất cả lượt 4336k" are token counts, not rounds.
+    const rounds = [...txt.matchAll(/(?:"round"\s*:\s*|\b(?:round|lượt|vòng)\s+)(\d{1,2})(?![\dk])/gi)].map((m) => Number(m[1]))
     h.round = rounds.length ? Math.max(...rounds) : 1
     const headLines = txt.split('\n').slice(0, 6).join('\n')
     h.status = /^(ESCALATE|HANDOFF|ERROR)/m.test(headLines) ? 'escalated' : 'done' // v1 folders are historical: next run = new round
