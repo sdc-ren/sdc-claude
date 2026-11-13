@@ -2,9 +2,9 @@
 // task-flow warm worktree pool: one ready worktree per repo (deps installed, env copied), so a new task
 // only moves it into place and switches branch instead of creating and installing from scratch.
 //
-//   fill <root> <key> <repoPath> --base <branch> [--lock <lockfile> --dirs <d1,d2>] [--env .env,.env.local]
+//   fill <root> <key> <repoPath> --base <branch> [--lock <lockfile> --dirs <d1,d2>] [--env .env,.env.local] [--install "<cmd>"]
 //       ensure <root>/.worktrees/_pool/<key> exists, detached at origin/<base>, deps cloned from the main
-//       checkout (fastdeps). Safe to run in the background after a task run.
+//       checkout (fastdeps); when they cannot be cloned, run --install in the pool. Safe to run in the background after a task run.
 //   take <root> <key> <repoPath> <dest> --branch <name> --base <branch> [--lock <lockfile>]
 //       move the pool worktree to <dest> and check out <name> (origin/<name> if it exists, else a new branch
 //       from origin/<base>, upstream unset). Prints {"taken":true,"path","needsInstall"} or {"taken":false,"reason"}.
@@ -59,7 +59,13 @@ function fill([root, key, repoPath], o) {
     const now = hash(join(pool, o.lock))
     if (stamp.lock && stamp.lock !== now) for (const d of o.dirs.split(',')) trySh(`rm -rf ${q(join(pool, d))}`)
     try { deps = JSON.parse(execFileSync(process.execPath, [join(HERE, 'fastdeps.mjs'), repo, pool, '--lock', o.lock, '--dirs', o.dirs], { stdio: 'pipe', timeout: 900_000 }).toString()) } catch {}
-    if (deps.cloned) writeFileSync(join(pool, STAMP), JSON.stringify({ lock: now, base, at: new Date().toISOString() }))
+    // fastdeps could not clone (lock differs / main checkout's deps are stale): install in the pool itself —
+    // fill runs in the background, so the slow install happens here instead of in the next task's setup.
+    if (!deps.cloned && o.install) {
+      const r = trySh(o.install, pool)
+      deps = r.ok ? { cloned: false, installed: true, reason: deps.reason } : { ...deps, installFailed: r.out.split('\n').pop() }
+    }
+    if (deps.cloned || deps.installed) writeFileSync(join(pool, STAMP), JSON.stringify({ lock: now, base, at: new Date().toISOString() }))
   }
   out({ filled: true, pool, deps })
 }

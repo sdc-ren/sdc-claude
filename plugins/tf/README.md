@@ -228,7 +228,8 @@ flowchart LR
    `plan.md` (micro-tasks: what + exact file, *how* only at contracts), and returns a dispatch: jobs, roles,
    models, parallel groups.
 3. **Jobs.** The executor runs the dispatch — e.g. group 1: `tf:dev` for each repo in parallel; group 2:
-   `tf:tester` ∥ `tf:reviewer` (gate). If a job fails, later groups are skipped and the PM re-plans.
+   `tf:reviewer` (gate); group 3: `tf:tester`. If a job fails or the gate asks for changes, later groups are
+   skipped and the PM re-plans. App servers start once per run (`serve.mjs`) and stay up across jobs.
 4. **Repeat** until the PM closes: fix rounds send only the open issue ids to the dev, and the tester re-runs
    only the failing flows. After a PASS and a clean gate, a `PACKAGE` reviewer job commits, pushes and opens
    the ready PR.
@@ -243,6 +244,7 @@ flowchart LR
 | A PR must come from a reviewer `PACKAGE` job that started after that PASS | Nothing ships untested |
 | PRs are ready; draft only with `--draft` | A PR means "done and verified" |
 | Dev and judge are separate agents, never in the same parallel group | Writer ≠ judge |
+| build/qc: the reviewer gate runs in an earlier group than the tester; a NEEDS-WORK gate skips the tester | No test run thrown away by a gate |
 | Roles allowed per mode (`review` / `e2e` never run a dev) | Review modes never change code |
 | ≤ 10 PM turns, ≤ 6 jobs per dispatch, ≤ 4 dev jobs per repo | Non-converging loops escalate to you |
 
@@ -257,9 +259,9 @@ is decided and listed as *assumptions* in the round report so you can correct it
 
 | Size | Example | Typical team | Model |
 |---|---|---|---|
-| XS | text, colour, spacing | 1 dev → tester ∥ reviewer → package | sonnet; PM on sonnet after turn 1 |
+| XS | text, colour, spacing | 1 dev → reviewer gate → tester → package | sonnet; PM on sonnet after turn 1 |
 | S | a field, one screen | same, tester writes 1 flow | sonnet |
-| M | 2 repos or an API change | parallel devs → testers ∥ reviewer | sonnet, opus where risky |
+| M | 2 repos or an API change | parallel devs → reviewer gates → testers | sonnet, opus where risky |
 | L | new feature, migration, money, permissions | M + opus on risky jobs | opus where it matters |
 
 ## Workspace configuration

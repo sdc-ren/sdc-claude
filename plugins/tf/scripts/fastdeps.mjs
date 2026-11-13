@@ -9,7 +9,9 @@
 // Each dir is copied with `cp -cR` (APFS clonefile: near-instant, copy-on-write, so the worktree gets
 // its own copy and never writes into the main checkout). Prints JSON:
 //   {"cloned":true,"dirs":[…]}                         lockfiles identical, dirs cloned
-//   {"cloned":false,"reason":"lock-differs|no-lock|missing-dir|clone-failed"}  → caller installs normally
+//   {"cloned":false,"reason":"lock-differs|no-lock|stale-deps|missing-dir|clone-failed"}  → caller installs normally
+//   (stale-deps: same lockfile, but the main checkout's node_modules misses a direct dependency or holds
+//   another version than the lock — its owner pulled without installing; "stale" lists the first ones)
 // Never deletes anything in the main checkout. Skips a dir that already exists in the worktree.
 
 import { createHash } from 'node:crypto'
@@ -29,8 +31,30 @@ if (!main || !wt || !lock || !dirs.length) {
 const M = resolve(main)
 const W = resolve(wt)
 const hash = (p) => createHash('sha256').update(readFileSync(p)).digest('hex')
+const readJson = (p) => { try { return JSON.parse(readFileSync(p, 'utf8')) } catch { return null } }
+export function staleDeps(mainDir, wtDir, lockName) {
+  const pkg = readJson(join(wtDir, 'package.json'))
+  if (!pkg) return []
+  const npmLock = lockName === 'package-lock.json' ? readJson(join(wtDir, lockName)) : null
+  const names = Object.keys({ ...(pkg.dependencies || {}), ...(pkg.devDependencies || {}) })
+  const out = []
+  for (const n of names) {
+    const installed = readJson(join(mainDir, 'node_modules', n, 'package.json'))
+    if (!installed) { out.push(`${n} missing`); continue }
+    const locked = npmLock && npmLock.packages && npmLock.packages[`node_modules/${n}`]
+    if (locked && locked.version && installed.version !== locked.version) out.push(`${n} ${installed.version} ≠ ${locked.version}`)
+  }
+  return out
+}
 if (!existsSync(join(M, lock)) || !existsSync(join(W, lock))) done({ cloned: false, reason: 'no-lock' })
 if (hash(join(M, lock)) !== hash(join(W, lock))) done({ cloned: false, reason: 'lock-differs' })
+// Same lockfile is not enough: the main checkout may have pulled a new lockfile without reinstalling
+// (RVD-293: develop added pdfkit, main node_modules lacked it). Check every direct dependency is installed,
+// at the locked version when the lockfile is npm's.
+if (dirs.includes('node_modules')) {
+  const stale = staleDeps(M, W, lock)
+  if (stale.length) done({ cloned: false, reason: 'stale-deps', stale: stale.slice(0, 10) })
+}
 const cloned = []
 for (const d of dirs) {
   const src = join(M, d)

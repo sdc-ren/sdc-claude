@@ -4,6 +4,21 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- build/qc: the reviewer gate runs before the tester (enforced). A gate `NEEDS-WORK`/`BLOCK` skips the
+  later groups and hands the report to the PM; P3 points never trigger another dev/test cycle. Fix rounds:
+  dev → gate → tester `--failed` + smoke. PM plans each case with the data it needs.
+- Setup leaves the app servers running for the whole run instead of smoke-and-stop.
+
+### Added
+- `scripts/serve.mjs`: start/reuse/stop the task's app servers from the workspace config `## Servers`
+  (task ports, DB, cache filled in, health-checked, logs in `<task>/logs/`), ad-hoc processes via `run`;
+  servers are `run-end` resources, so `end-run` stops them. Devs and testers use it instead of hand-made commands.
+- `fastdeps.mjs` reports `stale-deps` when the main checkout's `node_modules` misses a direct dependency
+  or holds another version than the lock; `pool.mjs fill --install` installs inside the pool in that case.
+
 ## [1.1.0] — 2026-11-13
 
 ### Changed

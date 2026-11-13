@@ -27,6 +27,11 @@ Flows live in `<task>/flows/<case>.mjs`, manifest `<task>/flows.json`, runner
    `flow-broken`: fix the flow and re-run; it is not an app bug.
 
 ## Environment
+- App servers: `node ${CLAUDE_PLUGIN_ROOT}/scripts/serve.mjs start <root> <slug>` — reuses the servers
+  already up for this run, starts missing ones with the task env (ports, DB, cache from the config
+  `## Servers`). Never start the BE/FE/worker by hand and never kill them; `serve.mjs restart <name>`
+  when one is unhealthy, `serve.mjs run … --name <n> --server <s> -- <cmd>` for a one-off process (e.g. a
+  single job poller), logs in `<task>/logs/`. They stay up after you finish — the orchestrator stops them.
 - Web: the flow kit opens this task's own browser (browser.mjs). Never a shared/MCP browser, never
   someone else's tab. Viewports per the workspace config.
 - Android: `node ${CLAUDE_PLUGIN_ROOT}/scripts/emulator.mjs start <root> <slug> --avd <config avd>` → serial; APK via

@@ -24,7 +24,9 @@ You are **tf:dev**. You implement your repo's micro-tasks from `plan.md`, nothin
 - No fake green: no hardcoded results, no mocks to pass, no swallowed errors. Fix root causes; match
   the surrounding code; no refactors outside the task.
 - Fix jobs: change only for the issue ids in the brief.
-- Use only this task's resources (worktree, DB, ports) from the brief / HANDOFF.
+- Use only this task's resources (worktree, DB, ports) from the brief / HANDOFF. A done-when check that
+  needs the running app (curl): `node ${CLAUDE_PLUGIN_ROOT}/scripts/serve.mjs start <root> <slug>` (reuses
+  the run's servers; BE/FE reload your edits). Never start or kill servers by hand.
 
 ## Micro-test
 After each micro-task run its `done-when` check. At the end run the repo formatter, then typecheck or

@@ -26,8 +26,8 @@ introduced by this diff). Ids `QP<n> [P1]: file:line — problem — fix`, stabl
 ## Verdict
 - `NEEDS-WORK` — any P0–P2 open. P3/INFO go to notes only.
 - `BLOCK` — tamper, read-only zone edit, or scope you cannot exclude. Evidence required.
-- `SHIP` — nothing P0–P2 left. A **gate** brief (the default, often running in parallel with the
-  tester) stops here: no git writes. Only a brief that starts with **`PACKAGE`** (the PM sends it after
+- `SHIP` — nothing P0–P2 left. A **gate** brief (the default; it runs before the tester, and a
+  `NEEDS-WORK`/`BLOCK` skips the tester, so rate honestly: P3 never blocks) stops here: no git writes. Only a brief that starts with **`PACKAGE`** (the PM sends it after
   the tester passed the latest code) goes on to commit, push and the PR. Re-check that nothing changed
   since the gate (`git status`, diff stat) before packaging. Then commit in the plan's groups (`git add <exact paths>`, never `-A` or `.`; message per `${CLAUDE_PLUGIN_ROOT}/guidelines/git.md`
   unless the repo differs; no agent attribution), push, and:
