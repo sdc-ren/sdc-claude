@@ -89,20 +89,14 @@ export const register: Register = on => {
     const designs = list.filter(a => a.kind === 'design system').slice(0, SHOWN)
     const canvases = list.filter(a => CANVAS.includes(a.kind)).slice(0, SHOWN)
     const others = list.filter(a => a.kind !== 'design system' && !CANVAS.includes(a.kind)).slice(0, SHOWN)
-    const isTerminal = e.surface === 'terminal'
-    // A light chip: border only; a picked one gets an accent border and a check, never a filled background.
+    // Compact chips. A picked one is marked by a check and green text, never a filled background.
     const chip = (a: TfArtifact, showKind: boolean) => {
       const isPicked = ids.includes(a.id)
-      const label = (
-        <Button key={`tf-${a.id}`} plain onPress={toggle(a.id)}>
-          {isPicked ? '✓ ' : ''}{short(nameOf(a))}{showKind ? <Text dimColor> · {a.kind}</Text> : ''}
-        </Button>
-      )
-      if (isTerminal) return label
       return (
-        <Box key={`tf-box-${a.id}`} borderStyle="round" borderColor={isPicked ? 'green' : undefined} borderDimColor={!isPicked} paddingX={1}>
-          {label}
-        </Box>
+        <Button key={`tf-${a.id}`} variant="secondary" onPress={toggle(a.id)}>
+          {isPicked ? <Text color="green" bold>✓ {short(nameOf(a))}</Text> : short(nameOf(a))}
+          {showKind ? <Text dimColor> · {a.kind}</Text> : ''}
+        </Button>
       )
     }
     const section = (title: string, items: TfArtifact[], showKind: boolean) =>
@@ -111,7 +105,7 @@ export const register: Register = on => {
           <Box marginBottom={1}>
             <Text bold>{title}</Text>
           </Box>
-          <Box flexDirection="row" flexWrap="wrap" columnGap={1} rowGap={1}>
+          <Box flexDirection="row" flexWrap="wrap" gap={1}>
             {items.map(a => chip(a, showKind))}
           </Box>
         </Box>
