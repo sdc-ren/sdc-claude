@@ -83,6 +83,8 @@ Issues and pull requests are welcome.
    ```bash
    claude plugin validate .
    claude plugin validate plugins/tf
+   claude plugin test plugins/tf                # the Artifacts band
+   node --test plugins/tf/tests/engine.mjs      # the executor's hard rules, with mock agents
    ```
 4. Bump the plugin's `version` in `plugins/<name>/.claude-plugin/plugin.json` and add a CHANGELOG entry.
 

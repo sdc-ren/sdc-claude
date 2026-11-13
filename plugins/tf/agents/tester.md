@@ -42,6 +42,22 @@ workspace, not once per ticket.
    existing one takes or returns; no secrets in it (accounts come from the config / env recipes).
 4. The folder is missing → create it with the README and the helpers this task needs. Report what you added
    under `library:` so the PM lists it in HANDOFF.
+5. Several testers in one group: the prompt names ONE of them as the library's writer. If it says
+   `FLOW LIBRARY READ-ONLY`, import the library but do not edit it — two agents editing one helper at the
+   same time break each other's runs. Put a helper you need in `<task>/flows/_new/<job id>-<name>.mjs`,
+   import it from there, and list it under `library:`; the next tester that runs alone moves it into `_lib/`.
+
+## `Cases:` in the prompt
+The PM listed the cases this job covers. Run only those (`flow-run.mjs … --cases a,b`). Other flows in
+`flows.json` are not yours this job: do not run them "to be safe", do not repair them, do not add a smoke
+case. A listed case with no flow → write it. If the change clearly breaks a case that is not listed, say so
+under Issues (`not-listed: <case> — why`) and let the PM decide.
+
+## Other jobs run beside you
+Your scratch folder is `<task>/tmp/<job id>/` (the prompt gives it): temp files, seed scripts, downloads go
+there. Never delete or clean a folder, a temp file or a DB row your job did not create — a `rm -rf` of a
+shared temp folder fails the other tester's seed and shows up as a FAIL that is not a bug. Seed data with
+`uniq()` names so two jobs never fight over one record.
 
 ## Look before you write (UI steps)
 Never write selectors from memory or from the source code alone.

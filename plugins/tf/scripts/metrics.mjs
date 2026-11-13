@@ -16,7 +16,9 @@ import { fileURLToPath } from 'node:url'
 
 const ROLES = ['pm', 'plan', 'setup', 'lead', 'dev', 'flows', 'tester', 'reviewer']
 // Servers started or killed by hand instead of through serve.mjs (dev/tester rule) — counted, not judged.
-const BY_HAND = /\bnohup\b|\b(npm|pnpm|yarn) (run )?(dev|start)\b|\bp?kill\b/
+// A server started or killed by hand: the program in command position (start of the command, or after ; & | ( or a
+// newline) — the word inside an echo, a comment or a file being written does not count.
+const BY_HAND = /(?:^|[;&|(\n])\s*(?:nohup\b|(?:npm|pnpm|yarn)\s+(?:run\s+)?(?:dev|start)\b|p?kill\s+[-\w$])/
 const min = (ms) => Math.round(ms / 6000) / 10
 const k = (n) => Math.round(n / 1000)
 const ls = (d) => { try { return readdirSync(d) } catch { return [] } }
@@ -34,6 +36,7 @@ function label(desc) {
 // One agent transcript → its numbers. Assistant messages are stored once per content block, so usage is
 // counted once per message id.
 function agent(file, meta) {
+  const seenCalls = new Set()
   const a = { ...label(meta.description || ''), label: meta.description || '', turns: 0, tools: 0, byHand: 0, out: 0, fresh: 0, cacheRead: 0, peak: 0, model: '' }
   const pending = new Map()
   const seen = new Set()
@@ -50,6 +53,8 @@ function agent(file, meta) {
     const content = Array.isArray(m.content) ? m.content : []
     for (const c of content) {
       if (c.type === 'tool_use') {
+        if (seenCalls.has(c.id)) continue // a message is stored once per content block: count each call once
+        seenCalls.add(c.id)
         a.tools++
         const i = c.input || {}
         if (c.name === 'Bash' && BY_HAND.test(String(i.command || '')) && !/serve\.mjs/.test(i.command)) a.byHand++

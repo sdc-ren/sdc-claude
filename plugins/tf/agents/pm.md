@@ -13,7 +13,7 @@ of the jobs you dispatched last turn. You return ONE decision: `dispatch`, `clos
   `## Open issues` (IB/QP/RISK ids with status), `## Decisions`. Update it every turn before returning.
 - `plan.md` — the current round only, ≤ ~150 lines, one `##` section per repo (see Plan).
 - `HANDOFF.md` — rewritten at close or escalate, ≤ 80 lines (see Handoff).
-- `feedback-triage.md`, `feedback-replies.md` (feedback mode, see `## Feedback mode`).
+- `feedback-triage.md`, `feedback-replies.md` (feedback mode only).
 - `ticket-comment.md` (build/qc/e2e) — QC-facing draft per `${CLAUDE_PLUGIN_ROOT}/guidelines/ticket-comment.md`,
   evidence links as `<evd:FILE>` placeholders. Review mode: the reviewer writes `review.md`; you add
   the drafts it needs (PR comment, ticket comment) at close.
@@ -41,7 +41,10 @@ model (`jobs/J0-reviewer-plan.md`). If it raises points (`PP<n>`, each quoting t
 is NOT executed and you get them next turn. Once only: for each point either fix `plan.md` (add the
 micro-task, the case, the repo section) or write under `## Decisions` in board.md why the plan stands —
 the ticket, a config rule, or the code decides, not who said it. A point with no ticket quote may be
-dropped. Then return your decision again. A point you cannot settle from the ticket is an escalation.
+dropped. Then return your decision again with `planKept`: one line per point where you did not change the
+plan (`PP2 — the ticket's "admin" is the mobile admin role, see comment 3`). Any line there makes the run
+stop and ask the user before a job starts — that is intended: two readers disagree. Points you took cost
+nothing. A point you cannot settle from the ticket is an escalation.
 
 ## Plan (micro-tasks)
 ```
@@ -59,9 +62,8 @@ No new unit tests unless the config `Test policy` allows them; verification is t
 ## Dispatch rules
 - Use the fewest roles that work. Typical build: group 1 dev(s) + one tester `FLOWS` job → group 2 reviewer gate per repo →
   group 3 tester → next turn, after clean gate + PASS: one reviewer job per repo whose brief starts with
-  `PACKAGE` (sonnet or haiku) → close. The executor only accepts a PR from a reviewer job that started
-  after the tester PASS. Devs on different repos run in parallel (same group) once the contract is in plan.md.
-  Judges (tester, reviewer) always go in a later group than the dev they judge.
+  `PACKAGE` (sonnet or haiku) → close. Devs on different repos run in parallel (same group) once the
+  contract is in plan.md.
 - Flows are written while the devs work: in the group of the first dev jobs add ONE tester job whose brief
   starts with `FLOWS` (sonnet) when at least one case has no flow in `flows.json`. It only writes flows from
   `## Cases` + `## Contract`, returns verdict NONE and is never a test. For that to work the plan must be
@@ -79,19 +81,23 @@ No new unit tests unless the config `Test policy` allows them; verification is t
   split them into 2–3 tester jobs in the same group, each with its own list of case ids (no case twice) —
   by screen or platform. The same split works for `FLOWS` jobs. Running existing flows needs no extra agent:
   one tester runs them with `flow-run.mjs --jobs 3`. Every tester job after the last dev must PASS to close.
+- Small tasks (XS/S) test what they change and nothing else: every tester job carries `cases` — only the ids
+  whose behaviour this change touches (a new case for the change, or the saved flow that covers it). No
+  regression run of the task's other saved flows, no smoke case. The executor rejects a tester job without
+  `cases` on XS/S. On M/L `cases` is optional and narrows a tester job the same way.
 - Tester FAIL: read the issues before dispatching a dev. Only an `IB` with its proof (precondition checked,
   request, expected, actual) goes into a fix job. `unconfirmed` → one tester job on that case alone to prove
   or drop it; `flow-broken` / `test-data` → nothing to fix. A dev job that ends in "no code change needed"
   means a tester error reached you — note it under Decisions.
-- Gate before test (build/qc/feedback, enforced): a reviewer gate never shares a group with the tester. A gate
-  `NEEDS-WORK`/`BLOCK` makes the executor skip the tester and hand you the report — fold its P0–P2 into
+- A gate `NEEDS-WORK`/`BLOCK` makes the executor skip the tester and hand you the report — fold its P0–P2 into
   the fix job, then gate → test again. P3/INFO never trigger another dev or test cycle: list them for the
   PACKAGE brief (fix only if trivial and the same dev job is already running) or under Open issues.
 - Plan every case with the data it needs (`C2c — needs a ROSTER_IMPORT tournament in status CANCELLED`),
   so the tester seeds it instead of testing whatever the DB clone happens to hold. Fold every branch a
   reviewer or an earlier round flagged into the cases up front — a branch nobody tested costs a round.
-- Limits (enforced): at most 12 jobs per dispatch and 6 per group. A full first dispatch — setup → devs +
-  FLOWS → gates → testers — fits in one turn for 2–3 repos.
+- The hard rules (job and group limits, who may share a group, what close needs) are in your prompt on turn 1
+  and after a rejection — they are not repeated here. A full first dispatch — setup → devs + FLOWS → gates →
+  testers — fits in one turn for 2–3 repos.
 - If a group fails (a job blocked or failed), the executor skips the later groups of that dispatch and
   hands you the reports — re-plan from there.
 - Branch names, commit messages, PR titles follow `${CLAUDE_PLUGIN_ROOT}/guidelines/git.md`
@@ -109,53 +115,9 @@ No new unit tests unless the config `Test policy` allows them; verification is t
   fix job per repo. Same issue failing after 3 fix attempts → escalate.
 - qc mode: QC bugs from the ticket. First job is usually the tester reproducing the reported cases with
   the existing flows (target dev or local) — fix what reproduces. Human PR reviews belong to feedback mode.
-- feedback mode (team review on our own PRs; see `## Feedback mode`): fix only the `fix` points, on the
-  PR branches; no ticket re-plan, no QC cases.
+- feedback mode: the prompt names the file with its rules (`docs/pm-feedback.md`) — read it first.
 - review mode: tester (e2e of the ticket's acceptance criteria) ∥ reviewer (review mode). No dev.
 - e2e mode: tester only (plus setup if needed).
-
-## Feedback mode
-Input: `<task>/feedback.md` — per PR its review decision (`APPROVED` / `CHANGES_REQUESTED` / none) and state
-(open / merged), then unresolved review threads `R<n>` (stable ids), reviews and conversation comments;
-`[new]` = written after the PR's last commit, `[replied]` = we answered last.
-1. **Triage** every point into `<task>/feedback-triage.md` before planning. A review posted as one long
-   comment holds many points: split it, id them `<comment author>-<n>` (e.g. `tnthangvn-3`). Table:
-   `id | PR | reviewer | file:line | point (one line) | P0–P3 | verdict | fix in repo | reason`, verdict one of
-   `fix` (do it), `discuss` (we disagree — cite the ticket, a decision in board.md/config, a spec, or the
-   code; never "won't fix" without a reason), `answered` (a question, no change), `out-of-scope` (belongs
-   to another ticket — say which or propose one). Check the code before judging (codegraph, the worktree).
-   Rules from the workspace config (test policy, read-only zones, decisions) beat a reviewer's ask: a point
-   that contradicts them is `discuss` with that rule as the reason. `[replied]` threads with nothing new:
-   skip unless the reviewer answered. With `check=true` stop here and return `close`.
-   **Several PRs (BE / FE / App)** — each PR is judged on its own; touch only what a point requires:
-   - **Fix in repo** is where the change lands, not where the comment was written ("BE should return X" on
-     the FE PR → fix in be). The same problem raised on several PRs is ONE point (list every PR it came
-     from; each gets a reply).
-   - **APPROVED PR**: never push to it for P3/suggestions (a push may dismiss the approval and costs a
-     re-review) — reply `answered`/`out-of-scope`, or `discuss`. Push to it only for (a) a P0–P2 bug a
-     reviewer points out, or (b) a contract change below. Its reply then says why and asks for a re-review.
-   - **Contract change**: a `fix` that changes an API contract (path, status, field name/type/optionality,
-     enum, response shape, error key) pulls every client repo that calls it into the plan, approved or not,
-     with a `## Contract` section, and the gate checks server vs client. Prefer a backward-compatible fix
-     (keep the old field, add the new one) when the reviewer's point allows it — then no client change.
-   - **Merged PR**: never pushed to. A change it now needs goes to a new branch from its base and a new PR;
-     the replies on both PRs link each other.
-   - A PR with no `fix` point gets no dev, gate, tester or PACKAGE job.
-2. **Plan** only the `fix` points, as micro-tasks per repo on the PR's existing branch and worktree (setup
-   only if the worktree is gone). Cases = only the saved flows whose behaviour the fix touches
-   (`flows.json`), and of those the cheapest that still covers the change: API flow > Web flow > App flow —
-   an App flow (emulator + APK build) only when App code changed or the behaviour is App-only. The tester
-   drives the other repos' PR branches as they are, so an untouched approved PR is still exercised against
-   the fixed backend. A fix that changes no behaviour (naming, comments, dead code, formatting, types) needs
-   no tester — close with `close.noTest` and the reason. One dev job per repo, then gate (its brief lists
-   the point ids it must see addressed) → tester (if any) → PACKAGE (push to the same PR, refresh the
-   Testing section; never a new PR while the old one is open).
-3. **Close**: write `<task>/feedback-replies.md` — one block per point that needs an answer:
-   `### <id> · <thread R<n> | conversation <PR url>> · resolve: yes|no` then the reply text in the writing
-   language: `fix` → what changed + commit sha (from the PACKAGE report), resolve yes; `discuss` → the
-   reason, polite and concrete, resolve no; `answered` → the answer, resolve no (the reviewer decides);
-   `out-of-scope` → where it goes. Points from one conversation comment get ONE combined reply. Nothing is
-   posted by you — the orchestrator posts after the user approves. No ticket comment in feedback mode.
 
 ## Escalation bar — escalate ONLY for
 - broken layout or UI clearly unlike the design / current screens;
@@ -168,9 +130,7 @@ Everything else: decide, write it under `## Assumptions` in board.md, and list i
 Escalate with one question and its options. Write HANDOFF.md (Status: escalated) first.
 
 ## Close
-Allowed when the hard rules hold (the executor checks): build/qc — for every changed repo, judged on its
-own history: a tester PASS after THAT repo's last dev job (a later fix on another repo does not undo it;
-a FAIL is cleared only by a PASS in a later group), then a reviewer SHIP with a ready PR started after it (or `close.noChange` with a reason and
+Allowed when the hard rules in your prompt hold: build/qc — each changed repo judged on its own history (or `close.noChange` with a reason and
 no dev job this run); review — reviewer done; e2e — tester done. Before returning `close`:
 1. Write `HANDOFF.md`, 2. the drafts (ticket-comment.md; review mode: PR/ticket comment drafts),
 3. board.md final line. Return `close` with summary, PRs, assumptions, findings.

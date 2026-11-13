@@ -47,6 +47,7 @@ const DISPATCH = {
     decision: { type: 'string', enum: ['dispatch', 'close', 'escalate', 'approve'] },
     size: { type: 'string', enum: ['XS', 'S', 'M', 'L'] },
     note: { type: 'string', description: 'One or two lines: what this turn decided and why.' },
+    planKept: { type: 'array', items: { type: 'string' }, description: 'The turn after a plan check: one line per point where you did NOT change the plan — "PP<n> — why the plan stands". Empty when you took every point.' },
     scope: { type: 'string', description: 'With the first dispatch/approve of a build or qc run, at most 5 lines for the user: repos changed, repos NOT changed and why, number of cases, the assumptions that could be wrong.' },
     escalate: { type: 'string', description: 'decision=escalate: the one question for the user, with the options.' },
     jobs: {
@@ -64,6 +65,7 @@ const DISPATCH = {
           brief: { type: 'string', description: 'What to do, concretely. Point at plan.md sections instead of repeating them.' },
           reads: { type: 'array', items: { type: 'string' }, description: 'Files/sections the job must read (keep it short).' },
           doneWhen: { type: 'string' },
+          cases: { type: 'string', description: 'tester jobs: the case ids to run, comma-separated. Required on XS/S tasks: only the cases whose behaviour this change touches.' },
         },
       },
     },
@@ -95,6 +97,8 @@ const REPORT = {
     filesChanged: { type: 'array', items: { type: 'string' } },
     blocked: { type: 'array', items: { type: 'string' } },
     reportFile: { type: 'string' },
+    headBefore: { type: 'string', description: 'dev jobs: output of `task.mjs head <worktree>` before the first edit' },
+    headAfter: { type: 'string', description: 'dev jobs: the same command after the last check' },
   },
 }
 
@@ -185,6 +189,9 @@ function checkDispatch(d) {
     if (!ROLES[mode].includes(j.role)) return `role ${j.role} is not allowed in mode ${mode} (allowed: ${ROLES[mode].join(', ')})`
     if (seenIds.has(j.id)) return `job id ${j.id} already used — continue the numbering`
     if (j.role === 'dev' && (!j.repo || j.repo === 'all')) return `dev job ${j.id} must name one repo`
+    // Small tasks test what they change and nothing else: the PM names the cases, the tester runs only those.
+    if (CODE_MODES.includes(mode) && ['XS', 'S'].includes(d.size || size) && j.role === 'tester' && !isFlows(j) && !String(j.cases || '').trim())
+      return `tester job ${j.id} on a size ${d.size || size} task needs "cases": the ids of the cases this change touches — a small task runs only those, never the whole saved suite`
   }
   const ids = jobs.map((j) => j.id)
   if (new Set(ids).size !== ids.length) return 'duplicate job ids in one dispatch'
@@ -270,10 +277,21 @@ function jobPrompt(j) {
         `later jobs reuse them and the orchestrator stops them at run end. A config without "## Servers": smoke-check backend/frontend by hand, then stop what you started. ` +
         `Emulator + APK only when the plan needs the App (stop the emulator when done).\n`
       : '') +
+    (j.role === 'tester' && !isFlows(j) && String(j.cases || '').trim()
+      ? `Cases: ${j.cases} — run ONLY these (flow-run.mjs --cases ${String(j.cases).replace(/\s+/g, '')}). Do not run, re-run or repair any other saved flow, and add no smoke case.\n`
+      : '') +
     (isFlows(j)
       ? `FLOWS job: the code is being changed right now by the dev job(s) of this group. Write the flows only (tester.md "FLOWS briefs"); do not judge the app, return verdict NONE.\n`
       : '') +
     (j.role === 'dev' || j.role === 'tester' ? serversLine : '') +
+    (j.role === 'tester'
+      ? `Scratch: ${dir}/tmp/${j.id}/ is yours alone (temp files, seeds, downloads). Never delete or clean a folder, DB row or temp file this job did not create — other jobs run at the same time.\n` +
+        (j._lib === 'reader'
+          ? `FLOW LIBRARY READ-ONLY: ${j._libOwner} is the only job that may edit ${root}/.pipeline/_lib in this group. Import from it, never edit it. A helper you would add goes to ${dir}/flows/_new/${j.id}-<name>.mjs and under \`library:\` in your report (a later tester moves it in).\n`
+          : j._lib === 'owner'
+            ? `FLOW LIBRARY: you are the only job in this group that may edit ${root}/.pipeline/_lib; other testers import it while you work, so only add (tester.md rule 3).\n`
+            : '')
+      : '') +
     reportLine(j.id, j.role, j.repo)
 }
 
@@ -294,11 +312,28 @@ function checkTeam(members) {
   return ''
 }
 const failed = (summary) => ({ status: 'failed', verdict: 'NONE', summary })
+// Dev jobs never commit: the reviewer packages after the tester passed. The lead reports the worktree HEAD
+// before and after; when it moved, the commits are turned back into uncommitted changes (nothing is lost).
+const headLine = (repo) => `Never commit. Your FIRST command: node ${S}/task.mjs head ${worktreeOf(repo)} → return it as headBefore; the same command after your last check → headAfter.\n`
+const sameHead = (a, b) => a.startsWith(b) || b.startsWith(a)
+async function uncommitted(j, model, report) {
+  const { headBefore: a, headAfter: b } = report
+  if (!a || !b) { log(`${j.id} dev ${j.repo}: no HEAD reported — commit check skipped`); return report }
+  if (sameHead(a, b)) return report
+  log(`${j.id} dev ${j.repo}: committed (${a.slice(0, 8)} → ${b.slice(0, 8)}) — undoing the commits, the changes stay`)
+  const fix = await run(
+    `Job ${j.id} · role dev lead · repo ${j.repo}\n${context}\n\nUNCOMMIT: this dev job left commits in the worktree; dev jobs never commit (the reviewer packages after the tester passed). ` +
+      `Run exactly: node ${S}/task.mjs uncommit ${worktreeOf(j.repo)} ${a}\nIt keeps every change as uncommitted work. Do nothing else. ` +
+      `status done when it printed "undone", blocked with its message otherwise; summary = its output.`,
+    { label: `${j.id} lead:${j.repo} uncommit`, phase: 'Jobs', model: 'haiku', schema: REPORT, agentType: AGENT.lead })
+  if (fix && fix.status === 'done') return { ...report, headAfter: a }
+  return { ...report, status: 'blocked', blocked: [...(report.blocked || []), `the dev job committed and the commits could not be undone: ${fix ? fix.summary : 'no answer'}`] }
+}
 async function runDev(j) {
   const model = MODELS.includes(j.model) ? j.model : 'sonnet'
   const head = `Job ${j.id} · role dev lead · repo ${j.repo}\n${context}\n\n` +
     `Brief: ${j.brief}\nRead first: ${(j.reads || []).join(', ') || 'plan.md section for your repo'}\nDone when: ${j.doneWhen}\n` +
-    `Worktree: ${worktreeOf(j.repo)} · existing PR: ${prs[j.repo] || 'none'}\n` + serversLine
+    `Worktree: ${worktreeOf(j.repo)} · existing PR: ${prs[j.repo] || 'none'}\n` + serversLine + headLine(j.repo)
   const teamFile = `${dir}/jobs/${j.id}-team-${j.repo}.md`
   const ask = (why) => run(
     head + `You lead this repo's dev work for this job (lead.md). Decide first: do it yourself, or split it among 2–${MAX_MEMBERS} members who work in this worktree at the same time.\n` +
@@ -308,8 +343,9 @@ async function runDev(j) {
     { label: `${j.id} lead:${j.repo}`, phase: 'Jobs', model, schema: LEAD, agentType: AGENT.lead, ...(j.effort ? { effort: j.effort } : {}) })
   let plan = await ask('')
   if (!plan) return null
-  const solo = (p) => ({ verdict: 'NONE', ...p, status: p.status || 'failed' })
+  const solo = (p) => uncommitted(j, model, { verdict: 'NONE', ...p, status: p.status || 'failed' })
   if (!plan.split) return solo(plan)
+  const headBefore = plan.headBefore || ''
   let bad = checkTeam(plan.members)
   if (bad) {
     log(`${j.id} lead: ${bad}`)
@@ -335,7 +371,8 @@ async function runDev(j) {
       `Make the repo whole: do what members reported as blocked or left for you, fix the seams, run the formatter and the whole-repo typecheck/build, and the job's done-when checks. ` +
       `Then report for the whole job (filesChanged = every file changed by you and the members). ${reportLine(j.id, 'dev', j.repo)}`,
     { label: `${j.id} lead:${j.repo} merge`, phase: 'Jobs', model, schema: REPORT, agentType: AGENT.lead })
-  return merged || failed(`dev lead did not return after its members (${got.map((g) => `${g.id} ${g.status}`).join(', ')})`)
+  if (merged) return uncommitted(j, model, { ...merged, headBefore: merged.headBefore || headBefore })
+  return failed(`dev lead did not return after its members (${got.map((g) => `${g.id} ${g.status}`).join(', ')})`)
 }
 // The code gate runs on the model of the dev lead whose work it judges (the repo's last dev job; for repo
 // "all" the strongest of them): the judge is never weaker than the writer. PACKAGE keeps the PM's model.
@@ -377,6 +414,7 @@ let size = ''
 // the PM fixes plan.md or records why not, once, and the run goes on.
 let planChecked = !['build', 'qc'].includes(mode) || !!A.approved
 let planNotes = ''
+let planAsked = false // the PM answers plan-check points this turn
 const planFile = `${dir}/jobs/J0-reviewer-plan.md`
 const RULES = CODE_MODES.includes(mode)
   ? `Hard rules the executor enforces (a decision that breaks one is rejected and costs a turn): at most ${MAX_JOBS} jobs per dispatch and ${MAX_GROUP} per group; ONE dev job per repo per group, ${MAX_DEV_PER_REPO} per repo per run; ` +
@@ -393,10 +431,11 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
       ? (A.format === 'old' ? 'This folder has the old layout (STATUS.md/spec.md, no HANDOFF.md): build HANDOFF.md/board.md from them first, keep only what the new round needs.\n' : '') +
         (A.approved ? 'The user approved plan.md — dispatch it.\n' : '') +
         (mode === 'feedback'
-          ? `Feedback mode: start from HANDOFF.md, board.md, feedback.md (NOT a QC round — do not re-plan ticket cases). Triage every point into feedback-triage.md${flags.check ? ', then return close (check = triage only)' : ', then plan only the fix points'}.\n`
+          ? `Feedback mode: read ${S}/../docs/pm-feedback.md first (its rules bind this run), then start from HANDOFF.md, board.md, feedback.md (NOT a QC round — do not re-plan ticket cases). Triage every point into feedback-triage.md${flags.check ? ', then return close (check = triage only)' : ', then plan only the fix points'}.\n`
           : 'Start from HANDOFF.md (if present), board.md, ticket.md (new comments are marked), then plan.\n')
       : `Reports from the last dispatch:\n${JSON.stringify(last.map(compact))}\n`) +
-    (planNotes ? `Plan check (${planFile}) — your last decision was NOT executed. Points raised:\n${planNotes}\nFor each point: fix plan.md, or write under board.md Decisions why the plan stands (a point without a ticket quote may be dropped). Then return your decision again.\n` : '') +
+    (planNotes ? `Plan check (${planFile}) — your last decision was NOT executed. Points raised:\n${planNotes}\nFor each point: fix plan.md, or write under board.md Decisions why the plan stands (a point without a ticket quote may be dropped). Then return your decision again, with planKept = one line per point where the plan stays as it was (the user is asked about those before any job runs).\n` : '') +
+    (mode === 'feedback' && turn > 1 ? `Feedback mode rules: ${S}/../docs/pm-feedback.md.\n` : '') +
     (violation ? `REJECTED last decision: ${violation}\nFix it this turn.\n` : '') +
     (turn === 1 || violation ? RULES : '') +
     (turn >= MAX_TURNS - 1 ? 'Last turns left: close or escalate now.\n' : '') +
@@ -406,6 +445,13 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
   if (!d) return { status: 'error', stage: `pm t${turn}`, slug }
   if (d.size) size = d.size
   log(`PM t${turn} [${d.size}] ${d.decision}: ${d.note}`)
+  // Two readers of the ticket still disagree after the PM answered the plan check: that is the moment to ask
+  // the user, before any code is written. A plan the PM corrected, or a clean check, runs straight on.
+  if (planAsked && !A.approved && Array.isArray(d.planKept) && d.planKept.length && (d.decision === 'dispatch' || d.decision === 'approve')) {
+    log(`plan check: ${d.planKept.length} point(s) kept open by the PM → asking the user`)
+    return { status: 'approve', slug, round, mode, note: d.note, scope: d.scope || '', planOpen: d.planKept, planCheck: planFile }
+  }
+  planAsked = false
   planNotes = ''
   if (!planChecked && (d.decision === 'dispatch' || d.decision === 'approve')) {
     planChecked = true
@@ -420,6 +466,7 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
       if (pc && pc.verdict !== 'SHIP' && points.length) {
         log(`plan check: ${points.length} point(s) → back to the PM`)
         planNotes = points.map((p) => `- ${p}`).join('\n')
+        planAsked = true
         continue
       }
       log(pc ? 'plan check: nothing found' : 'plan check: no report — going on with the plan as it is')
@@ -446,6 +493,9 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
       for (const g of groups) {
         seq++
         const batch = d.jobs.filter((j) => j.group === g).map((j) => ({ ...j, _seq: seq }))
+        // Several testers at once: one of them owns the shared flow library, the others only read it.
+        const testers = batch.filter((j) => j.role === 'tester')
+        if (testers.length > 1) testers.forEach((j, i) => { j._lib = i ? 'reader' : 'owner'; j._libOwner = testers[0].id })
         const recs = (await parallel(batch.map((j) => () => runJob(j, turn)))).filter(Boolean)
         last.push(...recs)
         // A later group usually depends on this one (judges after devs): stop and let the PM decide.

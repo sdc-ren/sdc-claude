@@ -21,6 +21,9 @@ import { fileURLToPath } from 'node:url'
 
 const KEY_RE = /\b([A-Za-z][A-Za-z0-9]{1,9})-(\d{1,6})\b/
 const LEGACY_SUFFIX = /-(?:e2e\d*|qc\d*|r\d+|evd|fix|review|view|verify|before|after|app|app-thumb|thumb|header)\b/i
+const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`
+const git = (wt, args) => sh(`git -C ${q(wt)} ${args}`)
+const gitOk = (wt, args) => { try { execSync(`git -C ${q(wt)} ${args}`, { stdio: 'pipe', shell: '/bin/sh', timeout: 30_000 }); return true } catch { return false } }
 const sh = (cmd) => { try { return execSync(cmd, { stdio: 'pipe', shell: '/bin/sh', timeout: 30_000 }).toString().trim() } catch { return '' } }
 const out = (o) => console.log(JSON.stringify(o, null, 2))
 
@@ -336,6 +339,21 @@ if (isMain) {
         break
       }
       case 'handoff-get': out(header(resolve(a[0]))); break
+      // Dev jobs never commit (the reviewer packages). `head` is what a dev job reports before and after its
+      // work; `uncommit` turns commits a dev job made back into uncommitted changes — nothing is lost.
+      case 'head': out({ head: git(resolve(a[0]), 'rev-parse HEAD') }); break
+      case 'uncommit': {
+        const wt = resolve(a[0]); const sha = a[1] || ''
+        const head = git(wt, 'rev-parse HEAD')
+        if (!/^[0-9a-f]{7,40}$/.test(sha) || !head) throw new Error('usage: task.mjs uncommit <worktree> <sha before the job>')
+        if (head.startsWith(sha) || sha.startsWith(head)) { out({ undone: 0, head }); break }
+        if (!gitOk(wt, `merge-base --is-ancestor ${sha} HEAD`)) throw new Error(`refused: ${sha} is not an ancestor of HEAD — the branch moved, undo by hand`)
+        if (git(wt, 'branch -r --contains HEAD')) throw new Error('refused: the commits are already pushed — leave them, tell the PM')
+        const n = Number(git(wt, `rev-list --count ${sha}..HEAD`)) || 0
+        if (!gitOk(wt, `reset -q ${sha}`)) throw new Error('git reset failed')
+        out({ undone: n, head: git(wt, 'rev-parse HEAD') })
+        break
+      }
       case 'migrate-worktrees': {
         const r0 = a.filter((x) => x !== '--apply')[0]
         out(migrateWorktrees(r0, repoMap(r0, flag('repos')), a.includes('--apply')))
@@ -348,7 +366,7 @@ if (isMain) {
         break
       }
       default:
-        console.error('usage: task.mjs resolve <root> <input> [--repos a,b] | lock <dir> | unlock <dir> | new-round <dir> <n> | journal <dir> <text> | handoff-get <dir> | legacy <root> [--apply]')
+        console.error('usage: task.mjs resolve <root> <input> [--repos a,b] | lock <dir> | unlock <dir> | new-round <dir> <n> | journal <dir> <text> | handoff-get <dir> | head <worktree> | uncommit <worktree> <sha> | legacy <root> [--apply]')
         process.exit(1)
     }
   } catch (e) {

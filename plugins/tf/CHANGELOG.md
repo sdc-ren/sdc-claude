@@ -4,6 +4,40 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.5.0] — 2026-11-13
+
+### Added
+- **Tool guard** (`hooks/guard.ts`): rules that were only sentences in a prompt are refused at the tool call —
+  a dev job's `git commit|push|merge|rebase`, a team member's edit of a file given to another member, a
+  read-only tester's write to the shared flow library. The guard recognises a job from the prompt the
+  executor starts it with; anything else passes.
+- **Ask the user only on disagreement**: after a plan check with points the PM returns `planKept`; a point
+  where the plan stays as it was stops the run (status `approve`, `planOpen`) so the user settles it before
+  any job runs. A corrected plan or a clean check runs straight on.
+- **Small tasks test only what they change**: on XS/S every tester job names `cases` (enforced) and the
+  tester runs only those — no other saved flow, no smoke case. `cases` is optional on M/L.
+
+### Changed
+- `agents/pm.md` 195 → 148 lines: feedback-mode rules moved to `docs/pm-feedback.md` (the engine points the
+  PM at it in that mode only); rules the engine already states in the PM prompt are no longer repeated.
+
+### Fixed
+- **Metrics `byHand` over-counted**: it matched the word `kill` anywhere in a command (an echo, a comment,
+  code being written) and counted each call twice. It now matches the program in command position and
+  counts a call once; tool counts were doubled for the same reason. RVD-289 has 0, not 10.
+- **Dev jobs that commit**: on RVD-289 a dev lead committed three times although only the reviewer packages.
+  The lead now reports the worktree HEAD before and after its job; when it moved, the executor has the
+  commits undone (`task.mjs uncommit`, changes kept; refused when already pushed) before the gate runs.
+- **Testers running side by side**: each tester job gets its own scratch folder (`<task>/tmp/<job>/`) and is
+  told never to clean what it did not create; with several testers in a group only the first may edit the
+  shared flow library, the others read it and park new helpers in `flows/_new/`.
+
+### Added (tests and scripts)
+- `tests/engine.mjs`: the executor's hard rules run against mock agents (`node --test tests/engine.mjs`) —
+  per-repo close, PACKAGE after PASS, plan check, job limits, writer ≠ judge, lead teams, commit undo,
+  tester isolation.
+- `task.mjs head <worktree>` and `task.mjs uncommit <worktree> <sha>`.
+
 ## [1.4.0] — 2026-11-13
 
 ### Added
