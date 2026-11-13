@@ -65,7 +65,7 @@ Then, in your workspace (the folder that holds your repos):
 | `/tf:qc <ticket>` | Answer a QC report or human PR review points: next round on the same branches and flows | Existing PR updated (or a new one if the old PR was merged), QC reply draft |
 | `/tf:review <PR url\|ticket>` | Review a teammate's PR: e2e of the ticket's acceptance criteria + risk report | `review.md`, PR-comment and ticket-comment drafts — nothing posted |
 | `/tf:e2e <PR url\|ticket> [--cases 21,22]` | E2E only, no code changes | Evidence + ticket-comment draft |
-| `/tf:attach [ticket] [keyword] [--setup]` | Pick artifacts / design systems for a task from a checkbox list — only this workspace's | Saved to `specs/`, used by PM, devs, testers |
+| `/tf:attach <ticket> [keyword]` | Pick artifacts / canvases / design systems from a checkbox list built automatically for this workspace | Saved to `specs/`, used by PM, devs, testers |
 | `/tf:doctor` | Check this machine and workspace | Pass/fail table with fixes |
 | `/tf:status` | What every task holds (worktrees, DBs, ports, PRs) | Table + what the reaper would free |
 | `/tf:cleanup <slug>` | Free one task's resources (asks first) | Resources released, folder archived |

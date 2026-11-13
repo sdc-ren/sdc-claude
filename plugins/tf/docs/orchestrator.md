@@ -21,7 +21,7 @@ You never write, test, or review repo code yourself. Design and rationale: `docs
 | `/tf:cleanup <slug>` | — | after the user confirms: `node $S/resources.mjs release <cwd> <slug>` then `archive` |
 | `/tf:legacy` | — | `node $S/task.mjs legacy <cwd> --repos <keys>` (dry run): show what would move into `<SLUG>/history/legacy/` and which clean worktrees would be removed. Only after the user's yes: same command with `--apply` |
 | `/tf:migrate` | — | `node $S/task.mjs migrate-worktrees <cwd>` (dry run) → after the user's yes, `--apply`: moves flat `<slug>-<key>` worktrees into `.worktrees/<SLUG>/<repo dir>` and rewrites the ledgers |
-| `/tf:attach [ticket] [keyword] [--setup]` | — | Pick artifacts / design systems for a task from a checkbox list scoped to this workspace — `<PLUGIN>/docs/attach.md` |
+| `/tf:attach <ticket> [keyword]` | — | Pick artifacts / design systems for a task from a checkbox list built automatically for this workspace — `<PLUGIN>/docs/attach.md` |
 | `/tf:doctor` | — | `node $S/doctor.mjs <cwd>`: tools, agents, config, repos, Playwright, plus the config `## Doctor` checks. Run it before the first task on a machine |
 | `/tf:regression [--target t]` | — | e2e only on `.pipeline/_regression/` (flows promoted from merged tickets): `node $S/flow-run.mjs <cwd>/.pipeline/_regression --target <t>` |
 
@@ -56,8 +56,8 @@ language; `writingLang` = `Writing language` → a `Writing language:` line in t
    new ones marked — the PM treats P0–P2 review points like QC bugs. PR input: add `gh pr view <url> --json title,body,headRefName,baseRefName,files`
    and the PR URL to ticket.md. No ticket → write the user's text.
 6b. **Attachments** — `--attach` given → run `<PLUGIN>/docs/attach.md` for this task now. Otherwise, if
-   `<dir>/attachments.json` exists from an earlier round, reuse it silently. Never show artifacts that are
-   not registered for, or matching, this workspace.
+   `<dir>/attachments.json` exists from an earlier round, reuse it silently. Never show artifacts that do
+   not belong to this workspace (see attach.md).
 7. **Session title** — `<SLUG> · <3–6 word summary>` via `mcp__ccd_session_mgmt__set_session_title`
    (`session_id: "self"`; load via ToolSearch if deferred; missing → skip).
 

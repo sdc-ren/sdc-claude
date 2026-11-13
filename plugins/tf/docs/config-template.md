@@ -28,11 +28,9 @@ Keep sections short; link to longer docs instead of copying them.
 - Ticket tracker: <URL> — `browser.mjs auth <name> --url <URL> --playwright <package.json>`
 - Spec sources the PM may query: <NotebookLM notebook, docs paths, Figma>
 
-## Design & artifacts (the --attach picker shows only these, or titles matching Match)
-- Design system: <title — https://claude.ai/artifact/…, or "none">
-- Artifacts:
-  - <title — https://claude.ai/artifact/…>
-- Match: <keywords found in this workspace's artifact titles, e.g. PROJ-, product name>
+## Design & artifacts (optional — the --attach picker already finds this workspace's items itself)
+- Design system: <title — https://claude.ai/artifact/…>   (pin a default)
+- Match: <extra title keywords, e.g. a product name>      (for artifacts made in the claude.ai web app)
 
 ## Knowledge (PM reads first; orchestrator updates at close-out)
 - Known bugs: <path> · Verified env recipes: <path> · Decisions: <path>
