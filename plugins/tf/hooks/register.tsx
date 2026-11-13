@@ -87,29 +87,31 @@ export const register: Register = on => {
 
     const designs = list.filter(a => a.kind === 'design system').slice(0, SHOWN)
     const others = list.filter(a => a.kind !== 'design system').slice(0, SHOWN)
-    const chip = (a: TfArtifact) => (
-      <Button key={`tf-${a.id}`} variant={ids.includes(a.id) ? 'primary' : 'secondary'} onPress={toggle(a.id)}>
-        {ids.includes(a.id) ? '✓ ' : ''}{short(nameOf(a))} <Text dimColor>{a.kind}</Text>
-      </Button>
-    )
+    const chip = (a: TfArtifact, showKind: boolean) => {
+      const isPicked = ids.includes(a.id)
+      return (
+        <Button key={`tf-${a.id}`} variant={isPicked ? 'primary' : 'secondary'} onPress={toggle(a.id)}>
+          {isPicked ? '✓ ' : ''}{short(nameOf(a))}{showKind ? <Text dimColor> · {a.kind}</Text> : ''}
+        </Button>
+      )
+    }
+    const section = (title: string, items: TfArtifact[], showKind: boolean) =>
+      items.length > 0 && (
+        <Box flexDirection="column">
+          <Text dimColor>{title}</Text>
+          <Box flexDirection="row" flexWrap="wrap" gap={1}>
+            {items.map(a => chip(a, showKind))}
+          </Box>
+        </Box>
+      )
 
     return (
-      <Box flexDirection="column" gap={0}>
-        {designs.length > 0 && (
-          <Box flexDirection="row" flexWrap="wrap" gap={1}>
-            <Text dimColor>Design system:</Text>
-            {designs.map(chip)}
-          </Box>
-        )}
-        {others.length > 0 && (
-          <Box flexDirection="row" flexWrap="wrap" gap={1}>
-            <Text dimColor>Artifacts:</Text>
-            {others.map(chip)}
-          </Box>
-        )}
-        <Box flexDirection="row" gap={1}>
+      <Box flexDirection="column" gap={1}>
+        {section('Design system', designs, false)}
+        {section('Artifacts', others, true)}
+        <Box flexDirection="row" gap={2}>
           <Text dimColor>
-            {ids.length ? `${ids.length} picked — sent with your next message` : 'Pick, then send e.g. /tf:build PROJ-12'}
+            {ids.length ? `${ids.length} picked · sent with your next message` : 'Pick, then send e.g. /tf:build PROJ-12'}
           </Text>
           {ids.length > 0 && <Button key="tf-clear" plain onPress={() => update($, picked, () => [])}>Clear</Button>}
           <Button key="tf-close" role="dismiss" plain onPress={() => update($, isOpen, () => false)}>Close</Button>
