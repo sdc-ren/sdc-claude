@@ -48,15 +48,24 @@ test('the band lists the workspace artifacts and attaches picked ones to the nex
   expect(again.text).toBe('next message')
 })
 
-test('nothing is drawn when the workspace has no artifacts', async ($, on) => {
+test('an empty workspace still shows the band as Artifacts (0) with a hint', async ($, on) => {
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('process.run', () => ({ value: { exitCode: 0, stdout: '[]', stderr: '' } }))
+  on('prompt.submit', (_, e) => ({ text: e.text, context: e.context ?? [] }))
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
     return <Text>engine</Text>
   })
   await $.session.start({ cwd: '/ws', surface: 'desktop', isInteractive: true })
+  await settle()
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  expect((await ui.find({ type: 'Text', text: /engine/ }))?.text).toBe('engine')
+  expect(await ui.find({ type: 'Button', key: 'tf-open' })).toBeTruthy()
+  await ui.press({ key: 'tf-open' })
+  expect(await ui.find({ type: 'Text', text: /No artifacts in this workspace yet/ })).toBeTruthy()
+  await ui.press({ key: 'tf-close' })
+  expect(await ui.find({ type: 'Button', key: 'tf-open' })).toBeTruthy()
   await ui.unmount()
+
+  const sent = await $.prompt.submit({ text: 'hello' })
+  expect(sent.text).toBe('hello')
 })

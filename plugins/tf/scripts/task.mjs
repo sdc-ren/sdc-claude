@@ -5,14 +5,14 @@
 //   resolve <root> <input> [--repos be,fe,mobile]
 //       input = ticket key (proj-301, PROJ-301), PR URL, owner/repo#n, or free text.
 //       Prints JSON: { slug, dir, created, restoredFromArchive, round, nextRound, status, mode, prs{},
-//       worktrees{}, legacyDirs[], legacyWorktrees[], format: 'v2'|'v1'|'new', locked }
+//       worktrees{}, legacyDirs[], legacyWorktrees[], format: 'current'|'old'|'new', locked }
 //   lock <dir> [--ttl 5400]      → {"conflict":false} or {"conflict":true,"holder":…}
 //   unlock <dir>
 //   new-round <dir> <round>      archive plan/board/jobs of the previous round into history/r<round-1>/
 //   journal <dir> <text…>        append "<ISO time> <text>" to journal.md
 //   handoff-get <dir>            HANDOFF.md header as JSON
 //   migrate-worktrees <root> [--apply]   move flat <slug>-<key> worktrees into .worktrees/<SLUG>/<repo dir>
-//   legacy <root> [--repos a,b] [--apply]   fold v1 suffixed folders/worktrees into the ticket folder (dry run by default)
+//   legacy <root> [--repos a,b] [--apply]   fold old suffixed folders/worktrees into the ticket folder (dry run by default)
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, appendFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
@@ -52,7 +52,7 @@ export function header(dir) {
   const f = join(dir, 'HANDOFF.md')
   const h = { format: 'new', round: 0, status: '', mode: '', prs: {}, worktrees: {} }
   if (existsSync(f)) {
-    h.format = 'v2'
+    h.format = 'current'
     for (const line of readFileSync(f, 'utf8').split('\n').slice(0, 40)) {
       let m
       if ((m = line.match(/^Round:\s*(\d+)/))) h.round = Number(m[1])
@@ -65,15 +65,15 @@ export function header(dir) {
   }
   const s = join(dir, 'STATUS.md')
   if (existsSync(s)) {
-    // v1 folder: round from the title, PRs from the State JSON.
-    h.format = 'v1'
+    // Old-layout folder (STATUS.md): round from the title, PRs from the State JSON.
+    h.format = 'old'
     const txt = readFileSync(s, 'utf8')
-    // v1 STATUS files were often hand-edited: take the highest round mentioned anywhere.
+    // Old STATUS files were often hand-edited: take the highest round mentioned anywhere.
     // Round numbers are small; "lượt này 2322k" / "tất cả lượt 4336k" are token counts, not rounds.
     const rounds = [...txt.matchAll(/(?:"round"\s*:\s*|\b(?:round|lượt|vòng)\s+)(\d{1,2})(?![\dk])/gi)].map((m) => Number(m[1]))
     h.round = rounds.length ? Math.max(...rounds) : 1
     const headLines = txt.split('\n').slice(0, 6).join('\n')
-    h.status = /^(ESCALATE|HANDOFF|ERROR)/m.test(headLines) ? 'escalated' : 'done' // v1 folders are historical: next run = new round
+    h.status = /^(ESCALATE|HANDOFF|ERROR)/m.test(headLines) ? 'escalated' : 'done' // old-layout folders are historical: next run = new round
     const st = txt.match(/^State:\s*(\{.*\})\s*$/m)
     if (st) {
       try {
@@ -198,7 +198,7 @@ function newRound(dir, round) {
   return { moved, to: dest }
 }
 
-// Fold folders/worktrees created by v1 with suffixes (-e2e, -qc, -r2, …) into the one-folder-per-ticket
+// Fold folders/worktrees created by earlier releases with suffixes (-e2e, -qc, -r2, …) into the one-folder-per-ticket
 // layout. Dry run by default; --apply moves each legacy folder to <SLUG>/history/legacy/<name>/ (after freeing
 // the resources it registered) and removes legacy worktrees that hold no uncommitted or unpushed work.
 function legacy(root, repos, apply) {

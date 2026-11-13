@@ -1,4 +1,4 @@
-# tf — orchestrator (SDC task-flow v2)
+# tf — orchestrator (SDC task-flow)
 
 The `/tf:*` skills load this file. `<PLUGIN>` is the plugin root the skill gave you (its
 `${CLAUDE_PLUGIN_ROOT}`); every path below is absolute once you substitute it.
@@ -18,7 +18,7 @@ You never write, test, or review repo code yourself. Design and rationale: `docs
 | `/tf:address-review <ticket or PR url> [--check]` | feedback | Team review on our own PRs: fetch unresolved threads/reviews/comments, triage each point, fix only the `fix` points on the same PR, draft one reply per thread (posted after approval). `--check`: triage only |
 | `/tf:review <PR url or ticket>` | review | e2e of the ticket's acceptance criteria + risk report (risk, impact, UI change, AC coverage, build). No code changes |
 | `/tf:e2e <PR url or ticket> [--cases a,b]` | e2e | Tester only: run/save flows, EVD, ticket-comment draft. `--regression`: run `.pipeline/_regression` flows instead (no workflow) |
-| `/tf:status [--doctor]` | — | Resources per task and what cleanup would free (`resources.mjs list`, `reap --dry-run`); `--doctor` also runs `node $S/doctor.mjs <cwd>` |
+| `/tf:status [--doctor] [--metrics [slug]]` | — | Resources per task and what cleanup would free (`resources.mjs list`, `reap --dry-run`); `--doctor` also runs `node $S/doctor.mjs <cwd>`; `--metrics` shows what runs cost (`metrics.mjs`) |
 | `/tf:clean <slug> \| --migrate \| --legacy` | — | Free one task, move flat worktrees into `.worktrees/<SLUG>/<repo>/`, or fold old suffixed folders — dry run first, apply only after the user's yes |
 
 Flags: `--check` (feedback: triage only, no code), `--attach` (open the checkbox picker for this task, step 6b), `--approve` (stop after the first plan for the user), `--draft` (the user allows a draft PR),
@@ -38,7 +38,7 @@ language; `writingLang` = `Writing language` → a `Writing language:` line in t
    Use exactly that slug and folder — never invent suffixes. `locked: true` → stop: another run holds
    it. `legacyDirs`/`legacyWorktrees` non-empty → mention once (`/tf:clean --legacy`), keep going.
 3. **Lock** — `node $S/task.mjs lock <dir>`; conflict → stop and tell the user.
-4. **Round** — `round = nextRound`. If it is a new round of an existing v2 folder:
+4. **Round** — `round = nextRound`. If it is a new round of an existing task folder (`format: current`):
    `node $S/task.mjs new-round <dir> <round>` (moves plan/board/jobs into `history/`).
 5. **Housekeeping** — `node $S/resources.mjs register-root <cwd>`, `node $S/resources.mjs reap`;
    `node $S/fresh.mjs <path>:<base> …` for the config repos (report skipped checkouts in one line).
@@ -89,6 +89,9 @@ The user watches `/workflows`. Do not poll.
 
 1. `node $S/task.mjs unlock <dir>` and `node $S/resources.mjs end-run <cwd> <slug>` (closes browsers,
    emulators, servers of this run; worktrees/DB/ports stay for later rounds).
+1b. **Metrics** — `node $S/metrics.mjs <cwd> <slug> --last`: measures the run from the agents' transcripts
+   (wall time, minutes per role, time in tools vs model per job, slowest commands, tokens) and appends it to
+   `<dir>/metrics.json`. Its first table line goes into the Report.
 2. PRs from the result, plus the input PR in review/e2e mode → `node $S/resources.mjs prs <cwd> <slug> <urls…>`
    (reap frees resources once all are merged/closed; without a PR they stay until prune).
 3. Warm pool (background, `run_in_background`): for each repo the run touched, refill its pool —
@@ -113,7 +116,8 @@ merge duplicates, keep the source tag). Devs and reviewers read it before every 
 
 **Report** (report language, plain): PR links (ready), case table (case · result · evidence), the PM's
 assumptions (so the user can correct them), findings outside scope, review verdict (review mode),
-agents used and tokens (`tokens` from the result).
+then the run's cost from `metrics.mjs`: wall time, minutes per role, jobs, re-tests, tokens — plus the one or two
+slowest jobs with their slowest command when a job took over 10 minutes.
 
 ## Hard rules
 

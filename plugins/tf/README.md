@@ -184,7 +184,7 @@ drafts the ticket comment.
 ### `/tf:status`
 
 ```
-/tf:status [--doctor]
+/tf:status [--doctor] [--metrics [slug]]
 ```
 
 What every task of the workspace holds — worktrees, databases, cache dbs, ports, PRs — and what cleanup would
@@ -193,6 +193,7 @@ free right now.
 | Option | Effect |
 |---|---|
 | `--doctor` | Also check this machine and workspace: Node, git, `gh` login, plugin agents and guidelines, workspace config, repos and their base branches, Playwright, and the config's own `## Doctor` checks (DB containers, SDKs, devices…) — with how to fix each failure. Run it once on a new machine. |
+| `--metrics [slug]` | What runs cost, measured from the agents' transcripts: one line per run (plugin version, wall time, minutes per role, jobs, re-tests, tokens). With a slug: every job of that task — minutes, time in tools vs model, slowest commands. Each run is also saved to `.pipeline/<TICKET>/metrics.json` and summarised in the run report. |
 
 ### `/tf:clean`
 
@@ -230,7 +231,8 @@ or pinned in its config. No setup, and other projects' items never appear.
 
 Attached items are saved to `.pipeline/<TICKET>/specs/` and `attachments.json`: the PM plans from them, devs
 use the design system's tokens and components, testers check the UI against it, and later rounds reuse them.
-The band appears once the session has started (after your first message in a new session).
+The band appears once the session has started (after your first message in a new session). It shows
+`Artifacts (0)` when the workspace has none yet; open it for how items get there.
 
 ## How it works
 
@@ -239,8 +241,10 @@ flowchart LR
     U([You]) -->|/tf:build PROJ-123| O[Session<br/>orchestrator]
     O -->|resolve ticket, lock,<br/>read HANDOFF + new comments| W[Workflow<br/>executor]
     W <-->|dispatch / reports| PM{{tf:pm}}
-    W --> D1[tf:dev · be]
-    W --> D2[tf:dev · fe]
+    W --> D1[tf:lead · be]
+    W --> D2[tf:lead · fe]
+    D1 --> M1[tf:dev · member a]
+    D1 --> M2[tf:dev · member b]
     W --> T[tf:tester]
     W --> R[tf:reviewer]
     R -->|ready PR| GH[(GitHub)]
@@ -255,7 +259,9 @@ flowchart LR
 2. **PM turn.** `tf:pm` reads `HANDOFF.md` / the ticket, inspects every repo the workspace lists, writes
    `plan.md` (micro-tasks: what + exact file, *how* only at contracts), and returns a dispatch: jobs, roles,
    models, parallel groups.
-3. **Jobs.** The executor runs the dispatch — e.g. group 1: `tf:dev` for each repo in parallel; group 2:
+3. **Jobs.** The executor runs the dispatch — e.g. group 1: one `tf:lead` per repo in parallel (each does its
+   repo's work alone, or splits it among up to 3 `tf:dev` members with separate files and merges the result), plus a
+   `tf:tester` `FLOWS` job writing the e2e flows from the plan; group 2:
    `tf:reviewer` (gate); group 3: `tf:tester`. If a job fails or the gate asks for changes, later groups are
    skipped and the PM re-plans. App servers start once per run (`serve.mjs`) and stay up across jobs.
 4. **Repeat** until the PM closes: fix rounds send only the open issue ids to the dev, and the tester re-runs
@@ -273,6 +279,8 @@ flowchart LR
 | PRs are ready; draft only with `--draft` | A PR means "done and verified" |
 | Dev and judge are separate agents, never in the same parallel group | Writer ≠ judge |
 | build/qc: the reviewer gate runs in an earlier group than the tester; a NEEDS-WORK gate skips the tester | No test run thrown away by a gate |
+| One dev job per repo; its lead may run 2–3 members only with a separate file list each | Parallel coding inside a repo without two agents editing the same file |
+| A tester `FLOWS` job (writes flows from the plan while the dev works) is never a test and never blocks | Flows are ready when the code is, without weakening writer ≠ judge |
 | Roles allowed per mode (`review` / `e2e` never run a dev) | Review modes never change code |
 | ≤ 10 PM turns, ≤ 6 jobs per dispatch, ≤ 4 dev jobs per repo | Non-converging loops escalate to you |
 
@@ -375,6 +383,8 @@ await webFlow('21', async ({ page, step, shot, gotoReady, expect, uniq }) => {
 node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --target local          # all cases
 node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --failed                # only what failed last time
 node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --cases 21 --target dev # reproduce a QC report
+node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --jobs 3                # three cases at a time
+node <plugin>/scripts/flow-peek.mjs .pipeline/PROJ-123 /some/screen           # what is on a screen, with locators
 ```
 
 - Waits for the app, not the clock: `waitApi`, `ready`, `gotoReady`; a 15 s ceiling per step, never a delay.

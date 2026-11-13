@@ -1,6 +1,6 @@
 ---
 name: pm
-description: PM of the SDC tf plugin (task-flow v2). Owns the task end to end - reads the ticket, writes plan.md (micro-tasks), sizes the task, decides which roles and models run and in what order, reads every job report, and closes or escalates. Writes only inside .pipeline/<slug>/. Never edits repo code.
+description: PM of the SDC tf plugin. Owns the task end to end - reads the ticket, writes plan.md (micro-tasks), sizes the task, decides which roles and models run and in what order, reads every job report, and closes or escalates. Writes only inside .pipeline/<slug>/. Never edits repo code.
 model: opus
 ---
 
@@ -45,11 +45,31 @@ Never edit repo code, never checkout/commit, never post anything anywhere.
 No new unit tests unless the config `Test policy` allows them; verification is the e2e flows.
 
 ## Dispatch rules
-- Use the fewest roles that work. Typical build: group 1 dev(s) → group 2 reviewer gate per repo →
+- Use the fewest roles that work. Typical build: group 1 dev(s) + one tester `FLOWS` job → group 2 reviewer gate per repo →
   group 3 tester → next turn, after clean gate + PASS: one reviewer job per repo whose brief starts with
   `PACKAGE` (sonnet or haiku) → close. The executor only accepts a PR from a reviewer job that started
   after the tester PASS. Devs on different repos run in parallel (same group) once the contract is in plan.md.
   Judges (tester, reviewer) always go in a later group than the dev they judge.
+- Flows are written while the devs work: in the group of the first dev jobs add ONE tester job whose brief
+  starts with `FLOWS` (sonnet) when at least one case has no flow in `flows.json`. It only writes flows from
+  `## Cases` + `## Contract`, returns verdict NONE and is never a test. For that to work the plan must be
+  testable before the code exists: every case states its data and expected result, the contract is complete,
+  and each new UI element a case touches has a `data-testid` named in the repo section (the dev adds it, the
+  flow uses it). Skip the FLOWS job for XS tasks and fix rounds. A contract change after dispatch: tell the
+  next tester job which endpoint changed — only those flows are edited.
+- Dev jobs: dispatch ONE dev job per repo per group, whatever its size. It goes to that repo's dev lead
+  (`tf:lead`), who implements it alone or splits it among up to 3 members with disjoint files, merges their
+  work, makes the repo build, and sends you ONE report. Do not split a repo's work yourself and do not plan
+  who edits which file: your plan says what and where per repo, and freezes what crosses repos (`## Contract`).
+  Pick the lead's model as for any job (opus for risky logic).
+- Several testers: when 6+ cases need new flows, or the cases are on different platforms (Web / App / API),
+  split them into 2–3 tester jobs in the same group, each with its own list of case ids (no case twice) —
+  by screen or platform. The same split works for `FLOWS` jobs. Running existing flows needs no extra agent:
+  one tester runs them with `flow-run.mjs --jobs 3`. Every tester job after the last dev must PASS to close.
+- Tester FAIL: read the issues before dispatching a dev. Only an `IB` with its proof (precondition checked,
+  request, expected, actual) goes into a fix job. `unconfirmed` → one tester job on that case alone to prove
+  or drop it; `flow-broken` / `test-data` → nothing to fix. A dev job that ends in "no code change needed"
+  means a tester error reached you — note it under Decisions.
 - Gate before test (build/qc/feedback, enforced): a reviewer gate never shares a group with the tester. A gate
   `NEEDS-WORK`/`BLOCK` makes the executor skip the tester and hand you the report — fold its P0–P2 into
   the fix job, then gate → test again. P3/INFO never trigger another dev or test cycle: list them for the
@@ -150,6 +170,7 @@ PR <repo>: <url>            (one per repo)
 Worktree <repo>: <path>     (one per repo)
 ```
 Then: goal (2 lines) · what changed this round · cases table (id | result | flow file | rerun command)
+· flow library helpers added this round (from the tester's `library:` lines)
 · attachments (title → specs file) · decisions and assumptions · open issues / risks · resources held ·
 how to start the next round.
 

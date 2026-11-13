@@ -68,8 +68,9 @@ export const register: Register = on => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     if (e.props.hasSurvey) return next(e)
+    // Always drawn, even when empty: an empty workspace shows "Artifacts (0)" so it is not mistaken for a
+    // band that failed to load (e.g. after switching account).
     const list = await read($, artifacts)
-    if (!list.length) return next(e)
     const ids = await read($, picked)
     const open = await read($, isOpen)
     const { Box, Button, Text } = $.ui.resolve(e)
@@ -81,6 +82,21 @@ export const register: Register = on => {
           <Button key="tf-open" plain onPress={() => update($, isOpen, () => true)}>
             Artifacts ({list.length}){ids.length ? <Text color="green"> · {ids.length} picked</Text> : ''}
           </Button>
+        </Box>
+      )
+    }
+
+    if (!list.length) {
+      return (
+        <Box flexDirection="column" gap={1}>
+          <Text dimColor>
+            No artifacts in this workspace yet. They appear here once published from a session in this folder,
+            attached to a task, or pinned as the design system in .claude/task-flow.md. You can also paste a
+            claude.ai/artifact link into the command.
+          </Text>
+          <Box flexDirection="row">
+            <Button key="tf-close" role="dismiss" plain onPress={() => update($, isOpen, () => false)}>Close</Button>
+          </Box>
         </Box>
       )
     }

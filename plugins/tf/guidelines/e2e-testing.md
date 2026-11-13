@@ -11,10 +11,14 @@ workspace config; this file is the shared standard.
   UI itself is under test) with a unique suffix per run, and never depends on another flow's leftovers.
 - Assert the acceptance criterion as the user sees it (text, state, navigation), plus the API/DB effect
   when the criterion is about data. A flow that only clicks and screenshots proves nothing.
-- Keep flows short: setup → the action under test → assertions. Shared steps (login, seeding) go in
-  helpers, not copy-paste.
+- Keep flows short: setup → the action under test → assertions. Shared steps (login, seeding, waiting for a
+  background job) live in the workspace library `.pipeline/_lib/` (`FLOW_LIB`), listed in its `README.md` —
+  written once, imported by every task's flows, extended but never changed incompatibly.
 
 ## Selectors (most stable first)
+
+Look at the real page before writing them (`flow-peek.mjs`), and at the page dump a failed step leaves
+(`<case>-fail-<step>.page.txt`) before changing them — a guessed selector costs a full run to disprove.
 
 1. Test ids / accessibility ids (`data-testid`, Flutter `Semantics(identifier:)` → `resource-id`).
 2. Role + accessible name (`getByRole('button', { name: 'Lưu' })`), label, placeholder.

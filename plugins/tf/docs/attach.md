@@ -18,7 +18,8 @@ only those. Items from other workspaces never appear.
 
 - **Band above the chat input** — the plugin draws an `Artifacts (n)` button above the prompt (terminal and
   desktop app). Open it and press items to pick them; they are appended as links to the next message you
-  send (e.g. `/tf:build PROJ-12`), which attaches them. Same list as below, refreshed after every turn.
+  send (e.g. `/tf:build PROJ-12`), which attaches them. Same list as below, refreshed after every turn. An empty workspace shows
+  `Artifacts (0)` (not hidden), with a hint on how items get there.
 - **Picker** — `--attach` on `/tf:build`, `/tf:qc`, `/tf:review`, `/tf:e2e`: a checkbox list of the workspace's items (see "Picker" below). Works everywhere, including the
   desktop app.
 - **`@` mention (terminal CLI)** — the plugin's MCP server `artifacts` lists the same items as resources;

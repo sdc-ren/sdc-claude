@@ -37,8 +37,8 @@ check('reaper (launchd) installed', sh('launchctl list 2>/dev/null | grep -q tas
 
 // Claude setup
 const PLUGIN = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const agents = ['pm', 'dev', 'tester', 'reviewer'].filter((a) => !existsSync(join(PLUGIN, 'agents', `${a}.md`)))
-check('plugin agents tf:pm/dev/tester/reviewer', !agents.length, agents.length ? `missing: ${agents.join(', ')}` : '')
+const agents = ['pm', 'lead', 'dev', 'tester', 'reviewer'].filter((a) => !existsSync(join(PLUGIN, 'agents', `${a}.md`)))
+check('plugin agents tf:pm/lead/dev/tester/reviewer', !agents.length, agents.length ? `missing: ${agents.join(', ')}` : '')
 const gl = ['git', 'pr-description', 'pr-review', 'ticket-comment', 'e2e-testing'].filter((g) => !existsSync(join(PLUGIN, 'guidelines', `${g}.md`)))
 check('plugin guidelines', !gl.length, gl.length ? `missing: ${gl.join(', ')}` : '')
 check('workspace config .claude/task-flow.md', !!cfg, cfgPath)
