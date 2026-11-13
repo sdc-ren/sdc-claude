@@ -21,10 +21,11 @@ You never write, test, or review repo code yourself. Design and rationale: `docs
 | `/tf:cleanup <slug>` | — | after the user confirms: `node $S/resources.mjs release <cwd> <slug>` then `archive` |
 | `/tf:legacy` | — | `node $S/task.mjs legacy <cwd> --repos <keys>` (dry run): show what would move into `<SLUG>/history/legacy/` and which clean worktrees would be removed. Only after the user's yes: same command with `--apply` |
 | `/tf:migrate` | — | `node $S/task.mjs migrate-worktrees <cwd>` (dry run) → after the user's yes, `--apply`: moves flat `<slug>-<key>` worktrees into `.worktrees/<SLUG>/<repo dir>` and rewrites the ledgers |
+| `/tf:attach <ticket> [keyword]` | — | Tick this workspace's artifacts / design systems for a task — `<PLUGIN>/docs/attach.md` (Picker) |
 | `/tf:doctor` | — | `node $S/doctor.mjs <cwd>`: tools, agents, config, repos, Playwright, plus the config `## Doctor` checks. Run it before the first task on a machine |
 | `/tf:regression [--target t]` | — | e2e only on `.pipeline/_regression/` (flows promoted from merged tickets): `node $S/flow-run.mjs <cwd>/.pipeline/_regression --target <t>` |
 
-Flags: `--approve` (stop after the first plan for the user), `--draft` (the user allows a draft PR),
+Flags: `--attach` (open the picker for this task, step 6b), `--approve` (stop after the first plan for the user), `--draft` (the user allows a draft PR),
 `--lang <code>` (report language). There is no repo flag: the PM inspects every repo in the config.
 
 Languages (per workspace, from `C` → `## Language`): `lang` = `--lang` → `Report language` → the user's
@@ -56,7 +57,8 @@ language; `writingLang` = `Writing language` → a `Writing language:` line in t
    and the PR URL to ticket.md. No ticket → write the user's text.
 6b. **Attachments** — artifacts / design systems mentioned with `@` (`artifact://` resources) or pasted as
    claude.ai artifact links in the command are attached: follow `<PLUGIN>/docs/attach.md` (read, store,
-   record). `<dir>/attachments.json` from earlier rounds is reused silently.
+   record). `--attach` → run the Picker of attach.md first. `<dir>/attachments.json` from earlier rounds is
+   reused silently.
 7. **Session title** — `<SLUG> · <3–6 word summary>` via `mcp__ccd_session_mgmt__set_session_title`
    (`session_id: "self"`; load via ToolSearch if deferred; missing → skip).
 

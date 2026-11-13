@@ -7,8 +7,9 @@ All notable changes to the `tf` plugin are documented here. The format follows
 ## [1.1.0] — 2026-11-13
 
 ### Added
-- Attach Claude artifacts, canvases and design systems to a task by typing `@` (the plugin's `artifacts`
-  MCP server lists them as resources) or by pasting a claude.ai artifact link in a `/tf:*` command.
+- Attach Claude artifacts, canvases and design systems to a task: `/tf:attach <ticket> [keyword]` or
+  `--attach` (checkbox list), a pasted claude.ai artifact link, or `@` in the terminal CLI (the plugin's
+  `artifacts` MCP server lists them as resources).
 - The list is built automatically for the workspace, with no setup: what its Claude Code sessions created
   (`scripts/artifacts-local.mjs`), what earlier tasks attached, and an optional pinned design system.
   Other projects' artifacts never appear.

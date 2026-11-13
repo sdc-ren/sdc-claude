@@ -65,6 +65,7 @@ Then, in your workspace (the folder that holds your repos):
 | `/tf:qc <ticket>` | Answer a QC report or human PR review points: next round on the same branches and flows | Existing PR updated (or a new one if the old PR was merged), QC reply draft |
 | `/tf:review <PR url\|ticket>` | Review a teammate's PR: e2e of the ticket's acceptance criteria + risk report | `review.md`, PR-comment and ticket-comment drafts — nothing posted |
 | `/tf:e2e <PR url\|ticket> [--cases 21,22]` | E2E only, no code changes | Evidence + ticket-comment draft |
+| `/tf:attach <ticket> [keyword]` | Tick this workspace's artifacts / design systems for a task (found automatically) | Saved to `specs/`, used by PM, devs, testers |
 | `/tf:doctor` | Check this machine and workspace | Pass/fail table with fixes |
 | `/tf:status` | What every task holds (worktrees, DBs, ports, PRs) | Table + what the reaper would free |
 | `/tf:cleanup <slug>` | Free one task's resources (asks first) | Resources released, folder archived |
@@ -72,11 +73,12 @@ Then, in your workspace (the folder that holds your repos):
 | `/tf:legacy` | Fold old suffixed folders (`-e2e`, `-qc`, `-r2`…) into one folder per ticket | Dry run, then apply on your yes |
 | `/tf:regression [--target local\|dev]` | Run flows promoted from merged tickets | PASS/FAIL per case |
 
-**Attach artifacts / design systems** — type `@` and pick this workspace's items (listed by the plugin's
-`artifacts` MCP server; other projects' never appear), or paste a claude.ai artifact link, e.g.
-`/tf:build PROJ-12 @Checkout redesign @Brand DS`. Later rounds reuse them.
+**Attach artifacts / design systems** — `--attach` (or `/tf:attach <ticket>`) opens a checkbox list of this
+workspace's items, found automatically; other projects' never appear. You can also paste a claude.ai
+artifact link in the command, or, in the terminal CLI, `@`-mention them (the `artifacts` MCP server).
+Later rounds reuse them.
 
-**Flags** — `--approve`: stop after the first plan for your approval · `--draft`: allow a draft PR (agents
+**Flags** — `--attach`: pick artifacts / design systems for this task · `--approve`: stop after the first plan for your approval · `--draft`: allow a draft PR (agents
 never choose draft on their own) · `--lang <code>`: report language for this run.
 
 Nothing is ever posted to the tracker or GitHub as a comment without your approval of the exact text.

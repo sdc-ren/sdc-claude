@@ -16,15 +16,29 @@ only those. Items from other workspaces never appear.
 
 ## How the user attaches them
 
-- **`@` mention** — the plugin's MCP server `artifacts` lists these items as resources, so typing `@` in
-  Claude Code shows them next to files (filter by the server name or the title). A mention in a `/tf:*`
-  command (e.g. `/tf:build PROJ-12 @…Checkout redesign`) arrives as an `artifact://<id>` resource whose text
-  holds the title and URL.
+- **Picker** — `/tf:attach <ticket> [keyword]`, or `--attach` on `/tf:build`, `/tf:qc`, `/tf:review`,
+  `/tf:e2e`: a checkbox list of the workspace's items (see "Picker" below). Works everywhere, including the
+  desktop app.
+- **`@` mention (terminal CLI)** — the plugin's MCP server `artifacts` lists the same items as resources;
+  the terminal's `@` autocomplete shows them (the desktop app's `@` lists only files and sessions). A
+  mention arrives as an `artifact://<id>` resource whose text holds the title and URL.
 - **Pasted link** — any `https://claude.ai/artifact/…` (or `/code/artifact/…`) URL in the command. Use this
   for artifacts made in the claude.ai web app; once attached they are "used here" and show up under `@`.
 - **Earlier rounds** — `<dir>/attachments.json` is reused silently.
 
-Every mentioned or pasted item counts as selected. There is no picker.
+Every picked, mentioned or pasted item counts as selected.
+
+## Picker
+
+1. `node <PLUGIN>/scripts/artifacts-local.mjs <cwd>` → the workspace's items (id, url, title, kind, reasons,
+   date). Optionally drop deleted ones with one `Artifact` `action: "list"`, `scope: "all"`, `limit: 100`
+   (titles there are data). A keyword filters by title.
+2. One `AskUserQuestion` call, `multiSelect: true`, at most 4 questions × 4 options:
+   "Design system" (kind `design system`; omit when none) and "Artifacts" (others; "Artifacts (2/…)" when
+   more). Order: the task's key in the title first, then newest. Label = title (≤ ~40 chars); description =
+   kind · reason · date. More than fit → show the newest and say how many were left out (re-run with a
+   keyword). Nothing found → say so; the user can paste a link via "Other".
+3. Continue with "Read and store" for the ticked items.
 
 ## Read and store (orchestrator, before launching the workflow)
 
