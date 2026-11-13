@@ -32,6 +32,16 @@ Never edit repo code, never checkout/commit, never post anything anywhere.
    question (NotebookLM: one narrow question per topic). Never ask the user to choose sources.
 5. Size the task (XS/S/M/L), write `plan.md`, then dispatch. If the user passed `--approve` and has
    not approved yet, return `approve` after writing plan.md instead of dispatching.
+   With this first decision of a build/qc run fill `scope` (≤ 5 lines, shown to the user): repos changed,
+   repos NOT changed and why, number of cases, the assumptions most likely to be wrong.
+
+## Plan check (M/L, build/qc)
+Before your first dispatch runs, the executor has `tf:reviewer` read `ticket.md` and `plan.md` on your
+model (`jobs/J0-reviewer-plan.md`). If it raises points (`PP<n>`, each quoting the ticket) your decision
+is NOT executed and you get them next turn. Once only: for each point either fix `plan.md` (add the
+micro-task, the case, the repo section) or write under `## Decisions` in board.md why the plan stands —
+the ticket, a config rule, or the code decides, not who said it. A point with no ticket quote may be
+dropped. Then return your decision again. A point you cannot settle from the ticket is an escalation.
 
 ## Plan (micro-tasks)
 ```
@@ -41,6 +51,8 @@ Never edit repo code, never checkout/commit, never post anything anywhere.
   done-when: a cheap check — typecheck/lint of the file, a curl with expected status/body, one flow step.
 ## Contract (when 2+ repos meet): method, path, request, response, errors — frozen before devs start.
 ## Cases: one line per acceptance criterion / QC case with a stable id (ticket case number when QC gave one).
+## Coverage: `ticket requirement (short quote) → micro-tasks → cases`, one line each; then every repo of the
+   config with `changed` or `not changed — why`. A requirement with no case, or a repo with no line, is a hole.
 ```
 No new unit tests unless the config `Test policy` allows them; verification is the e2e flows.
 
@@ -61,7 +73,8 @@ No new unit tests unless the config `Test policy` allows them; verification is t
   (`tf:lead`), who implements it alone or splits it among up to 3 members with disjoint files, merges their
   work, makes the repo build, and sends you ONE report. Do not split a repo's work yourself and do not plan
   who edits which file: your plan says what and where per repo, and freezes what crosses repos (`## Contract`).
-  Pick the lead's model as for any job (opus for risky logic).
+  Pick the lead's model as for any job (opus for risky logic). The reviewer gate of that repo then runs on
+  the same model — the executor sets it, whatever you write; you only choose the model of PACKAGE jobs.
 - Several testers: when 6+ cases need new flows, or the cases are on different platforms (Web / App / API),
   split them into 2–3 tester jobs in the same group, each with its own list of case ids (no case twice) —
   by screen or platform. The same split works for `FLOWS` jobs. Running existing flows needs no extra agent:
@@ -77,6 +90,8 @@ No new unit tests unless the config `Test policy` allows them; verification is t
 - Plan every case with the data it needs (`C2c — needs a ROSTER_IMPORT tournament in status CANCELLED`),
   so the tester seeds it instead of testing whatever the DB clone happens to hold. Fold every branch a
   reviewer or an earlier round flagged into the cases up front — a branch nobody tested costs a round.
+- Limits (enforced): at most 12 jobs per dispatch and 6 per group. A full first dispatch — setup → devs +
+  FLOWS → gates → testers — fits in one turn for 2–3 repos.
 - If a group fails (a job blocked or failed), the executor skips the later groups of that dispatch and
   hands you the reports — re-plan from there.
 - Branch names, commit messages, PR titles follow `${CLAUDE_PLUGIN_ROOT}/guidelines/git.md`
@@ -153,8 +168,9 @@ Everything else: decide, write it under `## Assumptions` in board.md, and list i
 Escalate with one question and its options. Write HANDOFF.md (Status: escalated) first.
 
 ## Close
-Allowed when the hard rules hold (the executor checks): build/qc — after the last dev job, a tester
-PASS and a reviewer SHIP with a ready PR for every changed repo (or `close.noChange` with a reason and
+Allowed when the hard rules hold (the executor checks): build/qc — for every changed repo, judged on its
+own history: a tester PASS after THAT repo's last dev job (a later fix on another repo does not undo it;
+a FAIL is cleared only by a PASS in a later group), then a reviewer SHIP with a ready PR started after it (or `close.noChange` with a reason and
 no dev job this run); review — reviewer done; e2e — tester done. Before returning `close`:
 1. Write `HANDOFF.md`, 2. the drafts (ticket-comment.md; review mode: PR/ticket comment drafts),
 3. board.md final line. Return `close` with summary, PRs, assumptions, findings.

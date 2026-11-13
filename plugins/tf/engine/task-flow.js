@@ -15,14 +15,15 @@ export const meta = {
   description: 'PM-led task pipeline: PM plans and dispatches dev/tester/reviewer jobs until the task closes',
   whenToUse: 'Internal engine of /tf:build, /tf:qc, /tf:address-review, /tf:review, /tf:e2e — launched by those skills with args; do not run it directly.',
   phases: [
-    { title: 'PM', detail: 'tf:pm reads the task, plans, dispatches, reviews reports, closes' },
+    { title: 'PM', detail: 'tf:pm reads the task, plans (the plan is checked once by tf:reviewer on M/L tasks), dispatches, reviews reports, closes' },
     { title: 'Jobs', detail: 'setup / dev (lead + members) / tester / reviewer jobs from the PM dispatch, parallel per group' },
   ],
 }
 
 // ── Limits ───────────────────────────────────────────────────────────────────
-const MAX_TURNS = 10
-const MAX_JOBS = 6
+const MAX_TURNS = 12
+const MAX_JOBS = 12 // jobs in one dispatch, all groups together
+const MAX_GROUP = 6 // jobs in one group, i.e. running at the same time
 const MAX_MEMBERS = 3 // dev members a repo's lead may run at once (one worktree, disjoint files)
 const MAX_DEV_PER_REPO = 6 // dev jobs per repo per run: the build plus the fix loop
 const RESERVE = 80_000
@@ -46,6 +47,7 @@ const DISPATCH = {
     decision: { type: 'string', enum: ['dispatch', 'close', 'escalate', 'approve'] },
     size: { type: 'string', enum: ['XS', 'S', 'M', 'L'] },
     note: { type: 'string', description: 'One or two lines: what this turn decided and why.' },
+    scope: { type: 'string', description: 'With the first dispatch/approve of a build or qc run, at most 5 lines for the user: repos changed, repos NOT changed and why, number of cases, the assumptions that could be wrong.' },
     escalate: { type: 'string', description: 'decision=escalate: the one question for the user, with the options.' },
     jobs: {
       type: 'array',
@@ -178,7 +180,7 @@ function checkDispatch(d) {
   if (mode === 'feedback' && flags.check) return '--check is triage only: write feedback-triage.md and return close, no jobs'
   const jobs = d.jobs || []
   if (!jobs.length) return 'decision=dispatch needs at least one job'
-  if (jobs.length > MAX_JOBS) return `at most ${MAX_JOBS} jobs per dispatch (got ${jobs.length})`
+  if (jobs.length > MAX_JOBS) return `at most ${MAX_JOBS} jobs per dispatch (got ${jobs.length}) — dispatch the first groups now, the rest next turn`
   for (const j of jobs) {
     if (!ROLES[mode].includes(j.role)) return `role ${j.role} is not allowed in mode ${mode} (allowed: ${ROLES[mode].join(', ')})`
     if (seenIds.has(j.id)) return `job id ${j.id} already used — continue the numbering`
@@ -193,7 +195,8 @@ function checkDispatch(d) {
   // Writer ≠ judge inside one group: a dev and a tester/reviewer for the same repo cannot run in parallel.
   const byGroup = {}
   for (const j of jobs) (byGroup[j.group] ||= []).push(j)
-  for (const g of Object.values(byGroup)) {
+  for (const [n, g] of Object.entries(byGroup)) {
+    if (g.length > MAX_GROUP) return `group ${n} has ${g.length} jobs — at most ${MAX_GROUP} run at the same time`
     const devRepos = new Set(g.filter((j) => j.role === 'dev').map((j) => j.repo))
     for (const repo of devRepos) {
       if (g.filter((j) => j.role === 'dev' && j.repo === repo).length > 1) return `repo ${repo} has several dev jobs in one group — dispatch ONE dev job per repo; its lead splits the work among members`
@@ -223,13 +226,16 @@ function checkClose(d) {
     if (!c.noChange) return 'build/qc close needs dev → tester PASS → reviewer package (SHIP + PR) in this run, or close.noChange with the reason no code change is needed'
     return ledger.some((x) => x.job.role === 'tester' && ok(x) && x.report.verdict === 'PASS') ? '' : 'close.noChange still needs a tester PASS in this run proving the current code already satisfies the task'
   }
-  const devSeq = Math.max(...devs.map((x) => x.seq))
-  const after = ledger.filter((x) => x.seq > devSeq)
-  const testers = after.filter((x) => x.job.role === 'tester' && !isFlows(x.job) && ok(x))
-  const failing = testers.filter((x) => x.report.verdict !== 'PASS')
-  if (failing.length) return `tester ${failing.map((x) => x.job.id).join(', ')} did not PASS on the latest code — fix or escalate`
+  // Each repo is judged on its own history: a later dev job on another repo does not undo this repo's test.
   for (const repo of new Set(devs.map((x) => x.job.repo))) {
-    const pass = testers.filter((x) => covers(x, repo))
+    const devSeq = Math.max(...devs.filter((x) => x.job.repo === repo).map((x) => x.seq))
+    const after = ledger.filter((x) => x.seq > devSeq)
+    const testers = after.filter((x) => x.job.role === 'tester' && !isFlows(x.job) && ok(x) && covers(x, repo))
+    const failing = testers.filter((x) => x.report.verdict !== 'PASS')
+    // A FAIL is cleared only by a PASS covering this repo in a later group (a flow or test-data error re-run).
+    const failSeq = failing.length ? Math.max(...failing.map((x) => x.seq)) : devSeq
+    const pass = testers.filter((x) => x.report.verdict === 'PASS' && x.seq > failSeq)
+    if (failing.length && !pass.length) return `repo ${repo}: tester ${failing.map((x) => x.job.id).join(', ')} did not PASS on its latest code — fix or escalate`
     const skipTest = mode === 'feedback' && c.noTest && !testers.length
     if (!pass.length && !skipTest) return `repo ${repo}: no tester PASS after its last dev job — test the latest code before closing` + (mode === 'feedback' ? ' (or close.noTest when the fix changes no behaviour)' : '')
     const passSeq = pass.length ? Math.min(...pass.map((x) => x.seq)) : devSeq
@@ -331,11 +337,25 @@ async function runDev(j) {
     { label: `${j.id} lead:${j.repo} merge`, phase: 'Jobs', model, schema: REPORT, agentType: AGENT.lead })
   return merged || failed(`dev lead did not return after its members (${got.map((g) => `${g.id} ${g.status}`).join(', ')})`)
 }
+// The code gate runs on the model of the dev lead whose work it judges (the repo's last dev job; for repo
+// "all" the strongest of them): the judge is never weaker than the writer. PACKAGE keeps the PM's model.
+const modelOf = (j) => (MODELS.includes(j.model) ? j.model : 'sonnet')
+function leadModel(repo) {
+  const lastByRepo = new Map()
+  for (const x of ledger) if (x.job.role === 'dev' && (repo === 'all' || x.job.repo === repo)) lastByRepo.set(x.job.repo, modelOf(x.job))
+  const ms = [...lastByRepo.values()]
+  return ms.length ? MODELS[Math.max(...ms.map((m) => MODELS.indexOf(m)))] : ''
+}
 async function runJob(j, turn) {
   let report
   if (j.role === 'dev') report = await runDev(j)
   else {
-    const o = { label: `${j.id} ${j.role}:${j.repo}`, phase: 'Jobs', model: MODELS.includes(j.model) ? j.model : 'sonnet', schema: REPORT }
+    let model = modelOf(j)
+    if (j.role === 'reviewer' && !isPackage(j) && CODE_MODES.includes(mode)) {
+      const lm = leadModel(j.repo)
+      if (lm && lm !== model) { log(`${j.id} gate ${j.repo}: model ${model} → ${lm} (the dev lead's)`); model = lm }
+    }
+    const o = { label: `${j.id} ${j.role}:${j.repo}`, phase: 'Jobs', model, schema: REPORT }
     if (AGENT[j.role]) o.agentType = AGENT[j.role]
     if (j.effort) o.effort = j.effort
     report = await run(jobPrompt(j), o)
@@ -352,6 +372,17 @@ let strikes = 0
 // PM model: turn 1 is opus (sizing and planning need judgement). After that XS/S tasks run the PM on
 // sonnet; M/L stay on opus. A guard violation puts the PM back on opus for the retry.
 let size = ''
+// Plan check: on M/L build/qc runs the first plan is read once by tf:reviewer, on the PM's model, against
+// the ticket (missing requirements, a repo left out, assumptions the ticket contradicts). It cannot block:
+// the PM fixes plan.md or records why not, once, and the run goes on.
+let planChecked = !['build', 'qc'].includes(mode) || !!A.approved
+let planNotes = ''
+const planFile = `${dir}/jobs/J0-reviewer-plan.md`
+const RULES = CODE_MODES.includes(mode)
+  ? `Hard rules the executor enforces (a decision that breaks one is rejected and costs a turn): at most ${MAX_JOBS} jobs per dispatch and ${MAX_GROUP} per group; ONE dev job per repo per group, ${MAX_DEV_PER_REPO} per repo per run; ` +
+    `a tester or reviewer never shares a group with a dev job on its repo (a FLOWS tester may); a reviewer gate never shares a group with a tester of its repo; ` +
+    `a gate runs on the model of that repo's last dev job, whatever model you give it; close needs, for EACH changed repo on its own, a tester PASS after that repo's last dev job and then a PACKAGE reviewer SHIP with a ready PR started after that PASS.\n`
+  : ''
 const pmModel = (turn) => (turn === 1 || violation || !['XS', 'S'].includes(size) ? 'opus' : 'sonnet')
 for (let turn = 1; turn <= MAX_TURNS; turn++) {
   if (budgetLow()) return { status: 'handoff', slug, round, mode, note: 'token budget low — relaunch with the same args; the PM resumes from board.md' }
@@ -365,7 +396,9 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
           ? `Feedback mode: start from HANDOFF.md, board.md, feedback.md (NOT a QC round — do not re-plan ticket cases). Triage every point into feedback-triage.md${flags.check ? ', then return close (check = triage only)' : ', then plan only the fix points'}.\n`
           : 'Start from HANDOFF.md (if present), board.md, ticket.md (new comments are marked), then plan.\n')
       : `Reports from the last dispatch:\n${JSON.stringify(last.map(compact))}\n`) +
+    (planNotes ? `Plan check (${planFile}) — your last decision was NOT executed. Points raised:\n${planNotes}\nFor each point: fix plan.md, or write under board.md Decisions why the plan stands (a point without a ticket quote may be dropped). Then return your decision again.\n` : '') +
     (violation ? `REJECTED last decision: ${violation}\nFix it this turn.\n` : '') +
+    (turn === 1 || violation ? RULES : '') +
     (turn >= MAX_TURNS - 1 ? 'Last turns left: close or escalate now.\n' : '') +
     'Update board.md, then return your decision.'
   const model = pmModel(turn)
@@ -373,6 +406,25 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
   if (!d) return { status: 'error', stage: `pm t${turn}`, slug }
   if (d.size) size = d.size
   log(`PM t${turn} [${d.size}] ${d.decision}: ${d.note}`)
+  planNotes = ''
+  if (!planChecked && (d.decision === 'dispatch' || d.decision === 'approve')) {
+    planChecked = true
+    if (d.scope) log(`scope: ${d.scope}`)
+    if (['M', 'L'].includes(d.size)) {
+      const pc = await run(
+        `Job J0 · role reviewer · PLAN check\n${context}\n\n` +
+          `Brief: PLAN (reviewer.md "Plan check"). The PM wrote ${dir}/plan.md from ${dir}/ticket.md; no code exists yet. Check the plan against the ticket and the workspace config. No git, no code edits, do not rewrite the plan.\n` +
+          `Write your report to ${planFile} (heredoc) and append one line: node ${S}/task.mjs journal ${dir} "J0 reviewer plan: <one-line result>". Return the structured report; reportFile = that path; verdict SHIP when you found nothing, NEEDS-WORK otherwise, issues = the points (PP<n>).`,
+        { label: 'J0 reviewer:plan', phase: 'PM', model, schema: REPORT, agentType: AGENT.reviewer })
+      const points = (pc && pc.issues) || []
+      if (pc && pc.verdict !== 'SHIP' && points.length) {
+        log(`plan check: ${points.length} point(s) → back to the PM`)
+        planNotes = points.map((p) => `- ${p}`).join('\n')
+        continue
+      }
+      log(pc ? 'plan check: nothing found' : 'plan check: no report — going on with the plan as it is')
+    }
+  }
 
   if (d.decision === 'escalate') return { status: 'escalate', slug, round, mode, question: d.escalate || d.note }
   if (d.decision === 'approve') {

@@ -274,7 +274,9 @@ flowchart LR
 
 | Rule | Why |
 |---|---|
-| Code modes close only when every tester after the last dev job passed, for every changed repo | No "green on one repo, red on the other" |
+| Code modes close only when, for every changed repo, a tester passed after that repo's last dev job | No "green on one repo, red on the other"; a fix on one repo does not force a re-test of the other |
+| M/L build/qc: the plan is read once by `tf:reviewer` on the PM's model before any job runs | A second reader of the ticket catches a missing requirement or a repo left out |
+| A reviewer gate runs on the model of the dev lead it judges | The judge is never weaker than the writer |
 | A PR must come from a reviewer `PACKAGE` job that started after that PASS | Nothing ships untested |
 | PRs are ready; draft only with `--draft` | A PR means "done and verified" |
 | Dev and judge are separate agents, never in the same parallel group | Writer ≠ judge |
@@ -282,7 +284,7 @@ flowchart LR
 | One dev job per repo; its lead may run 2–3 members only with a separate file list each | Parallel coding inside a repo without two agents editing the same file |
 | A tester `FLOWS` job (writes flows from the plan while the dev works) is never a test and never blocks | Flows are ready when the code is, without weakening writer ≠ judge |
 | Roles allowed per mode (`review` / `e2e` never run a dev) | Review modes never change code |
-| ≤ 10 PM turns, ≤ 6 jobs per dispatch, ≤ 4 dev jobs per repo | Non-converging loops escalate to you |
+| ≤ 12 PM turns, ≤ 12 jobs per dispatch (6 per group), ≤ 6 dev jobs per repo | Non-converging loops escalate to you |
 
 ### When the PM stops to ask you
 

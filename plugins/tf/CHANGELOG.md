@@ -4,6 +4,34 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] — 2026-11-13
+
+### Added
+- **Plan check**: on M/L build/qc runs `tf:reviewer` reads the ticket and the PM's plan once (brief `PLAN`,
+  job `J0`, on the PM's model) before any job runs: missing requirements, a repo left out, assumptions the
+  ticket contradicts, untestable cases — every point quotes the ticket. It cannot block: the PM fixes the plan
+  or records why it stands. Plans gain a `## Coverage` section (requirement → micro-tasks → cases, and every
+  repo `changed` / `not changed — why`).
+- **Scope line**: the PM's first decision carries `scope` (repos changed and not, cases, risky assumptions),
+  logged by the run and repeated in the report.
+- Metrics: the plan check is its own role column (`plan`).
+
+### Changed
+- **The reviewer gate runs on the model of the dev lead it judges** (the repo's last dev job); the executor
+  sets it. PACKAGE jobs keep the PM's model.
+- **Close is judged per repo**: a repo needs a tester PASS after its own last dev job. A later fix on another
+  repo no longer forces a re-test and a second PACKAGE (measured on RVD-289: 2 jobs and 2 PM turns wasted).
+  A FAIL followed by a PASS in a later group (a flow or test-data error re-run) no longer blocks the close.
+- **Job limits**: 12 jobs per dispatch and 6 per group (was 6 per dispatch, counting groups that run one
+  after another); 12 PM turns (was 10).
+- The PM is told the hard rules in its first prompt and after a rejection, generated from the engine's constants.
+
+### Fixed
+- **Artifacts band empty in some sessions of the same workspace**: the band remembered the directory the
+  session started in, but the desktop app starts a session in a pre-warmed spare folder and moves it to the
+  workspace afterwards. It now asks for the session root on every refresh, and says `could not list` with the
+  reason when the listing fails instead of looking empty.
+
 ## [1.3.0] — 2026-11-13
 
 ### Added

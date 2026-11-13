@@ -13,6 +13,7 @@ declare module 'claude-code' {
       artifacts: Shaped<TfArtifact[]>
       picked: string[]
       isOpen: boolean
+      problem: string
     }
   }
 }

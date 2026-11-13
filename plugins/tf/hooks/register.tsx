@@ -11,23 +11,35 @@ import type { TfArtifact } from '../types'
 const artifacts = atom({ plugin: 'tf', key: 'artifacts' } as const, [] as TfArtifact[], { shape: 'artifacts-1' })
 const picked = atom({ plugin: 'tf', key: 'picked' } as const, [] as string[])
 const isOpen = atom({ plugin: 'tf', key: 'isOpen' } as const, false)
+const problem = atom({ plugin: 'tf', key: 'problem' } as const, '')
 
 const SHOWN = 12
 const short = (s: string, n = 34) => (s.length > n ? `${s.slice(0, n - 1)}…` : s)
 const nameOf = (a: TfArtifact) => a.title || `Artifact ${a.id.slice(0, 8)}`
 
 // Re-read the workspace's artifacts (cached by the script, ~50 ms after the first run).
-async function refresh($: EngineInterface, cwd: string) {
-  if (!cwd) return
+// The workspace is asked for on every refresh, never remembered from session.start: the desktop app starts
+// a session in a pre-warmed spare folder and moves it to the user's folder afterwards, so the directory
+// seen at start is often not the workspace — the list then stayed empty for the whole session.
+async function refresh($: EngineInterface, startCwd: string) {
+  let root = startCwd
+  try {
+    root = (await $.session.root()) || startCwd
+  } catch {
+    // An engine without session.root: fall back to where the session started.
+  }
+  if (!root) return
   try {
     const script = `${$.plugin.root}/scripts/artifacts-local.mjs`
-    const { exitCode, stdout } = await $.process.run(['node', script, cwd], { timeoutMs: 60_000 })
-    if (exitCode !== 0) return
+    const { exitCode, stdout, stderr } = await $.process.run(['node', script, root], { timeoutMs: 60_000 })
+    if (exitCode !== 0) throw new Error((stderr || `exit ${exitCode}`).trim().split('\n').pop())
     const list = JSON.parse(stdout) as TfArtifact[]
     await update($, artifacts, () => list)
     await update($, picked, ids => ids.filter(id => list.some(a => a.id === id)))
-  } catch {
-    // No node, no transcripts, bad output: the band simply stays empty.
+    await update($, problem, () => '')
+  } catch (err) {
+    // No node, bad output: keep the last list and say so in the band instead of looking empty.
+    await update($, problem, () => String((err as Error)?.message || err).slice(0, 120))
   }
 }
 
@@ -73,6 +85,7 @@ export const register: Register = on => {
     const list = await read($, artifacts)
     const ids = await read($, picked)
     const open = await read($, isOpen)
+    const failed = await read($, problem)
     const { Box, Button, Text } = $.ui.resolve(e)
     const toggle = (id: string) => () => update($, picked, cur => (cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]))
 
@@ -81,6 +94,7 @@ export const register: Register = on => {
         <Box flexDirection="row" gap={1}>
           <Button key="tf-open" plain onPress={() => update($, isOpen, () => true)}>
             Artifacts ({list.length}){ids.length ? <Text color="green"> · {ids.length} picked</Text> : ''}
+            {failed ? <Text color="yellow"> · could not list</Text> : ''}
           </Button>
         </Box>
       )
@@ -89,6 +103,7 @@ export const register: Register = on => {
     if (!list.length) {
       return (
         <Box flexDirection="column" gap={1}>
+          {failed ? <Text color="yellow">Could not list this workspace's artifacts: {failed}</Text> : ''}
           <Text dimColor>
             No artifacts in this workspace yet. They appear here once published from a session in this folder,
             attached to a task, or pinned as the design system in .claude/task-flow.md. You can also paste a

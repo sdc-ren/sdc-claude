@@ -54,9 +54,18 @@ Flags: `--approve` (stop for the user after the first plan), `--draft` (user all
    cases; all of them must PASS.
 2a. A tester job whose brief starts with `FLOWS` only writes flows from the plan's cases and contract while the
    dev works (same group allowed). It returns verdict NONE, never counts as a test, never blocks later groups.
-3. Code modes cannot close until, for every repo a dev touched: every tester after the last dev job
-   passed (and one covers the repo), and a reviewer `PACKAGE` job that started after that PASS reported
+3. Code modes cannot close until, for every repo a dev touched, judged on that repo's own history: a tester
+   covering it PASSed after ITS last dev job (a later dev job on another repo does not undo that; a FAIL is
+   cleared only by a PASS in a later group), and a reviewer `PACKAGE` job that started after that PASS reported
    `SHIP` with a PR URL. `close.noChange` still needs a tester PASS.
+3c. Plan check (build/qc, size M/L): before the PM's first dispatch (or `approve`) is executed, `tf:reviewer`
+   reads `ticket.md` and `plan.md` once, on the PM's model, for missing requirements, a repo left out and
+   assumptions the ticket contradicts (`jobs/J0-reviewer-plan.md`). It cannot block: with points, the PM gets
+   them next turn and fixes the plan or records why it stands; without, the dispatch runs as returned.
+3d. A reviewer gate runs on the model of the dev lead it judges (the repo's last dev job) — the executor sets
+   it. PACKAGE jobs keep the PM's model.
+3e. Limits: 12 PM turns, 12 jobs per dispatch, 6 per group, 6 dev jobs per repo. The PM prompt of turn 1
+   (and of a rejected turn) carries the rules, generated from the same constants the guards use.
 3a. feedback mode: no dev job → `close.noChange`; a fix with no behaviour change may close with
    `close.noTest` (no tester ran) but still needs a PACKAGE after the last dev; `--check` allows no jobs at all.
 3b. When a job in a group is not `done`, or a reviewer gate returns `NEEDS-WORK`/`BLOCK`, the later groups of that
@@ -196,7 +205,7 @@ archives are slimmed (not deleted) to HANDOFF, journal, flows, ticket, plan, boa
 `metrics.mjs` measures every run from the transcripts Claude Code keeps for each workflow agent — the
 engine cannot (its token budget is one shared counter and it has no clock per job). Per job: minutes, time
 waiting on tools vs model time, turns, tokens, the slowest commands. Per run: wall time, minutes per role,
-PM turns, dev/tester jobs, re-tests, plugin version. The orchestrator runs it after every run and keeps the
+PM turns, dev/tester jobs, re-tests, plugin version. The plan check is its own column (`plan`). The orchestrator runs it after every run and keeps the
 history in `<task>/metrics.json`; `/tf:status --metrics` lists all runs so two plugin versions can be
 compared. A change made for speed names the number it should move and is checked against the next runs.
 
