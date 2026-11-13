@@ -89,14 +89,24 @@ export const register: Register = on => {
     const designs = list.filter(a => a.kind === 'design system').slice(0, SHOWN)
     const canvases = list.filter(a => CANVAS.includes(a.kind)).slice(0, SHOWN)
     const others = list.filter(a => a.kind !== 'design system' && !CANVAS.includes(a.kind)).slice(0, SHOWN)
-    // Compact chips. A picked one is marked by a check and the theme's success (green) text, never a filled background.
+    // Compact chips drawn by the band itself: a light pill (Box background) holding a plain Button, so the
+    // text colour is ours to set — native buttons ignore it. Picked = check + the theme's success green.
+    const isTerminal = e.surface === 'terminal'
     const chip = (a: TfArtifact, showKind: boolean) => {
       const isPicked = ids.includes(a.id)
-      return (
-        <Button key={`tf-${a.id}`} variant="secondary" onPress={toggle(a.id)}>
-          {isPicked ? <Text color="success" bold>✓ {short(nameOf(a))}</Text> : short(nameOf(a))}
+      const button = (
+        <Button key={`tf-${a.id}`} plain onPress={toggle(a.id)}>
+          <Text color={isPicked ? 'success' : undefined} bold={isPicked}>
+            {isPicked ? '✓ ' : ''}{short(nameOf(a))}
+          </Text>
           {showKind ? <Text dimColor> · {a.kind}</Text> : ''}
         </Button>
+      )
+      if (isTerminal) return button
+      return (
+        <Box key={`tf-pill-${a.id}`} backgroundColor="inactive" paddingX={1}>
+          {button}
+        </Box>
       )
     }
     const section = (title: string, items: TfArtifact[], showKind: boolean) =>
