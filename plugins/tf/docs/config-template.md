@@ -40,7 +40,7 @@ Keep sections short; link to longer docs instead of copying them.
 - Targets: `local` = the task's own ports; `dev` = <shared dev URL, or "not allowed">.
 - Accounts: <where test credentials come from (env names, seed files)>.
 - Login recipe: <path#section>.
-- Project helper module flows may import: <path, or "none">.
+- Flow library: `.pipeline/_lib/` (default; shared helpers every task's flows import — login, seeding; the tester keeps its `README.md`). Other helper module flows may import: <path, or "none">.
 - Web viewport: <e.g. 1440x900>. Android: AVD `<name>`, appId `<id>`. iOS: <recipe or "out of scope">.
 
 ## Servers (`serve.mjs` starts them once per run; jobs reuse them; `end-run` stops them)

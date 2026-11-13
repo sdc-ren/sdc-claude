@@ -17,7 +17,10 @@
 //   })
 //
 // Env (set by flow-run.mjs): CASE, BASE_URL, API_URL, EVD_DIR, RUN_ID, TARGET, PLAYWRIGHT_FROM,
-// ANDROID_SERIAL, ADB, VIEWPORT (e.g. 1440x900), HEADED=1, TRACE=1, STEP_TIMEOUT_MS, LOADING_SELECTOR, TF_ROOT, TF_SLUG.
+// ANDROID_SERIAL, ADB, VIEWPORT (e.g. 1440x900), HEADED=1, TRACE=1, STEP_TIMEOUT_MS, LOADING_SELECTOR, TF_ROOT, TF_SLUG,
+// FLOW_LIB (the workspace's shared helpers, <root>/.pipeline/_lib — `await import(`${process.env.FLOW_LIB}/auth.mjs`)`).
+// A web step that fails also saves <case>-fail-<step>.page.txt: what was on the page (roles, names, test ids)
+// with ready-to-use locators — read it before editing the flow instead of guessing and re-running.
 // Result: <EVD_DIR>/<case>.verdict.json  { case, status: PASS|FAIL|BLOCKED, steps[], shots[], warnings[], trace?, error }
 // Standard: <plugin>/guidelines/e2e-testing.md
 // Exit code: 0 PASS · 1 FAIL · 2 BLOCKED (environment, not the app).
@@ -77,6 +80,31 @@ function stepper(v, onFail) {
   }
 }
 
+// What is on the page right now, as the locators a flow can use: the accessibility tree (role + name →
+// getByRole), every data-testid, form fields with their label/placeholder, and visible alerts/toasts.
+export async function describePage(page, { max = 9000 } = {}) {
+  const out = [`URL: ${page.url()}`]
+  try { out.push(`Title: ${await page.title()}`) } catch {}
+  const found = await page.evaluate(() => {
+    const seen = (el) => { const r = el.getBoundingClientRect(); const s = getComputedStyle(el); return r.width > 0 && r.height > 0 && s.visibility !== 'hidden' && s.display !== 'none' }
+    const txt = (el) => (el.getAttribute('aria-label') || el.innerText || el.value || '').replace(/\s+/g, ' ').trim().slice(0, 70)
+    const ids = [...document.querySelectorAll('[data-testid]')].filter(seen).slice(0, 80).map((el) => `${el.getAttribute('data-testid')}  <${el.tagName.toLowerCase()}> ${txt(el)}`)
+    const fields = [...document.querySelectorAll('input, select, textarea')].filter(seen).slice(0, 60).map((el) => {
+      const label = (el.labels && el.labels[0] && el.labels[0].innerText || el.getAttribute('aria-label') || '').replace(/\s+/g, ' ').trim().slice(0, 60)
+      return `<${el.tagName.toLowerCase()}${el.type ? ` type=${el.type}` : ''}> label="${label}" placeholder="${el.getAttribute('placeholder') || ''}" name="${el.getAttribute('name') || ''}"${el.disabled ? ' disabled' : ''}`
+    })
+    const alerts = [...document.querySelectorAll('[role=alert], [role=status], [aria-live], .toast, .Toastify__toast, .el-message, .ant-message, .v-snackbar')].filter(seen).map(txt).filter(Boolean).slice(0, 10)
+    return { ids, fields, alerts }
+  }).catch(() => ({ ids: [], fields: [], alerts: [] }))
+  if (found.alerts.length) out.push('', '## Alerts / toasts', ...found.alerts.map((a) => `- ${a}`))
+  out.push('', "## Test ids → page.getByTestId('<id>')", ...(found.ids.length ? found.ids.map((x) => `- ${x}`) : ['(none on this page — use role + name, label or placeholder; tell the dev which element needs one)']))
+  if (found.fields.length) out.push('', "## Form fields → getByLabel('<label>') / getByPlaceholder('<placeholder>')", ...found.fields.map((x) => `- ${x}`))
+  let tree = ''
+  try { tree = await page.locator('body').ariaSnapshot() } catch { tree = '(aria snapshot not available in this Playwright version)' }
+  out.push('', "## Accessibility tree → getByRole('<role>', { name: '<name>' })", tree.length > max ? `${tree.slice(0, max)}\n… (cut at ${max} chars)` : tree)
+  return out.join('\n')
+}
+
 export async function webFlow(caseId, fn, opts = {}) {
   const k = base(caseId)
   let b = null
@@ -119,8 +147,15 @@ export async function webFlow(caseId, fn, opts = {}) {
       k.v.shots.push(file)
       return file
     }
-    const step = stepper(k.v, (name) => shot(`fail-${name.replace(/[^\w-]+/g, '_').slice(0, 40)}`))
-    await fn({ page, context: b.context, step, shot, waitApi, ready, gotoReady, api: k.api, uniq: k.uniq, expect: k.expect, blocked: k.blocked, env })
+    const step = stepper(k.v, async (name) => {
+      const tag = `fail-${name.replace(/[^\w-]+/g, '_').slice(0, 40)}`
+      await shot(tag)
+      // The page as it was when the step failed, so the fix comes from what is really there.
+      const file = `${k.v.case}-${tag}.page.txt`
+      writeFileSync(join(EVD, file), await describePage(page))
+      k.v.page = file
+    })
+    await fn({ page, context: b.context, step, shot, waitApi, ready, gotoReady, describe: () => describePage(page), lib: env.FLOW_LIB || '', api: k.api, uniq: k.uniq, expect: k.expect, blocked: k.blocked, env })
     if (tracing) { try { await b.context.tracing.stop() } catch {} }
     k.finish()
   } catch (e) {

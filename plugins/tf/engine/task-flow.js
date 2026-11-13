@@ -1,4 +1,4 @@
-// SDC tf plugin — task-flow v2 PM-led executor. Launched by the /tf:build|qc|feedback|review|e2e skills (docs/orchestrator.md); design in docs/design.md.
+// SDC tf plugin — task-flow PM-led executor. Launched by the /tf:build|qc|feedback|review|e2e skills (docs/orchestrator.md); design in docs/design.md.
 //
 // The PM (tf:pm) decides every step: it reads the task, writes the plan, returns a dispatch (jobs, roles,
 // models, parallel groups). This script runs the jobs, enforces the hard rules, hands the reports back to
@@ -6,7 +6,7 @@
 // the orchestrator handles lock/unlock and close-out around the run.
 //
 // args: { root, slug, dir, mode: 'build'|'qc'|'feedback'|'review'|'e2e', round, input, description?, cases?, notes?,
-//         prs?: {repo: url}, worktrees?: {repo: path|null}, worktreePaths?: {repo: path}, format?: 'new'|'v1'|'v2',
+//         prs?: {repo: url}, worktrees?: {repo: path|null}, worktreePaths?: {repo: path}, format?: 'new'|'old'|'current',
 //         flags?: { approve?: bool, draft?: bool, check?: bool (feedback: triage only) }, approved?: bool, lang?, writingLang?, scripts, config }
 // returns { status: 'done'|'triaged'|'verified'|'reviewed'|'escalate'|'approve'|'handoff'|'error', … }
 
@@ -16,14 +16,15 @@ export const meta = {
   whenToUse: 'Internal engine of /tf:build, /tf:qc, /tf:address-review, /tf:review, /tf:e2e — launched by those skills with args; do not run it directly.',
   phases: [
     { title: 'PM', detail: 'tf:pm reads the task, plans, dispatches, reviews reports, closes' },
-    { title: 'Jobs', detail: 'setup / dev / tester / reviewer jobs from the PM dispatch, parallel per group' },
+    { title: 'Jobs', detail: 'setup / dev (lead + members) / tester / reviewer jobs from the PM dispatch, parallel per group' },
   ],
 }
 
 // ── Limits ───────────────────────────────────────────────────────────────────
 const MAX_TURNS = 10
 const MAX_JOBS = 6
-const MAX_DEV_PER_REPO = 4
+const MAX_MEMBERS = 3 // dev members a repo's lead may run at once (one worktree, disjoint files)
+const MAX_DEV_PER_REPO = 6 // dev jobs per repo per run: the build plus the fix loop
 const RESERVE = 80_000
 
 const ROLES = {
@@ -95,6 +96,31 @@ const REPORT = {
   },
 }
 
+// A dev job goes to the repo's lead. It either does the work itself (split=false, the REPORT fields are its
+// report) or hands back a team (split=true) that the executor runs in parallel before the lead merges.
+const LEAD = {
+  type: 'object',
+  required: ['split', 'summary'],
+  properties: {
+    split: { type: 'boolean', description: 'true: return members and write NO code yet. false: you implemented the job yourself — fill the report fields.' },
+    members: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['title', 'tasks', 'files'],
+        properties: {
+          title: { type: 'string', description: 'Two to five words: the part this member owns.' },
+          tasks: { type: 'string', description: 'The micro-tasks of plan.md this member implements (ids), plus anything the plan does not say.' },
+          files: { type: 'array', items: { type: 'string' }, description: 'Exact repo-relative files this member may create or edit. No file in two members.' },
+          model: { type: 'string', enum: MODELS },
+        },
+      },
+    },
+    interfaces: { type: 'string', description: 'split=true: what the parts agree on before coding (function names and signatures, types, props, events).' },
+    ...REPORT.properties,
+  },
+}
+
 // ── Args ─────────────────────────────────────────────────────────────────────
 let A = args
 if (typeof A === 'string') { try { A = JSON.parse(A) } catch { A = {} } }
@@ -110,13 +136,9 @@ const worktrees = A.worktrees || {}
 if (!root || !slug || !dir || !S || !cfg) return { status: 'error', note: 'args need { root, slug, dir, scripts, config } — see the header of workflow.mjs' }
 const langRule = `Report language: ${lang} (all .pipeline files and free-text you return). Writing language for commits/PR/ticket comments: ${writingLang}, per ${S}/../guidelines/ (git.md, pr-description.md, pr-review.md, ticket-comment.md, e2e-testing.md).`
 const budgetLow = () => budget.total && budget.remaining() < RESERVE
-const tok = []
-async function run(prompt, opts) {
-  const before = budget.spent()
-  const out = await agent(prompt, opts)
-  tok.push(`${opts.label}=${Math.round((budget.spent() - before) / 1000)}k`)
-  return out
-}
+// Cost and timing are measured after the run from the agents' transcripts (scripts/metrics.mjs); the
+// workflow budget is one shared counter, so a per-job difference is wrong as soon as two jobs run in parallel.
+const run = (prompt, opts) => agent(prompt, opts)
 
 // ── State of this run ────────────────────────────────────────────────────────
 const ledger = [] // { job, report, turn, seq } — seq = index of the group the job ran in (groups run strictly in order)
@@ -143,11 +165,14 @@ const compact = (r) => ({
 
 // ── Guards ───────────────────────────────────────────────────────────────────
 const isPackage = (j) => /^\s*PACKAGE\b/.test(j.brief || '')
+// A tester job whose brief starts with FLOWS only writes flows (from plan.md cases + contract) while the dev
+// works. It judges nothing: verdict NONE, never counts as a test, may share a group with the dev.
+const isFlows = (j) => j.role === 'tester' && /^\s*FLOWS\b/.test(j.brief || '')
 // A job that did not finish, or a reviewer gate asking for changes: later groups (the tester) would judge
 // code that is about to change, so they are skipped and the PM re-plans.
 const stopsLaterGroups = (r) =>
-  !r.report || r.report.status !== 'done' ||
-  (r.job.role === 'reviewer' && !isPackage(r.job) && mode !== 'review' && ['NEEDS-WORK', 'BLOCK'].includes(r.report.verdict))
+  !isFlows(r.job) && (!r.report || r.report.status !== 'done' ||
+  (r.job.role === 'reviewer' && !isPackage(r.job) && mode !== 'review' && ['NEEDS-WORK', 'BLOCK'].includes(r.report.verdict)))
 
 function checkDispatch(d) {
   if (mode === 'feedback' && flags.check) return '--check is triage only: write feedback-triage.md and return close, no jobs'
@@ -170,12 +195,15 @@ function checkDispatch(d) {
   for (const j of jobs) (byGroup[j.group] ||= []).push(j)
   for (const g of Object.values(byGroup)) {
     const devRepos = new Set(g.filter((j) => j.role === 'dev').map((j) => j.repo))
-    const judge = g.find((j) => (j.role === 'tester' || j.role === 'reviewer') && (devRepos.has(j.repo) || (j.repo === 'all' && devRepos.size)))
+    for (const repo of devRepos) {
+      if (g.filter((j) => j.role === 'dev' && j.repo === repo).length > 1) return `repo ${repo} has several dev jobs in one group — dispatch ONE dev job per repo; its lead splits the work among members`
+    }
+    const judge = g.find((j) => (j.role === 'tester' || j.role === 'reviewer') && !isFlows(j) && (devRepos.has(j.repo) || (j.repo === 'all' && devRepos.size)))
     if (judge) return `${judge.id} (${judge.role}) runs in the same group as a dev job on ${judge.repo} — put judges in a later group`
     // Gate before test (build/qc): a NEEDS-WORK gate in parallel with the tester throws the test run away.
     if (CODE_MODES.includes(mode)) {
       const gate = g.find((j) => j.role === 'reviewer' && !isPackage(j))
-      const tester = gate && g.find((j) => j.role === 'tester' && (j.repo === 'all' || gate.repo === 'all' || j.repo === gate.repo))
+      const tester = gate && g.find((j) => j.role === 'tester' && !isFlows(j) && (j.repo === 'all' || gate.repo === 'all' || j.repo === gate.repo))
       if (tester) return `${tester.id} (tester) runs in the same group as reviewer gate ${gate.id} — put the gate in an earlier group; the tester runs only on code that passed it`
     }
   }
@@ -185,7 +213,7 @@ function checkDispatch(d) {
 function checkClose(d) {
   const c = d.close || {}
   const ok = (x) => x.report && x.report.status === 'done'
-  if (mode === 'e2e') return ledger.some((x) => x.job.role === 'tester' && ok(x)) ? '' : 'e2e cannot close without a finished tester job'
+  if (mode === 'e2e') return ledger.some((x) => x.job.role === 'tester' && !isFlows(x.job) && ok(x)) ? '' : 'e2e cannot close without a finished tester job'
   if (mode === 'review') return ledger.some((x) => x.job.role === 'reviewer' && ok(x)) ? '' : 'review cannot close without a finished reviewer job'
   if (mode === 'feedback' && flags.check) return ''
   const devs = ledger.filter((x) => x.job.role === 'dev')
@@ -197,7 +225,7 @@ function checkClose(d) {
   }
   const devSeq = Math.max(...devs.map((x) => x.seq))
   const after = ledger.filter((x) => x.seq > devSeq)
-  const testers = after.filter((x) => x.job.role === 'tester' && ok(x))
+  const testers = after.filter((x) => x.job.role === 'tester' && !isFlows(x.job) && ok(x))
   const failing = testers.filter((x) => x.report.verdict !== 'PASS')
   if (failing.length) return `tester ${failing.map((x) => x.job.id).join(', ')} did not PASS on the latest code — fix or escalate`
   for (const repo of new Set(devs.map((x) => x.job.repo))) {
@@ -215,12 +243,16 @@ function checkClose(d) {
 // ── Job runner ───────────────────────────────────────────────────────────────
 // Agent types: plugin agents are namespaced <plugin>:<name>; override with args.agentPrefix (e.g. 'tf-' for a non-plugin install).
 const AP = typeof A.agentPrefix === 'string' ? A.agentPrefix : 'tf:'
-const AGENT = { dev: `${AP}dev`, tester: `${AP}tester`, reviewer: `${AP}reviewer` }
+const AGENT = { dev: `${AP}dev`, lead: `${AP}lead`, tester: `${AP}tester`, reviewer: `${AP}reviewer` }
+const worktreeOf = (repo) => worktrees[repo] || (A.worktreePaths && A.worktreePaths[repo]) || '(see HANDOFF.md / setup report)'
+const serversLine = `App servers: node ${S}/serve.mjs start ${root} ${slug} (reuses running ones; status/restart/run per its header) — never start or kill them by hand.\n`
+const reportLine = (id, role, repo) =>
+  `Write your report to ${dir}/jobs/${id}-${role}-${repo}.md (heredoc) and append one line: node ${S}/task.mjs journal ${dir} "${id} ${role} ${repo}: <one-line result>". ` +
+  `Return the structured report; reportFile = that path.`
 function jobPrompt(j) {
-  const wt = worktrees[j.repo] || (A.worktreePaths && A.worktreePaths[j.repo]) || '(see HANDOFF.md / setup report)'
   return `Job ${j.id} · role ${j.role} · repo ${j.repo}\n${context}\n\n` +
     `Brief: ${j.brief}\nRead first: ${(j.reads || []).join(', ') || 'plan.md section for your repo'}\nDone when: ${j.doneWhen}\n` +
-    (j.repo !== 'all' ? `Worktree: ${wt} · existing PR: ${prs[j.repo] || 'none'}\n` : '') +
+    (j.repo !== 'all' ? `Worktree: ${worktreeOf(j.repo)} · existing PR: ${prs[j.repo] || 'none'}\n` : '') +
     (j.role === 'setup'
       ? `You provision runtime resources for this task exactly as the workspace config "Provisioning" section says. Reuse everything the task already holds ` +
         `(node ${S}/resources.mjs list ${root}); worktrees go exactly to the paths listed above (<root>/.worktrees/<SLUG>/<repo dir>) — never another folder name. ` +
@@ -232,17 +264,82 @@ function jobPrompt(j) {
         `later jobs reuse them and the orchestrator stops them at run end. A config without "## Servers": smoke-check backend/frontend by hand, then stop what you started. ` +
         `Emulator + APK only when the plan needs the App (stop the emulator when done).\n`
       : '') +
-    (j.role === 'dev' || j.role === 'tester'
-      ? `App servers: node ${S}/serve.mjs start ${root} ${slug} (reuses running ones; status/restart/run per its header) — never start or kill them by hand.\n`
+    (isFlows(j)
+      ? `FLOWS job: the code is being changed right now by the dev job(s) of this group. Write the flows only (tester.md "FLOWS briefs"); do not judge the app, return verdict NONE.\n`
       : '') +
-    `Write your report to ${dir}/jobs/${j.id}-${j.role}-${j.repo}.md (heredoc) and append one line: node ${S}/task.mjs journal ${dir} "${j.id} ${j.role} ${j.repo}: <one-line result>". ` +
-    `Return the structured report; reportFile = that path.`
+    (j.role === 'dev' || j.role === 'tester' ? serversLine : '') +
+    reportLine(j.id, j.role, j.repo)
+}
+
+// ── Dev team: lead → members → lead ──────────────────────────────────────────
+// The lead's team must be runnable in one worktree: 2–3 members, each with its own files.
+function checkTeam(members) {
+  if (!Array.isArray(members) || members.length < 2) return 'split=true needs 2 or 3 members (one part is not a split — do the job yourself with split=false)'
+  if (members.length > MAX_MEMBERS) return `at most ${MAX_MEMBERS} members (got ${members.length})`
+  const owner = new Map()
+  for (const [i, m] of members.entries()) {
+    if (!Array.isArray(m.files) || !m.files.length) return `member ${i + 1} (${m.title || 'untitled'}) has no files — every member names the exact files it may edit`
+    for (const f of m.files) {
+      const key = String(f).replace(/^\.\//, '')
+      if (owner.has(key)) return `${key} belongs to both member ${owner.get(key)} and member ${i + 1} — give it to one of them`
+      owner.set(key, i + 1)
+    }
+  }
+  return ''
+}
+const failed = (summary) => ({ status: 'failed', verdict: 'NONE', summary })
+async function runDev(j) {
+  const model = MODELS.includes(j.model) ? j.model : 'sonnet'
+  const head = `Job ${j.id} · role dev lead · repo ${j.repo}\n${context}\n\n` +
+    `Brief: ${j.brief}\nRead first: ${(j.reads || []).join(', ') || 'plan.md section for your repo'}\nDone when: ${j.doneWhen}\n` +
+    `Worktree: ${worktreeOf(j.repo)} · existing PR: ${prs[j.repo] || 'none'}\n` + serversLine
+  const teamFile = `${dir}/jobs/${j.id}-team-${j.repo}.md`
+  const ask = (why) => run(
+    head + `You lead this repo's dev work for this job (lead.md). Decide first: do it yourself, or split it among 2–${MAX_MEMBERS} members who work in this worktree at the same time.\n` +
+      `· Yourself (split=false): implement the job now as a developer. ${reportLine(j.id, 'dev', j.repo)}\n` +
+      `· Team (split=true): write NO code. Write the team plan to ${teamFile} (members, their micro-tasks and files, the interfaces between them) and return members + interfaces.\n` +
+      (why ? `REJECTED team: ${why}. Return a valid team, or split=false and do the job yourself.\n` : ''),
+    { label: `${j.id} lead:${j.repo}`, phase: 'Jobs', model, schema: LEAD, agentType: AGENT.lead, ...(j.effort ? { effort: j.effort } : {}) })
+  let plan = await ask('')
+  if (!plan) return null
+  const solo = (p) => ({ verdict: 'NONE', ...p, status: p.status || 'failed' })
+  if (!plan.split) return solo(plan)
+  let bad = checkTeam(plan.members)
+  if (bad) {
+    log(`${j.id} lead: ${bad}`)
+    plan = await ask(bad)
+    if (!plan) return null
+    if (!plan.split) return solo(plan)
+    bad = checkTeam(plan.members)
+    if (bad) return failed(`dev lead returned an invalid team twice: ${bad}`)
+  }
+  const members = plan.members.map((m, i) => ({ ...m, id: `${j.id}${'abc'[i]}` }))
+  log(`${j.id} lead:${j.repo} → ${members.map((m) => `${m.id} ${m.title}`).join(' · ')}`)
+  const reports = await parallel(members.map((m) => () => run(
+    `Job ${m.id} · role dev (member of ${j.id}) · repo ${j.repo}\n${context}\n\n` +
+      `Your part: ${m.title}\nTasks: ${m.tasks}\nRead first: ${teamFile}, plan.md section for your repo\n` +
+      `Worktree: ${worktreeOf(j.repo)}\n` +
+      `SHARED WORKTREE: ${members.filter((x) => x !== m).map((x) => x.id).join(', ')} edit this repo at the same time. Your files (edit nothing else): ${m.files.join(', ')}. ` +
+      `Their files (do not touch): ${members.filter((x) => x !== m).flatMap((x) => x.files).join(', ')}. Follow dev.md "Sharing the worktree".\n` +
+      (plan.interfaces ? `Interfaces agreed by the lead: ${plan.interfaces}\n` : '') + serversLine + reportLine(m.id, 'dev', j.repo),
+    { label: `${m.id} dev:${j.repo}`, phase: 'Jobs', model: MODELS.includes(m.model) ? m.model : 'sonnet', schema: REPORT, agentType: AGENT.dev })))
+  const got = members.map((m, i) => ({ id: m.id, title: m.title, files: m.files, ...(reports[i] || failed('agent returned nothing')) }))
+  const merged = await run(
+    head + `MERGE (lead.md "Merge"): your members finished. Their reports:\n${JSON.stringify(got.map(({ id, title, status, summary, blocked, filesChanged, reportFile }) => ({ id, title, status, summary, blocked: blocked || [], filesChanged: filesChanged || [], reportFile: reportFile || '' })))}\n` +
+      `Make the repo whole: do what members reported as blocked or left for you, fix the seams, run the formatter and the whole-repo typecheck/build, and the job's done-when checks. ` +
+      `Then report for the whole job (filesChanged = every file changed by you and the members). ${reportLine(j.id, 'dev', j.repo)}`,
+    { label: `${j.id} lead:${j.repo} merge`, phase: 'Jobs', model, schema: REPORT, agentType: AGENT.lead })
+  return merged || failed(`dev lead did not return after its members (${got.map((g) => `${g.id} ${g.status}`).join(', ')})`)
 }
 async function runJob(j, turn) {
-  const o = { label: `${j.id} ${j.role}:${j.repo}`, phase: 'Jobs', model: MODELS.includes(j.model) ? j.model : 'sonnet', schema: REPORT }
-  if (AGENT[j.role]) o.agentType = AGENT[j.role]
-  if (j.effort) o.effort = j.effort
-  const report = await run(jobPrompt(j), o)
+  let report
+  if (j.role === 'dev') report = await runDev(j)
+  else {
+    const o = { label: `${j.id} ${j.role}:${j.repo}`, phase: 'Jobs', model: MODELS.includes(j.model) ? j.model : 'sonnet', schema: REPORT }
+    if (AGENT[j.role]) o.agentType = AGENT[j.role]
+    if (j.effort) o.effort = j.effort
+    report = await run(jobPrompt(j), o)
+  }
   const rec = { job: j, report, turn, seq: j._seq }
   ledger.push(rec)
   return rec
@@ -257,12 +354,12 @@ let strikes = 0
 let size = ''
 const pmModel = (turn) => (turn === 1 || violation || !['XS', 'S'].includes(size) ? 'opus' : 'sonnet')
 for (let turn = 1; turn <= MAX_TURNS; turn++) {
-  if (budgetLow()) return { status: 'handoff', slug, round, mode, note: 'token budget low — relaunch with the same args; the PM resumes from board.md', tokens: tok }
+  if (budgetLow()) return { status: 'handoff', slug, round, mode, note: 'token budget low — relaunch with the same args; the PM resumes from board.md' }
   phase('PM')
   const pmPrompt =
     `${context}\n\nPM turn ${turn}/${MAX_TURNS}. Allowed roles in this mode: ${ROLES[mode].join(', ')}. Design: ${S}/../docs/design.md.\n` +
     (turn === 1
-      ? (A.format === 'v1' ? 'This folder was made by task-flow v1 (STATUS.md/spec.md): build HANDOFF.md/board.md from them first, keep only what the new round needs.\n' : '') +
+      ? (A.format === 'old' ? 'This folder has the old layout (STATUS.md/spec.md, no HANDOFF.md): build HANDOFF.md/board.md from them first, keep only what the new round needs.\n' : '') +
         (A.approved ? 'The user approved plan.md — dispatch it.\n' : '') +
         (mode === 'feedback'
           ? `Feedback mode: start from HANDOFF.md, board.md, feedback.md (NOT a QC round — do not re-plan ticket cases). Triage every point into feedback-triage.md${flags.check ? ', then return close (check = triage only)' : ', then plan only the fix points'}.\n`
@@ -273,18 +370,18 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
     'Update board.md, then return your decision.'
   const model = pmModel(turn)
   const d = await run(pmPrompt, { agentType: `${AP}pm`, model, label: `PM t${turn} (${model})`, phase: 'PM', schema: DISPATCH })
-  if (!d) return { status: 'error', stage: `pm t${turn}`, slug, tokens: tok }
+  if (!d) return { status: 'error', stage: `pm t${turn}`, slug }
   if (d.size) size = d.size
   log(`PM t${turn} [${d.size}] ${d.decision}: ${d.note}`)
 
-  if (d.decision === 'escalate') return { status: 'escalate', slug, round, mode, question: d.escalate || d.note, tokens: tok }
+  if (d.decision === 'escalate') return { status: 'escalate', slug, round, mode, question: d.escalate || d.note }
   if (d.decision === 'approve') {
-    if (flags.approve && !A.approved) return { status: 'approve', slug, round, mode, note: d.note, tokens: tok }
+    if (flags.approve && !A.approved) return { status: 'approve', slug, round, mode, note: d.note }
     violation = 'no approval was requested (or it was already given) — dispatch the plan'
   } else if (d.decision === 'close') {
     violation = checkClose(d)
     if (!violation) {
-      return { status: mode === 'feedback' && flags.check ? 'triaged' : DONE_STATUS[mode], slug, round, mode, size: d.size, close: d.close || {}, jobs: ledger.map(compact), tokens: tok }
+      return { status: mode === 'feedback' && flags.check ? 'triaged' : DONE_STATUS[mode], slug, round, mode, size: d.size, close: d.close || {}, jobs: ledger.map(compact) }
     }
   } else {
     violation = checkDispatch(d)
@@ -315,6 +412,6 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
   }
   strikes++
   log(`guard: ${violation}`)
-  if (strikes >= 2) return { status: 'escalate', slug, round, mode, question: `PM decision rejected twice by the hard rules: ${violation}`, tokens: tok }
+  if (strikes >= 2) return { status: 'escalate', slug, round, mode, question: `PM decision rejected twice by the hard rules: ${violation}` }
 }
-return { status: 'escalate', slug, round, mode, question: `PM did not close within ${MAX_TURNS} turns — see board.md`, tokens: tok }
+return { status: 'escalate', slug, round, mode, question: `PM did not close within ${MAX_TURNS} turns — see board.md` }

@@ -1,22 +1,7 @@
-# task-flow v2 — design
+# task-flow — design
 
-Status: implemented 2026-11-13, shipped as the SDC `tf` plugin (`tf@sdc`). Replaces v1 (fixed planner → coder → tester ∥ auditor → reviewer
-pipeline).
-
-## Why v2
-
-Measured on ~60 v1 runs in a multi-repo workspace (backend, web, Flutter app), Nov 2026:
-
-| v1 cost | Evidence |
-|---|---|
-| 7 mechanical haiku agents per run (lock, STATUS ×5, unlock) | 60–100k tokens each, serial |
-| Plan-review 2 rounds (6 agents) on almost every run | 400–500k tokens; `plan:gap` still fired afterwards |
-| Repos run strictly in sequence | FE waited for BE to ship |
-| Every fix round re-ran the full verify-plan + auditor + plan:gap | test r2/r3 100–175k each |
-| Tester drove the UI by hand every round | 70–200 tool calls per tester run |
-| Handoff files grew without bound | spec.md 214 KB, ticket.md 88 KB, all re-read |
-
-BE+FE build runs took 130–230 min and 2.5–4.5M tokens with 24–42 agents.
+The SDC `tf` plugin (`tf@sdc`): a PM agent plans each task and staffs dev / tester / reviewer agents; a thin
+executor runs the jobs and enforces the hard rules.
 
 ## Shape
 
@@ -33,12 +18,13 @@ session (orchestrator, has Bash)            Workflow (thin executor, no fs)
 The PM is stateless between turns: it re-reads `board.md` (its own ledger) and the job reports it
 names. That makes resume free — relaunch, the PM reads the board and continues.
 
-## Roles (`agents/*.md` → `tf:pm`, `tf:dev`, `tf:tester`, `tf:reviewer`)
+## Roles (`agents/*.md` → `tf:pm`, `tf:lead`, `tf:dev`, `tf:tester`, `tf:reviewer`)
 
 | Role | Owns | Never |
 |---|---|---|
 | `tf:pm` | brief, plan, board, HANDOFF, ticket-comment draft; picks jobs, roles, models, size | edits repo code, runs tests |
-| `tf:dev` | code changes in its worktree for its micro-tasks; micro-tests | commits, judges its own work |
+| `tf:lead` | one repo's dev job: does it alone, or splits it among ≤ 3 members (disjoint files, agreed interfaces), merges, makes the repo build, one report to the PM | commits, judges its own work |
+| `tf:dev` | member of a lead's team: code changes in its own files for its micro-tasks; micro-tests; reports to the lead | commits, edits another member's files |
 | `tf:tester` | e2e flows (`flows/`), EVD, verdicts | edits repo code |
 | `tf:reviewer` | static gate (scope, contract, quality, tamper, read-only zones); commit + push + PR; review-mode report | edits code, merges |
 | `setup` | provisioning per workspace config (generic agent, sonnet) | touches other tasks' resources |
@@ -62,6 +48,12 @@ Flags: `--approve` (stop for the user after the first plan), `--draft` (user all
 
 1. Roles outside the mode's allowed set are rejected.
 2. Writer ≠ judge: a dev job and a tester/reviewer job are always separate agents.
+2b. One dev job per repo per group. It goes to the repo's lead, which works alone or returns a team of 2–3
+   members sharing the worktree: every member names its `files`, no file twice (an invalid team is sent back
+   once, then the job fails). The lead merges and reports once. Several tester jobs in one group split the
+   cases; all of them must PASS.
+2a. A tester job whose brief starts with `FLOWS` only writes flows from the plan's cases and contract while the
+   dev works (same group allowed). It returns verdict NONE, never counts as a test, never blocks later groups.
 3. Code modes cannot close until, for every repo a dev touched: every tester after the last dev job
    passed (and one covers the repo), and a reviewer `PACKAGE` job that started after that PASS reported
    `SHIP` with a PR URL. `close.noChange` still needs a tester PASS.
@@ -72,7 +64,7 @@ Flags: `--approve` (stop for the user after the first plan), `--draft` (user all
 3c. Gate before test (build/qc): a reviewer gate and the tester it precedes never share a group — a
    NEEDS-WORK gate next to a running tester throws the test run away (RVD-293 round 3: ~16 min).
 4. PR is ready. A reviewer report with `prDraft: true` is a violation unless the user passed `--draft`.
-5. Caps: PM turns ≤ 10, jobs per dispatch ≤ 6, fix cycles per issue id ≤ 3 (PM must escalate), token
+5. Caps: PM turns ≤ 10, jobs per dispatch ≤ 6, dev jobs per repo per run ≤ 6, members per lead ≤ 3, fix cycles per issue id ≤ 3 (PM must escalate), token
    reserve 80k → handoff.
 6. Two guard violations in a row → escalate.
 
@@ -84,8 +76,8 @@ workspace config and every agent reads them.
 | Size | Typical task | Typical staffing |
 |---|---|---|
 | XS | text, colour, spacing, show/hide | PM (short) → dev → reviewer gate → tester → reviewer PACKAGE |
-| S | add a field/column, one screen, one repo | same, tester writes 1 flow |
-| M | 2 repos or API change | devs in parallel per repo → reviewer gates → tester(s) |
+| S | add a field/column, one screen, one repo | dev ∥ tester FLOWS → gate → tester → PACKAGE |
+| M | 2 repos or API change | one lead per repo in parallel (each alone or with members) ∥ tester FLOWS → reviewer gates → tester(s) |
 | L | new feature, migration, money, permissions | M + opus where risky |
 
 Model per job: haiku < sonnet < opus. Default sonnet; opus only for risky logic or judgement.
@@ -124,10 +116,12 @@ decide, record under `Assumptions` in `board.md`, list them in the round report.
   journal.md       append-only, 1–3 lines per job (each agent)      grep only
   jobs/J<n>-<role>-<repo>.md   brief + report (the job's agent)     PM
   flows/*.mjs + flows.json     e2e flows + manifest (tester)        tester, next rounds
+  ../_lib/*.mjs + README.md    shared flow helpers of the workspace (testers)   every task's flows
   evd/             WebP/txt evidence (tester)                       session uploads
   ticket-comment.md / review.md   drafts (PM / reviewer)            user approves before posting
   history/r<N>/    plan, board, jobs of finished rounds             on demand
   resources.json   resource ledger (resources.mjs)
+  metrics.json     measured cost of every run (metrics.mjs)
 ```
 
 `HANDOFF.md` header lines are machine-read by `task.mjs`:
@@ -158,6 +152,13 @@ Contract (generic, in the skill): a flow is `flows/<case>.mjs`, reads `BASE_URL`
 helpers; `flow-run.mjs` runs flows, converts screenshots to WebP, updates `flows.json`.
 Project-specific helpers, accounts and targets come from the workspace config `## Flows` section.
 Flows stay in the task folder; a later round re-runs them instead of re-driving the UI.
+
+Two things keep writing them cheap. **Shared library**: `<root>/.pipeline/_lib/` (`FLOW_LIB`) holds login,
+seeding and other helpers for the whole workspace, indexed in its `README.md`; a task's flows import it and the
+tester adds what a later ticket would need again, so no task starts from an empty folder. **Look before
+writing**: `flow-peek.mjs` opens a screen (after optional steps) and prints the real test ids, labels and
+role + name locators; a failed web step saves the same description of the page it failed on, so a selector
+is fixed from what is there, not by re-running.
 
 ## Retention
 
@@ -190,9 +191,18 @@ archives are slimmed (not deleted) to HANDOFF, journal, flows, ticket, plan, boa
   cache filled in), waits for their health checks, and keeps them up across jobs; jobs call `start`
   again (a no-op when they answer). Each is a `server` run-end resource, so `end-run` stops it.
 
+## Metrics
+
+`metrics.mjs` measures every run from the transcripts Claude Code keeps for each workflow agent — the
+engine cannot (its token budget is one shared counter and it has no clock per job). Per job: minutes, time
+waiting on tools vs model time, turns, tokens, the slowest commands. Per run: wall time, minutes per role,
+PM turns, dev/tester jobs, re-tests, plugin version. The orchestrator runs it after every run and keeps the
+history in `<task>/metrics.json`; `/tf:status --metrics` lists all runs so two plugin versions can be
+compared. A change made for speed names the number it should move and is checked against the next runs.
+
 ## Maintenance commands
 
-- `task.mjs legacy <root> [--apply]` folds v1 suffixed folders into `<SLUG>/history/legacy/` and removes
+- `task.mjs legacy <root> [--apply]` folds old suffixed folders into `<SLUG>/history/legacy/` and removes
   clean legacy worktrees (dry run unless `--apply`).
 - `resources.mjs reap` promotes a merged task's passing flows into `.pipeline/_regression/`
   (`resources.mjs promote` by hand); `/tf:e2e --regression` runs them.

@@ -4,6 +4,48 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.3.0] — 2026-11-13
+
+### Added
+- **Run metrics** (`scripts/metrics.mjs`): every run is measured from its agents' transcripts — wall time,
+  minutes per role, time in tools vs model per job, slowest commands, re-tests, tokens, plugin version. The
+  orchestrator records it in `<task>/metrics.json` after each run and reports it; `/tf:status --metrics [slug]`
+  lists runs to compare versions.
+
+### Changed
+- **Flows are written while the devs work**: the PM adds one tester job whose brief starts with `FLOWS` to the
+  group of the first dev jobs. It writes the flows from the plan's cases and contract, returns verdict NONE,
+  never counts as a test and never blocks later groups (engine rule 2a). Plans now name the `data-testid`s
+  of new UI elements so flows and code meet.
+- **A tester FAIL must be proven before a dev is sent**: the tester checks the data precondition and
+  reproduces the failure directly; an `IB` carries that proof, anything else is `unconfirmed`, `flow-broken`
+  or `test-data`. The PM only puts proven `IB`s into a fix job.
+- **Shared flow library**: `<root>/.pipeline/_lib/` (`FLOW_LIB`, `lib` in the flow context) holds the
+  workspace's login, seeding and other helpers with a `README.md` index; flows import it and the tester adds
+  to it instead of writing a `flows/lib/` per ticket.
+- **Look before writing**: new `scripts/flow-peek.mjs` opens a screen (after optional steps) and prints the
+  real test ids, form labels and role + name locators; a failed web step now also saves
+  `<case>-fail-<step>.page.txt` with the same description, reported as `page` by `flow-run.mjs`.
+- Tester: run one case while writing it, look at the real response before editing, API flows before Web flows.
+- **Dev lead per repo** (`tf:lead`, new agent): the PM dispatches one dev job per repo; the repo's lead does
+  it alone, or splits it among up to 3 `tf:dev` members with an explicit, non-overlapping `files` list each and
+  the interfaces between them, then merges — applies what members left for it, fixes the seams, runs the
+  whole-repo typecheck/build — and sends the PM one report. The engine runs the members, rejects an invalid
+  team (sent back once), and refuses two dev jobs on one repo in a group (rule 2b). The PM no longer plans who
+  edits which file. Dev jobs per repo per run: 4 → 6.
+- **Parallel testers**: the PM splits 6+ new cases (or different platforms) over 2–3 tester jobs by case ids;
+  `flow-run.mjs --jobs N` runs cases concurrently and merges its results into `flows.json` instead of
+  overwriting it.
+- All "v1 / v2" wording is gone; `task.mjs resolve` reports `format: current | old | new`.
+- Metrics also count servers started or killed by hand instead of through `serve.mjs` (`byHand`).
+- The **Artifacts** band above the chat input is now always shown once the session starts: a workspace with
+  no artifacts shows `Artifacts (0)`, and opening it explains how items get there. Before, the band hid
+  itself when empty, which looked like it had failed to load (e.g. after switching account).
+
+### Fixed
+- The `tokens` list in the workflow result is gone: it was a difference of the shared budget counter, wrong
+  whenever jobs ran in parallel (a dev job that produced 10k output tokens showed `0k`).
+
 ## [1.2.2] — 2026-11-13
 
 ### Changed
@@ -66,7 +108,7 @@ All notable changes to the `tf` plugin are documented here. The format follows
 
 ## [1.0.0] — 2026-11-13
 
-First public release of task-flow v2 as a Claude Code plugin.
+First public release of task-flow as a Claude Code plugin.
 
 ### Added
 - PM-led executor: the `tf:pm` agent plans each ticket into micro-tasks, sizes it (XS–L), picks roles and
