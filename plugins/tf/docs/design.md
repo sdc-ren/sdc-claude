@@ -51,7 +51,7 @@ The roster is a menu. The PM uses the fewest roles that satisfy the hard rules.
 |---|---|---|---|
 | `/tf:build <ticket|text>` | build | setup, dev, tester, reviewer | PR(s) ready |
 | `/tf:qc <ticket>` | qc | setup, dev, tester, reviewer | existing PR updated (or new PR if merged) |
-| `/tf:feedback <ticket|PR> [--check]` | feedback | setup, dev, tester, reviewer (none with `--check`) | triage, fixes pushed to the same PR, reply drafts |
+| `/tf:address-review <ticket|PR> [--check]` | feedback | setup, dev, tester, reviewer (none with `--check`) | triage, fixes pushed to the same PR, reply drafts |
 | `/tf:review <PR|ticket>` | review | setup, tester, reviewer | review report + PR/ticket comment drafts |
 | `/tf:e2e <PR|ticket> [--cases a,b]` | e2e | setup, tester | EVD + ticket comment draft |
 

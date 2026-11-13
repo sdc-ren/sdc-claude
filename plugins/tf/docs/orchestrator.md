@@ -15,7 +15,7 @@ You never write, test, or review repo code yourself. Design and rationale: `docs
 |---|---|---|
 | `/tf:build <ticket or text>` | build | PM plans → devs → reviewer gate → tester → ready PR(s), EVD, ticket-comment draft |
 | `/tf:qc <ticket>` | qc | Next round on the same folder/branches: reproduce QC cases with saved flows, fix, re-test, update the PR |
-| `/tf:feedback <ticket or PR url> [--check]` | feedback | Team review on our own PRs: fetch unresolved threads/reviews/comments, triage each point, fix only the `fix` points on the same PR, draft one reply per thread (posted after approval). `--check`: triage only |
+| `/tf:address-review <ticket or PR url> [--check]` | feedback | Team review on our own PRs: fetch unresolved threads/reviews/comments, triage each point, fix only the `fix` points on the same PR, draft one reply per thread (posted after approval). `--check`: triage only |
 | `/tf:review <PR url or ticket>` | review | e2e of the ticket's acceptance criteria + risk report (risk, impact, UI change, AC coverage, build). No code changes |
 | `/tf:e2e <PR url or ticket> [--cases a,b]` | e2e | Tester only: run/save flows, EVD, ticket-comment draft. `--regression`: run `.pipeline/_regression` flows instead (no workflow) |
 | `/tf:status [--doctor]` | — | Resources per task and what cleanup would free (`resources.mjs list`, `reap --dry-run`); `--doctor` also runs `node $S/doctor.mjs <cwd>` |
@@ -52,7 +52,7 @@ language; `writingLang` = `Writing language` → a `Writing language:` line in t
    everything (description, every comment, attachments list, linked issues) verbatim with the URL to
    `<dir>/ticket.md`. Later rounds: re-read the whole ticket (QC edits comments: compare `updated` with
    `created`), rewrite ticket.md, mark comments new or edited since the last round under
-   `## New since round <n-1>`. Human reviews on our PRs are handled by `/tf:feedback`, not here — if
+   `## New since round <n-1>`. Human reviews on our PRs are handled by `/tf:address-review`, not here — if
    `pr-feedback.mjs fetch` would find open threads, mention it in one line. PR input: add `gh pr view <url> --json title,body,headRefName,baseRefName,files`
    and the PR URL to ticket.md. No ticket → write the user's text.
 6b. **Attachments** — artifacts / design systems mentioned with `@` (`artifact://` resources) or pasted as
@@ -101,7 +101,7 @@ The user watches `/workflows`. Do not poll.
 |---|---|
 | `done` (feedback) | Report the triage table, what was fixed (commits, PR links), then show `<dir>/feedback-replies.md`. Post only after the user approves the text (they may edit or drop replies): per thread `node $S/pr-feedback.mjs reply <dir> <R<n>> --body-file <tmp> [--resolve]` (resolve only where the draft says `resolve: yes`), per conversation reply `node $S/pr-feedback.mjs comment <dir> <pr url> --body-file <tmp>`. Then Review lessons (below). |
 | `done` / `verified` / `reviewed` | Report (below). Close-out per `C`: upload `<dir>/evd/`, fill `<evd:FILE>` links in the drafts, show drafts; post only after the user approves the text. |
-| `triaged` (feedback `--check`) | Show `<dir>/feedback-triage.md` as a short table (id · reviewer · point · P · verdict · reason) and ask whether to run `/tf:feedback` without `--check`. |
+| `triaged` (feedback `--check`) | Show `<dir>/feedback-triage.md` as a short table (id · reviewer · point · P · verdict · reason) and ask whether to run `/tf:address-review` without `--check`. |
 | `approve` | Show the plan summary (`<dir>/plan.md`) and ask for approval; on yes relaunch with `approved: true`. |
 | `escalate` | One `🛑` line with the PM's question and options. After the answer relaunch with the same args, the answer in `notes`. The PM resumes from board.md. |
 | `handoff` | Token budget low — relaunch in a new session with the same args. |

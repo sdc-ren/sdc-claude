@@ -13,7 +13,7 @@
 export const meta = {
   name: 'task-flow',
   description: 'PM-led task pipeline: PM plans and dispatches dev/tester/reviewer jobs until the task closes',
-  whenToUse: 'Internal engine of /tf:build, /tf:qc, /tf:feedback, /tf:review, /tf:e2e — launched by those skills with args; do not run it directly.',
+  whenToUse: 'Internal engine of /tf:build, /tf:qc, /tf:address-review, /tf:review, /tf:e2e — launched by those skills with args; do not run it directly.',
   phases: [
     { title: 'PM', detail: 'tf:pm reads the task, plans, dispatches, reviews reports, closes' },
     { title: 'Jobs', detail: 'setup / dev / tester / reviewer jobs from the PM dispatch, parallel per group' },

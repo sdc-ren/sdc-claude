@@ -4,6 +4,15 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.2] — 2026-11-13
+
+### Changed
+- `/tf:feedback` renamed to **`/tf:address-review`**: the app's command menu hid `tf:feedback` (likely the
+  built-in `/feedback`). The internal mode and files keep the name `feedback` (`feedback.md`, `feedback-triage.md`).
+
+### Fixed
+- `skills/qc` and `skills/review` frontmatter: the descriptions held `: ` and were invalid YAML (now quoted).
+
 ## [1.2.1] — 2026-11-13
 
 ### Changed

@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](https://code.claude.com/docs/en/plugins/install.md)
 
-`/tf:build` · `/tf:qc` · `/tf:feedback` · `/tf:review` · `/tf:e2e`
+`/tf:build` · `/tf:qc` · `/tf:address-review` · `/tf:review` · `/tf:e2e`
 
 </div>
 
@@ -67,7 +67,7 @@ Seven commands. The five task commands take a **ticket key** (`PROJ-123`), a **P
 |---|---|
 | [`/tf:build`](#tfbuild) | Do a new task end to end |
 | [`/tf:qc`](#tfqc) | Answer a QC report on a task tf already did |
-| [`/tf:feedback`](#tffeedback) | Check and answer the team's review on the PRs tf pushed |
+| [`/tf:address-review`](#tfaddress-review) | Check and answer the team's review on the PRs tf pushed |
 | [`/tf:review`](#tfreview) | Review a teammate's PR (e2e + risk report, no code changes) |
 | [`/tf:e2e`](#tfe2e) | Run e2e only, or the regression suite |
 | [`/tf:status`](#tfstatus) | See what tasks hold; check the machine |
@@ -111,16 +111,16 @@ with a **ready PR per changed repo**, e2e evidence and a ticket-comment draft.
 Next round of a ticket tf already did: re-reads the ticket (new or edited QC comments), reproduces the
 reported cases with the saved flows, fixes only those, re-tests, and pushes to the same PR (or opens a new
 one if the old PR was merged). Ends with a QC-reply draft. Attachments from earlier rounds are reused.
-Review comments from teammates on the PRs go through `/tf:feedback`.
+Review comments from teammates on the PRs go through `/tf:address-review`.
 
 ```
 /tf:qc PROJ-123
 ```
 
-### `/tf:feedback`
+### `/tf:address-review`
 
 ```
-/tf:feedback <ticket | PR url> [--check] [--lang <code>]
+/tf:address-review <ticket | PR url> [--check] [--lang <code>]
 ```
 
 After a teammate reviewed a PR tf pushed. Fetches every **unresolved** review thread (ids `R1`, `R2`… stable
@@ -138,9 +138,9 @@ Ends with `feedback-triage.md` and one reply draft per thread (`feedback-replies
 you approve the text; fixed threads are resolved, discussed ones stay open for the reviewer.
 
 ```
-/tf:feedback PROJ-123 --check     # what did the team say? triage only
-/tf:feedback PROJ-123             # fix, push, draft replies
-/tf:feedback https://github.com/org/api/pull/665
+/tf:address-review PROJ-123 --check     # what did the team say? triage only
+/tf:address-review PROJ-123             # fix, push, draft replies
+/tf:address-review https://github.com/org/api/pull/665
 ```
 
 ### `/tf:review`

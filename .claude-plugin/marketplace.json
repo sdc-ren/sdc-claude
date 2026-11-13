@@ -10,7 +10,7 @@
     {
       "name": "tf",
       "source": "./plugins/tf",
-      "description": "SDC task-flow — PM-led dev/test/review agent team: /tf:build, /tf:qc, /tf:feedback, /tf:review, /tf:e2e",
+      "description": "SDC task-flow — PM-led dev/test/review agent team: /tf:build, /tf:qc, /tf:address-review, /tf:review, /tf:e2e",
       "category": "development",
       "homepage": "https://github.com/sdc-ren/sdc-claude/tree/main/plugins/tf"
     }
