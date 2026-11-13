@@ -89,12 +89,12 @@ export const register: Register = on => {
     const designs = list.filter(a => a.kind === 'design system').slice(0, SHOWN)
     const canvases = list.filter(a => CANVAS.includes(a.kind)).slice(0, SHOWN)
     const others = list.filter(a => a.kind !== 'design system' && !CANVAS.includes(a.kind)).slice(0, SHOWN)
-    // Compact chips. A picked one is marked by a check and green text, never a filled background.
+    // Compact chips. A picked one is marked by a check and the theme's success (green) text, never a filled background.
     const chip = (a: TfArtifact, showKind: boolean) => {
       const isPicked = ids.includes(a.id)
       return (
         <Button key={`tf-${a.id}`} variant="secondary" onPress={toggle(a.id)}>
-          {isPicked ? <Text color="green" bold>✓ {short(nameOf(a))}</Text> : short(nameOf(a))}
+          {isPicked ? <Text color="success" bold>✓ {short(nameOf(a))}</Text> : short(nameOf(a))}
           {showKind ? <Text dimColor> · {a.kind}</Text> : ''}
         </Button>
       )
@@ -114,8 +114,8 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column" gap={1}>
         {section('Design system', designs, false)}
+        {section('Artifacts', others, true)}
         {section('Canvases', canvases, true)}
-        {section('Docs & pages', others, true)}
         <Box flexDirection="row" gap={2}>
           <Text dimColor>
             {ids.length ? `${ids.length} picked · sent with your next message` : 'Pick, then send e.g. /tf:build PROJ-12'}
