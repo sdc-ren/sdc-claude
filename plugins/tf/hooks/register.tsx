@@ -89,24 +89,15 @@ export const register: Register = on => {
     const designs = list.filter(a => a.kind === 'design system').slice(0, SHOWN)
     const canvases = list.filter(a => CANVAS.includes(a.kind)).slice(0, SHOWN)
     const others = list.filter(a => a.kind !== 'design system' && !CANVAS.includes(a.kind)).slice(0, SHOWN)
-    // Compact chips drawn by the band itself: a light pill (Box background) holding a plain Button, so the
-    // text colour is ours to set — native buttons ignore it. Picked = check + the theme's success green.
-    const isTerminal = e.surface === 'terminal'
+    // Native chips (the desktop app draws its own button and ignores text colours inside it).
+    // Picked: check mark at full strength; not picked: dimmed label. No filled background.
     const chip = (a: TfArtifact, showKind: boolean) => {
       const isPicked = ids.includes(a.id)
-      const button = (
-        <Button key={`tf-${a.id}`} plain onPress={toggle(a.id)}>
-          <Text color={isPicked ? 'success' : undefined} bold={isPicked}>
-            {isPicked ? '✓ ' : ''}{short(nameOf(a))}
-          </Text>
+      return (
+        <Button key={`tf-${a.id}`} variant="secondary" dimColor={!isPicked} onPress={toggle(a.id)}>
+          {isPicked ? '✓ ' : ''}{short(nameOf(a))}
           {showKind ? <Text dimColor> · {a.kind}</Text> : ''}
         </Button>
-      )
-      if (isTerminal) return button
-      return (
-        <Box key={`tf-pill-${a.id}`} backgroundColor="inactive" paddingX={1}>
-          {button}
-        </Box>
       )
     }
     const section = (title: string, items: TfArtifact[], showKind: boolean) =>
