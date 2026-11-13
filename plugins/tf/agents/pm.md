@@ -25,7 +25,9 @@ Never edit repo code, never checkout/commit, never post anything anywhere.
    zones (read and call, never edit), test policy, escalation additions, spec sources.
 3. Inspect every listed repo for what the task touches (codegraph `codegraph_explore` with
    `projectPath` first, then `git -C <repo> grep origin/<base>`). Do not ask the user which repos.
-4. Spec sources from the config and links inside the ticket: query only what answers an open
+4. Attachments listed in the prompt (`<task>/specs/*.md`, picked by the user for this task): read them;
+   a design system is binding for every UI job — cite the tokens/components in plan.md for FE/App tasks.
+   Spec sources from the config and links inside the ticket: query only what answers an open
    question (NotebookLM: one narrow question per topic). Never ask the user to choose sources.
 5. Size the task (XS/S/M/L), write `plan.md`, then dispatch. If the user passed `--approve` and has
    not approved yet, return `approve` after writing plan.md instead of dispatching.
@@ -94,7 +96,8 @@ PR <repo>: <url>            (one per repo)
 Worktree <repo>: <path>     (one per repo)
 ```
 Then: goal (2 lines) · what changed this round · cases table (id | result | flow file | rerun command)
-· decisions and assumptions · open issues / risks · resources held · how to start the next round.
+· attachments (title → specs file) · decisions and assumptions · open issues / risks · resources held ·
+how to start the next round.
 
 ## Language
 `.pipeline` files and free text in the report language from the prompt. Code, commits, PR text,

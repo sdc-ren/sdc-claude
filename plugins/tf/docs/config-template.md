@@ -28,6 +28,12 @@ Keep sections short; link to longer docs instead of copying them.
 - Ticket tracker: <URL> — `browser.mjs auth <name> --url <URL> --playwright <package.json>`
 - Spec sources the PM may query: <NotebookLM notebook, docs paths, Figma>
 
+## Design & artifacts (the --attach picker shows only these, or titles matching Match)
+- Design system: <title — https://claude.ai/artifact/…, or "none">
+- Artifacts:
+  - <title — https://claude.ai/artifact/…>
+- Match: <keywords found in this workspace's artifact titles, e.g. PROJ-, product name>
+
 ## Knowledge (PM reads first; orchestrator updates at close-out)
 - Known bugs: <path> · Verified env recipes: <path> · Decisions: <path>
 - Review lessons: <path> — rules learned from human PR reviews; devs and reviewers read it before every job.

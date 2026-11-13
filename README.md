@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin%20marketplace-d97757)](https://code.claude.com/docs/en/plugins/install.md)
-[![tf](https://img.shields.io/badge/tf-v1.0.0-2ea44f)](plugins/tf/CHANGELOG.md)
+[![tf](https://img.shields.io/badge/tf-v1.1.0-2ea44f)](plugins/tf/CHANGELOG.md)
 
 </div>
 
@@ -19,7 +19,7 @@ is self-contained: skills (slash commands), subagents, workflows, scripts and th
 
 | Plugin | Version | What it does |
 |---|---|---|
-| [**tf** — task-flow](plugins/tf/README.md) | 1.0.0 | A PM agent plans each ticket, staffs dev / tester / reviewer agents, keeps re-runnable e2e flows, and ships **ready** PRs with evidence. Commands: `/tf:build`, `/tf:qc`, `/tf:review`, `/tf:e2e`. |
+| [**tf** — task-flow](plugins/tf/README.md) | 1.1.0 | A PM agent plans each ticket, staffs dev / tester / reviewer agents, keeps re-runnable e2e flows, and ships **ready** PRs with evidence. Commands: `/tf:build`, `/tf:qc`, `/tf:review`, `/tf:e2e`. |
 
 ## Installation
 

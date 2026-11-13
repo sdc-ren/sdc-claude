@@ -4,6 +4,17 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.1.0] — 2026-11-13
+
+### Added
+- `/tf:attach [ticket] [keyword] [--setup]` and `--attach` on `/tf:build`, `/tf:qc`, `/tf:review`, `/tf:e2e`:
+  pick Claude artifacts and design systems from a checkbox list. The list is scoped to the workspace —
+  only items registered in its config (`## Design & artifacts`) or whose titles match its keywords;
+  other projects' artifacts never appear. `--setup` registers what belongs to the workspace.
+- Picked items are read into `.pipeline/<TICKET>/specs/` and recorded in `attachments.json`; the PM plans
+  from them, devs use the design system's tokens and components, testers check UI against it. Later rounds
+  reuse them.
+
 ## [1.0.0] — 2026-11-13
 
 First public release of task-flow v2 as a Claude Code plugin.
@@ -29,4 +40,5 @@ First public release of task-flow v2 as a Claude Code plugin.
 - Per-workspace configuration in `<workspace>/.claude/task-flow.md`, including languages, read-only zones,
   test policy, review lessons and doctor checks.
 
+[1.1.0]: https://github.com/sdc-ren/sdc-claude/releases/tag/tf-v1.1.0
 [1.0.0]: https://github.com/sdc-ren/sdc-claude/releases/tag/tf-v1.0.0

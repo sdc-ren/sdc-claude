@@ -124,7 +124,11 @@ const context =
   `Input: ${A.input || ''}\n` + (A.description ? `Description: ${A.description}\n` : '') +
   (A.cases ? `Target cases: ${A.cases}\n` : '') + (A.notes ? `User notes: ${A.notes}\n` : '') +
   `PRs: ${JSON.stringify(prs)}\nWorktrees (existing): ${JSON.stringify(worktrees)}\nWorktree paths (one folder per task, one subfolder per repo — use exactly these): ${JSON.stringify(A.worktreePaths || {})}\n` +
-  `Flags: approve=${!!flags.approve} draft=${!!flags.draft}\n${langRule}`
+  `Flags: approve=${!!flags.approve} draft=${!!flags.draft}\n` +
+  (Array.isArray(A.attachments) && A.attachments.length
+    ? `Attachments (read the files; the design system binds UI work): ${A.attachments.map((x) => `${x.kind}: ${x.title} → ${x.file}`).join(' · ')}\n`
+    : '') +
+  langRule
 
 const compact = (r) => ({
   id: r.job.id, role: r.job.role, repo: r.job.repo, status: r.report ? r.report.status : 'failed',

@@ -4,7 +4,7 @@
 
 **A PM-led agent team for Claude Code: plan the ticket, build it, test it end to end, ship a ready PR.**
 
-[![Version](https://img.shields.io/badge/version-1.0.0-2ea44f)](CHANGELOG.md)
+[![Version](https://img.shields.io/badge/version-1.1.0-2ea44f)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](https://code.claude.com/docs/en/plugins/install.md)
 
@@ -65,6 +65,7 @@ Then, in your workspace (the folder that holds your repos):
 | `/tf:qc <ticket>` | Answer a QC report or human PR review points: next round on the same branches and flows | Existing PR updated (or a new one if the old PR was merged), QC reply draft |
 | `/tf:review <PR url\|ticket>` | Review a teammate's PR: e2e of the ticket's acceptance criteria + risk report | `review.md`, PR-comment and ticket-comment drafts — nothing posted |
 | `/tf:e2e <PR url\|ticket> [--cases 21,22]` | E2E only, no code changes | Evidence + ticket-comment draft |
+| `/tf:attach [ticket] [keyword] [--setup]` | Pick artifacts / design systems for a task from a checkbox list — only this workspace's | Saved to `specs/`, used by PM, devs, testers |
 | `/tf:doctor` | Check this machine and workspace | Pass/fail table with fixes |
 | `/tf:status` | What every task holds (worktrees, DBs, ports, PRs) | Table + what the reaper would free |
 | `/tf:cleanup <slug>` | Free one task's resources (asks first) | Resources released, folder archived |
@@ -72,7 +73,7 @@ Then, in your workspace (the folder that holds your repos):
 | `/tf:legacy` | Fold old suffixed folders (`-e2e`, `-qc`, `-r2`…) into one folder per ticket | Dry run, then apply on your yes |
 | `/tf:regression [--target local\|dev]` | Run flows promoted from merged tickets | PASS/FAIL per case |
 
-**Flags** — `--approve`: stop after the first plan for your approval · `--draft`: allow a draft PR (agents
+**Flags** — `--attach`: pick this workspace's artifacts / design system for the task · `--approve`: stop after the first plan for your approval · `--draft`: allow a draft PR (agents
 never choose draft on their own) · `--lang <code>`: report language for this run.
 
 Nothing is ever posted to the tracker or GitHub as a comment without your approval of the exact text.
