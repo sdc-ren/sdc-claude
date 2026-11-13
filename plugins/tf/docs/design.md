@@ -64,6 +64,18 @@ Flags: `--approve` (stop for the user after the first plan), `--draft` (user all
    them next turn and fixes the plan or records why it stands; without, the dispatch runs as returned.
 3d. A reviewer gate runs on the model of the dev lead it judges (the repo's last dev job) — the executor sets
    it. PACKAGE jobs keep the PM's model.
+3f. Dev jobs never commit. The lead reports the worktree HEAD before and after its job; when it moved, the
+   executor has the commits undone (`task.mjs uncommit`: a mixed reset to the earlier HEAD, refused when the
+   commits are pushed) before the gate runs. If that fails the job is `blocked` and the PM decides.
+3g. Several testers in one group: each gets its own scratch folder (`<task>/tmp/<job>/`), and only the first
+   may edit the shared flow library; the others read it and park new helpers in `flows/_new/`.
+3h. Tool guard (`hooks/guard.ts`, a hooks module — not the executor): when the executor starts a job the guard
+   reads its prompt, and that agent's tool calls are refused when a dev job runs `git commit|push|merge|rebase`,
+   a team member edits a file given to another member, or a tester told `FLOW LIBRARY READ-ONLY` writes to the
+   library. Unrecognised agents and any failure in the guard let the call through.
+3i. After a plan check with points, the PM returns `planKept` (points where it did not change the plan). Any
+   entry stops the run with status `approve` so the user settles the disagreement before a job starts.
+3j. Size XS/S: every tester job names `cases`; the tester runs only those — no other saved flow, no smoke case.
 3e. Limits: 12 PM turns, 12 jobs per dispatch, 6 per group, 6 dev jobs per repo. The PM prompt of turn 1
    (and of a rejected turn) carries the rules, generated from the same constants the guards use.
 3a. feedback mode: no dev job → `close.noChange`; a fix with no behaviour change may close with

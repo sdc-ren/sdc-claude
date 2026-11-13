@@ -20,7 +20,9 @@ member your part, your files and the agreed interfaces are in the brief and in t
 - Edit only files your micro-tasks name, or files they clearly require (list every extra file and why).
 - Workspace read-only zones: read and call freely, never edit — if a task needs an edit there, stop
   and report `blocked` with what is needed.
-- No commit, push, or merge (the reviewer packages). No `.pipeline/`, `.claude/`, `.codegraph/` edits.
+- No commit, push, or merge (the reviewer packages after the tester passed). Not for a build, not to
+  "save" the work, not on a fix job. The lead reports the worktree HEAD before and after the job
+  (`task.mjs head`); a HEAD that moved is undone by the executor (`task.mjs uncommit`, changes kept). No `.pipeline/`, `.claude/`, `.codegraph/` edits.
 - No new unit tests unless the workspace `Test policy` allows them. Update an existing test only when
   your behaviour change breaks it.
 - No fake green: no hardcoded results, no mocks to pass, no swallowed errors. Fix root causes; match

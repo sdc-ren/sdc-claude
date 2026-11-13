@@ -7,6 +7,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register } from 'claude-code'
 
 import type { TfArtifact } from '../types'
+import { guard } from './guard'
 
 const artifacts = atom({ plugin: 'tf', key: 'artifacts' } as const, [] as TfArtifact[], { shape: 'artifacts-1' })
 const picked = atom({ plugin: 'tf', key: 'picked' } as const, [] as string[])
@@ -43,7 +44,8 @@ async function refresh($: EngineInterface, startCwd: string) {
   }
 }
 
-export const register: Register = on => {
+export const register: Register = (on, options) => {
+  guard(on, options)
   let cwd = ''
 
   on('session.start', async ($, e, next) => {

@@ -277,6 +277,9 @@ flowchart LR
 | Code modes close only when, for every changed repo, a tester passed after that repo's last dev job | No "green on one repo, red on the other"; a fix on one repo does not force a re-test of the other |
 | M/L build/qc: the plan is read once by `tf:reviewer` on the PM's model before any job runs | A second reader of the ticket catches a missing requirement or a repo left out |
 | A reviewer gate runs on the model of the dev lead it judges | The judge is never weaker than the writer |
+| The plan check and the PM still disagree → the run stops and asks you | You are asked exactly when two readers of the ticket differ, not on every plan |
+| XS/S tasks: the tester runs only the cases the change touches | A one-line fix does not pay for the whole saved suite |
+| Tool guard: a dev job's `git commit/push`, a member's edit of another member's file, a read-only tester's write to the flow library are refused at the tool call | Rules that used to be only a sentence in a prompt |
 | A PR must come from a reviewer `PACKAGE` job that started after that PASS | Nothing ships untested |
 | PRs are ready; draft only with `--draft` | A PR means "done and verified" |
 | Dev and judge are separate agents, never in the same parallel group | Writer ≠ judge |

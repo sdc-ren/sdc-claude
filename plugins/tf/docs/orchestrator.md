@@ -107,7 +107,7 @@ in the Report as well.
 | `done` (feedback) | Report the triage table, what was fixed (commits, PR links), then show `<dir>/feedback-replies.md`. Post only after the user approves the text (they may edit or drop replies): per thread `node $S/pr-feedback.mjs reply <dir> <R<n>> --body-file <tmp> [--resolve]` (resolve only where the draft says `resolve: yes`), per conversation reply `node $S/pr-feedback.mjs comment <dir> <pr url> --body-file <tmp>`. Then Review lessons (below). |
 | `done` / `verified` / `reviewed` | Report (below). Close-out per `C`: upload `<dir>/evd/`, fill `<evd:FILE>` links in the drafts, show drafts; post only after the user approves the text. |
 | `triaged` (feedback `--check`) | Show `<dir>/feedback-triage.md` as a short table (id · reviewer · point · P · verdict · reason) and ask whether to run `/tf:address-review` without `--check`. |
-| `approve` | Show the plan summary (`<dir>/plan.md`) and ask for approval; on yes relaunch with `approved: true`. |
+| `approve` | Show the plan summary (`<dir>/plan.md`) and ask for approval; on yes relaunch with `approved: true`. Without `--approve` this status means the plan check and the PM still disagree: show `scope`, then each `planOpen` line next to the reviewer's point (`planCheck` file) and ask the user which reading is right; relaunch with `approved: true` and the answer in `notes`. |
 | `escalate` | One `🛑` line with the PM's question and options. After the answer relaunch with the same args, the answer in `notes`. The PM resumes from board.md. |
 | `handoff` | Token budget low — relaunch in a new session with the same args. |
 | `error` | Report the failing stage; relaunch once; then escalate. |
