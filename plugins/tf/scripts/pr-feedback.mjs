@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // tf PR feedback: what the team said on the PRs we pushed, and replying to it (after the user approves).
 //
-//   fetch <dir> <pr-url>…            unresolved review threads, reviews and conversation comments of each OPEN PR
+//   fetch <dir> <pr-url>…            pass every PR of the task (open and merged): a status table (decision, whether a
+//                                    push is allowed), then unresolved review threads, reviews and conversation comments of each OPEN PR
 //                                    → <dir>/feedback.md (for the PM) + <dir>/feedback.json (ids, raw data).
 //                                    Threads get stable ids R<n> across runs. "new" = written after the PR's last
 //                                    commit. Bots are skipped; a thread whose last comment is ours is "replied".
@@ -77,12 +78,23 @@ export function summarize(pr, me, ids, next) {
   }
 }
 
+// What the PM may do to this PR's branch (pm.md "Several PRs").
+export const pushRule = (p) =>
+  p.state === 'MERGED' ? 'no — new PR if needed'
+    : p.state !== 'OPEN' ? 'no'
+      : p.decision === 'APPROVED' ? 'only P0–P2 bug or contract change'
+        : 'yes, for `fix` points'
+
 export function render(prs, at) {
   const out = [`# PR feedback — fetched ${at}`, '', 'Threads R<n> are unresolved review threads (stable ids). [new] = written after the PR\'s last commit;',
-    '[replied] = our reply is the last word (waiting for the reviewer).', '']
+    '[replied] = our reply is the last word (waiting for the reviewer).', '',
+    '| PR | state | review decision | push allowed | open threads | new |', '|---|---|---|---|---|---|']
+  for (const p of prs) out.push(`| ${p.url} | ${p.state}${p.draft ? ' (draft)' : ''} | **${p.decision}** | ${pushRule(p)} | ${p.state === 'OPEN' ? p.threads.length : '-'} | ${p.state === 'OPEN' ? p.threads.filter((t) => t.new).length : '-'} |`)
+  out.push('')
   for (const p of prs) {
-    out.push(`## ${p.url} — ${p.state}${p.draft ? ' (draft)' : ''} · review decision ${p.decision} · branch ${p.branch} · head ${p.head} (${p.headAt})`, '')
-    if (p.state !== 'OPEN') { out.push('Not open — skipped.', ''); continue }
+    out.push(`## ${p.url} — ${p.state}${p.draft ? ' (draft)' : ''} · review decision **${p.decision}** · branch ${p.branch} · head ${p.head} (${p.headAt})`, '')
+    if (p.state === 'MERGED') { out.push('Merged — never pushed to. A change this repo now needs (e.g. a contract change from another PR) goes to a new branch from its base and a new PR.', ''); continue }
+    if (p.state !== 'OPEN') { out.push('Closed — skipped.', ''); continue }
     if (p.reviews.length) {
       out.push('### Reviews')
       for (const r of p.reviews) out.push(`- **${r.author}** ${r.state} ${r.at}${r.new ? ' [new]' : ''}${r.body.trim() ? `\n${quote(r.body)}` : ''}`)

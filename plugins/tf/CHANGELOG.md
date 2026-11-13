@@ -4,6 +4,18 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.2.1] — 2026-11-13
+
+### Changed
+- `/tf:feedback` with several PRs (BE / FE / App): each point records the PR it came from and the repo the
+  fix lands in; duplicates across PRs are one point. APPROVED PRs are pushed to only for a P0–P2 bug or a
+  contract change (reply asks for a re-review); a contract change pulls every client repo in (backward-
+  compatible fix preferred); a merged PR is never pushed to (new PR from base); PRs without a `fix` point
+  get no jobs. `feedback.md` starts with a per-PR table (state, review decision, push allowed); the
+  orchestrator passes merged PRs too.
+- Tester picks the cheapest flow per case (API > Web > App; emulator/APK only for App changes).
+- Reviewer PACKAGE: a conflicting PR gets the base merged in (no rebase, no force-push).
+
 ## [1.2.0] — 2026-11-13
 
 ### Changed
