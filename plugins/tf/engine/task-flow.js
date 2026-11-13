@@ -1,19 +1,19 @@
-// SDC tf plugin — task-flow v2 PM-led executor. Launched by the /tf:build|qc|review|e2e skills (docs/orchestrator.md); design in docs/design.md.
+// SDC tf plugin — task-flow v2 PM-led executor. Launched by the /tf:build|qc|feedback|review|e2e skills (docs/orchestrator.md); design in docs/design.md.
 //
 // The PM (tf:pm) decides every step: it reads the task, writes the plan, returns a dispatch (jobs, roles,
 // models, parallel groups). This script runs the jobs, enforces the hard rules, hands the reports back to
 // the PM, and repeats until the PM closes or escalates. No filesystem here: agents write their own files,
 // the orchestrator handles lock/unlock and close-out around the run.
 //
-// args: { root, slug, dir, mode: 'build'|'qc'|'review'|'e2e', round, input, description?, cases?, notes?,
+// args: { root, slug, dir, mode: 'build'|'qc'|'feedback'|'review'|'e2e', round, input, description?, cases?, notes?,
 //         prs?: {repo: url}, worktrees?: {repo: path|null}, worktreePaths?: {repo: path}, format?: 'new'|'v1'|'v2',
-//         flags?: { approve?: bool, draft?: bool }, approved?: bool, lang?, writingLang?, scripts, config }
-// returns { status: 'done'|'verified'|'reviewed'|'escalate'|'approve'|'handoff'|'error', … }
+//         flags?: { approve?: bool, draft?: bool, check?: bool (feedback: triage only) }, approved?: bool, lang?, writingLang?, scripts, config }
+// returns { status: 'done'|'triaged'|'verified'|'reviewed'|'escalate'|'approve'|'handoff'|'error', … }
 
 export const meta = {
   name: 'task-flow',
   description: 'PM-led task pipeline: PM plans and dispatches dev/tester/reviewer jobs until the task closes',
-  whenToUse: 'Internal engine of /tf:build, /tf:qc, /tf:review, /tf:e2e — launched by those skills with args; do not run it directly.',
+  whenToUse: 'Internal engine of /tf:build, /tf:qc, /tf:feedback, /tf:review, /tf:e2e — launched by those skills with args; do not run it directly.',
   phases: [
     { title: 'PM', detail: 'tf:pm reads the task, plans, dispatches, reviews reports, closes' },
     { title: 'Jobs', detail: 'setup / dev / tester / reviewer jobs from the PM dispatch, parallel per group' },
@@ -29,10 +29,12 @@ const RESERVE = 80_000
 const ROLES = {
   build: ['setup', 'dev', 'tester', 'reviewer'],
   qc: ['setup', 'dev', 'tester', 'reviewer'],
+  feedback: ['setup', 'dev', 'tester', 'reviewer'],
   review: ['setup', 'tester', 'reviewer'],
   e2e: ['setup', 'tester'],
 }
-const DONE_STATUS = { build: 'done', qc: 'done', review: 'reviewed', e2e: 'verified' }
+const DONE_STATUS = { build: 'done', qc: 'done', feedback: 'done', review: 'reviewed', e2e: 'verified' }
+const CODE_MODES = ['build', 'qc', 'feedback']
 const MODELS = ['haiku', 'sonnet', 'opus']
 
 // ── Schemas ──────────────────────────────────────────────────────────────────
@@ -66,7 +68,8 @@ const DISPATCH = {
       type: 'object',
       properties: {
         summary: { type: 'string' },
-        noChange: { type: 'string', description: 'build/qc only: why no code change is needed (no dev job this run).' },
+        noChange: { type: 'string', description: 'build/qc/feedback: why no code change is needed (no dev job this run). feedback: every point is answered/discuss/out-of-scope.' },
+        noTest: { type: 'string', description: 'feedback only: why the fix needs no e2e re-run (style, naming, comments, dead code — no behaviour change). The PACKAGE reviewer must still start after the last dev job.' },
         prs: { type: 'array', items: { type: 'object', properties: { repo: { type: 'string' }, url: { type: 'string' } } } },
         assumptions: { type: 'array', items: { type: 'string' } },
         findings: { type: 'array', items: { type: 'string' } },
@@ -124,7 +127,8 @@ const context =
   `Input: ${A.input || ''}\n` + (A.description ? `Description: ${A.description}\n` : '') +
   (A.cases ? `Target cases: ${A.cases}\n` : '') + (A.notes ? `User notes: ${A.notes}\n` : '') +
   `PRs: ${JSON.stringify(prs)}\nWorktrees (existing): ${JSON.stringify(worktrees)}\nWorktree paths (one folder per task, one subfolder per repo — use exactly these): ${JSON.stringify(A.worktreePaths || {})}\n` +
-  `Flags: approve=${!!flags.approve} draft=${!!flags.draft}\n` +
+  `Flags: approve=${!!flags.approve} draft=${!!flags.draft}${mode === 'feedback' ? ` check=${!!flags.check}` : ''}\n` +
+  (mode === 'feedback' ? `PR feedback: ${dir}/feedback.md (fetched review threads R<n>, reviews, conversation comments) · triage: ${dir}/feedback-triage.md · reply drafts: ${dir}/feedback-replies.md\n` : '') +
   (Array.isArray(A.attachments) && A.attachments.length
     ? `Attachments (read the files; the design system binds UI work): ${A.attachments.map((x) => `${x.kind}: ${x.title} → ${x.file}`).join(' · ')}\n`
     : '') +
@@ -146,6 +150,7 @@ const stopsLaterGroups = (r) =>
   (r.job.role === 'reviewer' && !isPackage(r.job) && mode !== 'review' && ['NEEDS-WORK', 'BLOCK'].includes(r.report.verdict))
 
 function checkDispatch(d) {
+  if (mode === 'feedback' && flags.check) return '--check is triage only: write feedback-triage.md and return close, no jobs'
   const jobs = d.jobs || []
   if (!jobs.length) return 'decision=dispatch needs at least one job'
   if (jobs.length > MAX_JOBS) return `at most ${MAX_JOBS} jobs per dispatch (got ${jobs.length})`
@@ -168,7 +173,7 @@ function checkDispatch(d) {
     const judge = g.find((j) => (j.role === 'tester' || j.role === 'reviewer') && (devRepos.has(j.repo) || (j.repo === 'all' && devRepos.size)))
     if (judge) return `${judge.id} (${judge.role}) runs in the same group as a dev job on ${judge.repo} — put judges in a later group`
     // Gate before test (build/qc): a NEEDS-WORK gate in parallel with the tester throws the test run away.
-    if (mode === 'build' || mode === 'qc') {
+    if (CODE_MODES.includes(mode)) {
       const gate = g.find((j) => j.role === 'reviewer' && !isPackage(j))
       const tester = gate && g.find((j) => j.role === 'tester' && (j.repo === 'all' || gate.repo === 'all' || j.repo === gate.repo))
       if (tester) return `${tester.id} (tester) runs in the same group as reviewer gate ${gate.id} — put the gate in an earlier group; the tester runs only on code that passed it`
@@ -182,9 +187,11 @@ function checkClose(d) {
   const ok = (x) => x.report && x.report.status === 'done'
   if (mode === 'e2e') return ledger.some((x) => x.job.role === 'tester' && ok(x)) ? '' : 'e2e cannot close without a finished tester job'
   if (mode === 'review') return ledger.some((x) => x.job.role === 'reviewer' && ok(x)) ? '' : 'review cannot close without a finished reviewer job'
+  if (mode === 'feedback' && flags.check) return ''
   const devs = ledger.filter((x) => x.job.role === 'dev')
   const covers = (x, repo) => x.job.repo === repo || x.job.repo === 'all' || x.report.repo === repo
   if (!devs.length) {
+    if (mode === 'feedback') return c.noChange ? '' : 'feedback close without a dev job needs close.noChange (every point answered, discussed or out of scope)'
     if (!c.noChange) return 'build/qc close needs dev → tester PASS → reviewer package (SHIP + PR) in this run, or close.noChange with the reason no code change is needed'
     return ledger.some((x) => x.job.role === 'tester' && ok(x) && x.report.verdict === 'PASS') ? '' : 'close.noChange still needs a tester PASS in this run proving the current code already satisfies the task'
   }
@@ -195,8 +202,9 @@ function checkClose(d) {
   if (failing.length) return `tester ${failing.map((x) => x.job.id).join(', ')} did not PASS on the latest code — fix or escalate`
   for (const repo of new Set(devs.map((x) => x.job.repo))) {
     const pass = testers.filter((x) => covers(x, repo))
-    if (!pass.length) return `repo ${repo}: no tester PASS after its last dev job — test the latest code before closing`
-    const passSeq = Math.min(...pass.map((x) => x.seq))
+    const skipTest = mode === 'feedback' && c.noTest && !testers.length
+    if (!pass.length && !skipTest) return `repo ${repo}: no tester PASS after its last dev job — test the latest code before closing` + (mode === 'feedback' ? ' (or close.noTest when the fix changes no behaviour)' : '')
+    const passSeq = pass.length ? Math.min(...pass.map((x) => x.seq)) : devSeq
     const ship = after.find((x) => x.job.role === 'reviewer' && ok(x) && x.report.verdict === 'SHIP' && x.report.prUrl && covers(x, repo) && x.seq > passSeq)
     if (!ship) return `repo ${repo}: no reviewer PACKAGE job (SHIP + PR URL) started after the tester PASS — the PR must be pushed only after the latest code passed`
     if (ship.report.prDraft && !flags.draft) return `repo ${repo}: PR ${ship.report.prUrl} is a draft — PRs must be ready (the user did not pass --draft); have the reviewer mark it ready or escalate the blocker`
@@ -256,7 +264,9 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
     (turn === 1
       ? (A.format === 'v1' ? 'This folder was made by task-flow v1 (STATUS.md/spec.md): build HANDOFF.md/board.md from them first, keep only what the new round needs.\n' : '') +
         (A.approved ? 'The user approved plan.md — dispatch it.\n' : '') +
-        'Start from HANDOFF.md (if present), board.md, ticket.md (new comments are marked), then plan.\n'
+        (mode === 'feedback'
+          ? `Feedback mode: start from HANDOFF.md, board.md, feedback.md (NOT a QC round — do not re-plan ticket cases). Triage every point into feedback-triage.md${flags.check ? ', then return close (check = triage only)' : ', then plan only the fix points'}.\n`
+          : 'Start from HANDOFF.md (if present), board.md, ticket.md (new comments are marked), then plan.\n')
       : `Reports from the last dispatch:\n${JSON.stringify(last.map(compact))}\n`) +
     (violation ? `REJECTED last decision: ${violation}\nFix it this turn.\n` : '') +
     (turn >= MAX_TURNS - 1 ? 'Last turns left: close or escalate now.\n' : '') +
@@ -274,7 +284,7 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
   } else if (d.decision === 'close') {
     violation = checkClose(d)
     if (!violation) {
-      return { status: DONE_STATUS[mode], slug, round, mode, size: d.size, close: d.close || {}, jobs: ledger.map(compact), tokens: tok }
+      return { status: mode === 'feedback' && flags.check ? 'triaged' : DONE_STATUS[mode], slug, round, mode, size: d.size, close: d.close || {}, jobs: ledger.map(compact), tokens: tok }
     }
   } else {
     violation = checkDispatch(d)

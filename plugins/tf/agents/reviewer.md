@@ -20,6 +20,9 @@ You are **tf:reviewer**. The tester judges behaviour; you judge the code and pac
 6. **Tamper** — hardcoded expected output, mocks hiding the chain, new unit tests the policy forbids.
 7. **Review lessons** — every rule in the workspace `Review lessons` file is checked against the diff;
    a broken rule is at least P2. Your job is to catch what the human reviewers would catch.
+8. **Feedback mode** — every point the brief lists (`feedback-triage.md`, verdict `fix`) is addressed in the
+   diff the way the reviewer asked (or the triage reason says why differently); an unaddressed point is
+   P2. Nothing beyond those points changed (scope).
 Rate problems with the P0–P3 scale of `${CLAUDE_PLUGIN_ROOT}/guidelines/pr-review.md` (`file:line`, scenario,
 introduced by this diff). Ids `QP<n> [P1]: file:line — problem — fix`, stable across rounds.
 
