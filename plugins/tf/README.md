@@ -73,8 +73,9 @@ Then, in your workspace (the folder that holds your repos):
 | `/tf:legacy` | Fold old suffixed folders (`-e2e`, `-qc`, `-r2`…) into one folder per ticket | Dry run, then apply on your yes |
 | `/tf:regression [--target local\|dev]` | Run flows promoted from merged tickets | PASS/FAIL per case |
 
-**Attach artifacts / design systems** — `--attach` (or `/tf:attach <ticket>`) opens a checkbox list of this
-workspace's items, found automatically; other projects' never appear. You can also paste a claude.ai
+**Attach artifacts / design systems** — press **Artifacts (n)** above the chat input and pick this workspace's
+items (found automatically; other projects' never appear); they ride along with the next `/tf:*` command.
+`--attach` / `/tf:attach <ticket>` opens the same list as a checkbox question. You can also paste a claude.ai
 artifact link in the command, or, in the terminal CLI, `@`-mention them (the `artifacts` MCP server).
 Later rounds reuse them.
 

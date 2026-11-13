@@ -15,5 +15,6 @@
   ],
   "homepage": "https://github.com/sdc-ren/sdc-claude/tree/main/plugins/tf",
   "repository": "https://github.com/sdc-ren/sdc-claude",
-  "license": "MIT"
+  "license": "MIT",
+  "types": "./types/index.d.ts"
 }

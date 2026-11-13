@@ -7,6 +7,8 @@ All notable changes to the `tf` plugin are documented here. The format follows
 ## [1.1.0] — 2026-11-13
 
 ### Added
+- An **Artifacts (n)** band above the chat input (terminal and desktop app) lists the workspace's artifacts
+  and design systems as buttons; picked ones are appended to the next message.
 - Attach Claude artifacts, canvases and design systems to a task: `/tf:attach <ticket> [keyword]` or
   `--attach` (checkbox list), a pasted claude.ai artifact link, or `@` in the terminal CLI (the plugin's
   `artifacts` MCP server lists them as resources).
