@@ -21,11 +21,10 @@ You never write, test, or review repo code yourself. Design and rationale: `docs
 | `/tf:cleanup <slug>` | — | after the user confirms: `node $S/resources.mjs release <cwd> <slug>` then `archive` |
 | `/tf:legacy` | — | `node $S/task.mjs legacy <cwd> --repos <keys>` (dry run): show what would move into `<SLUG>/history/legacy/` and which clean worktrees would be removed. Only after the user's yes: same command with `--apply` |
 | `/tf:migrate` | — | `node $S/task.mjs migrate-worktrees <cwd>` (dry run) → after the user's yes, `--apply`: moves flat `<slug>-<key>` worktrees into `.worktrees/<SLUG>/<repo dir>` and rewrites the ledgers |
-| `/tf:attach <ticket> [keyword]` | — | Pick artifacts / design systems for a task from a checkbox list built automatically for this workspace — `<PLUGIN>/docs/attach.md` |
 | `/tf:doctor` | — | `node $S/doctor.mjs <cwd>`: tools, agents, config, repos, Playwright, plus the config `## Doctor` checks. Run it before the first task on a machine |
 | `/tf:regression [--target t]` | — | e2e only on `.pipeline/_regression/` (flows promoted from merged tickets): `node $S/flow-run.mjs <cwd>/.pipeline/_regression --target <t>` |
 
-Flags: `--attach` (pick artifacts / design systems for the task, see step 6b), `--approve` (stop after the first plan for the user), `--draft` (the user allows a draft PR),
+Flags: `--approve` (stop after the first plan for the user), `--draft` (the user allows a draft PR),
 `--lang <code>` (report language). There is no repo flag: the PM inspects every repo in the config.
 
 Languages (per workspace, from `C` → `## Language`): `lang` = `--lang` → `Report language` → the user's
@@ -55,15 +54,14 @@ language; `writingLang` = `Writing language` → a `Writing language:` line in t
    (`gh pr view <url> --comments` and `gh api repos/<o>/<r>/pulls/<n>/comments`) under `## PR review comments`,
    new ones marked — the PM treats P0–P2 review points like QC bugs. PR input: add `gh pr view <url> --json title,body,headRefName,baseRefName,files`
    and the PR URL to ticket.md. No ticket → write the user's text.
-6b. **Attachments** — `artifact://` resources mentioned with `@` in the command are attached directly
-   (attach.md, `@` mentions). `--attach` given → run `<PLUGIN>/docs/attach.md` for this task now. Otherwise, if
-   `<dir>/attachments.json` exists from an earlier round, reuse it silently. Never show artifacts that do
-   not belong to this workspace (see attach.md).
+6b. **Attachments** — artifacts / design systems mentioned with `@` (`artifact://` resources) or pasted as
+   claude.ai artifact links in the command are attached: follow `<PLUGIN>/docs/attach.md` (read, store,
+   record). `<dir>/attachments.json` from earlier rounds is reused silently.
 7. **Session title** — `<SLUG> · <3–6 word summary>` via `mcp__ccd_session_mgmt__set_session_title`
    (`session_id: "self"`; load via ToolSearch if deferred; missing → skip).
 
 Do not ask the user which spec sources to use: the PM uses the config defaults, links in the ticket, and the
-task's attachments (`--attach` is the only picker, and only when the user asks for it).
+task's attachments.
 
 ## 2. Launch
 

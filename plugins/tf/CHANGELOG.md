@@ -7,14 +7,12 @@ All notable changes to the `tf` plugin are documented here. The format follows
 ## [1.1.0] — 2026-11-13
 
 ### Added
-- `/tf:attach <ticket> [keyword]` and `--attach` on `/tf:build`, `/tf:qc`, `/tf:review`, `/tf:e2e`: pick
-  Claude artifacts, canvases and design systems from a checkbox list. No setup: the list is built
-  automatically from what was created in this workspace's sessions (`scripts/artifacts-local.mjs`), what
-  earlier tasks attached, and titles matching the workspace (folder name, ticket prefixes, optional
-  `Match:`). Other projects' artifacts never appear.
-- `artifacts` MCP server: this workspace's artifacts and design systems appear in the `@` mention list;
-  mentioning them in a `/tf:*` command attaches them to the task.
-- Picked items are read into `.pipeline/<TICKET>/specs/` and recorded in `attachments.json`; the PM plans
+- Attach Claude artifacts, canvases and design systems to a task by typing `@` (the plugin's `artifacts`
+  MCP server lists them as resources) or by pasting a claude.ai artifact link in a `/tf:*` command.
+- The list is built automatically for the workspace, with no setup: what its Claude Code sessions created
+  (`scripts/artifacts-local.mjs`), what earlier tasks attached, and an optional pinned design system.
+  Other projects' artifacts never appear.
+- Attached items are read into `.pipeline/<TICKET>/specs/` and recorded in `attachments.json`; the PM plans
   from them, devs use the design system's tokens and components, testers check UI against it. Later rounds
   reuse them.
 
