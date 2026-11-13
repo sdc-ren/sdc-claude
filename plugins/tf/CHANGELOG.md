@@ -6,11 +6,15 @@ All notable changes to the `tf` plugin are documented here. The format follows
 
 ## [1.1.0] — 2026-11-13
 
+### Changed
+- Fewer commands: `/tf:build`, `/tf:qc`, `/tf:review`, `/tf:e2e`, `/tf:status`, `/tf:clean`.
+  `/tf:doctor` → `/tf:status --doctor`; `/tf:cleanup`, `/tf:migrate`, `/tf:legacy` → `/tf:clean <slug> | --migrate | --legacy`;
+  `/tf:regression` → `/tf:e2e --regression`. The internal workflow no longer shows up as `/tf:task-flow`.
+
 ### Added
 - An **Artifacts (n)** band above the chat input (terminal and desktop app) lists the workspace's artifacts
   and design systems as buttons; picked ones are appended to the next message.
-- Attach Claude artifacts, canvases and design systems to a task: `/tf:attach <ticket> [keyword]` or
-  `--attach` (checkbox list), a pasted claude.ai artifact link, or `@` in the terminal CLI (the plugin's
+- Attach Claude artifacts, canvases and design systems to a task: `--attach` (checkbox list), a pasted claude.ai artifact link, or `@` in the terminal CLI (the plugin's
   `artifacts` MCP server lists them as resources).
 - The list is built automatically for the workspace, with no setup: what its Claude Code sessions created
   (`scripts/artifacts-local.mjs`), what earlier tasks attached, and an optional pinned design system.

@@ -53,7 +53,7 @@ Keep sections short; link to longer docs instead of copying them.
 
 Forbidden: <ports / databases / checkouts nobody may touch>.
 
-## Doctor (checked by `/tf:doctor`; add `(optional)` to only warn)
+## Doctor (checked by `/tf:status --doctor`; add `(optional)` to only warn)
 - `<shell command>` — <label>
 
 ## Hard rules

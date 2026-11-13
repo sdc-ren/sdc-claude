@@ -184,7 +184,7 @@ archives are slimmed (not deleted) to HANDOFF, journal, flows, ticket, plan, boa
 - `task.mjs legacy <root> [--apply]` folds v1 suffixed folders into `<SLUG>/history/legacy/` and removes
   clean legacy worktrees (dry run unless `--apply`).
 - `resources.mjs reap` promotes a merged task's passing flows into `.pipeline/_regression/`
-  (`resources.mjs promote` by hand); `/tf:regression` runs them.
+  (`resources.mjs promote` by hand); `/tf:e2e --regression` runs them.
 - `doctor.mjs <root>` checks tools, agents, config, repos, Playwright and the config's `## Doctor` lines.
 
 ## Global vs workspace

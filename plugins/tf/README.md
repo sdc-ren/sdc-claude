@@ -53,7 +53,7 @@ everything. **tf** organises the work like a small team:
 Then, in your workspace (the folder that holds your repos):
 
 ```
-/tf:doctor            # checks tools, gh login, config, repos, Playwright, devices
+/tf:status --doctor   # checks tools, gh login, config, repos, Playwright, devices
 /tf:build PROJ-123    # first run offers to create .claude/task-flow.md if it is missing
 ```
 
@@ -64,18 +64,13 @@ Then, in your workspace (the folder that holds your repos):
 | `/tf:build <ticket\|text> [--approve] [--draft]` | New task end to end | Ready PR per changed repo, e2e evidence, ticket-comment draft |
 | `/tf:qc <ticket>` | Answer a QC report or human PR review points: next round on the same branches and flows | Existing PR updated (or a new one if the old PR was merged), QC reply draft |
 | `/tf:review <PR url\|ticket>` | Review a teammate's PR: e2e of the ticket's acceptance criteria + risk report | `review.md`, PR-comment and ticket-comment drafts — nothing posted |
-| `/tf:e2e <PR url\|ticket> [--cases 21,22]` | E2E only, no code changes | Evidence + ticket-comment draft |
-| `/tf:attach <ticket> [keyword]` | Tick this workspace's artifacts / design systems for a task (found automatically) | Saved to `specs/`, used by PM, devs, testers |
-| `/tf:doctor` | Check this machine and workspace | Pass/fail table with fixes |
-| `/tf:status` | What every task holds (worktrees, DBs, ports, PRs) | Table + what the reaper would free |
-| `/tf:cleanup <slug>` | Free one task's resources (asks first) | Resources released, folder archived |
-| `/tf:migrate` | Move old flat worktrees into `.worktrees/<TICKET>/<repo>/` | Moves + ledgers rewritten (asks first) |
-| `/tf:legacy` | Fold old suffixed folders (`-e2e`, `-qc`, `-r2`…) into one folder per ticket | Dry run, then apply on your yes |
-| `/tf:regression [--target local\|dev]` | Run flows promoted from merged tickets | PASS/FAIL per case |
+| `/tf:e2e <PR url\|ticket> [--cases 21,22]` | E2E only, no code changes (`--regression`: run flows promoted from merged tickets) | Evidence + ticket-comment draft |
+| `/tf:status [--doctor]` | What every task holds (worktrees, DBs, ports, PRs); `--doctor` checks this machine and workspace | Table + what cleanup would free; pass/fail with fixes |
+| `/tf:clean <slug> \| --migrate \| --legacy` | Free one task, move old flat worktrees into `.worktrees/<TICKET>/<repo>/`, or fold old `-e2e`/`-qc` folders | Dry run first, applied on your yes |
 
 **Attach artifacts / design systems** — press **Artifacts (n)** above the chat input and pick this workspace's
 items (found automatically; other projects' never appear); they ride along with the next `/tf:*` command.
-`--attach` / `/tf:attach <ticket>` opens the same list as a checkbox question. You can also paste a claude.ai
+`--attach` opens the same list as a checkbox question. You can also paste a claude.ai
 artifact link in the command, or, in the terminal CLI, `@`-mention them (the `artifacts` MCP server).
 Later rounds reuse them.
 
@@ -245,7 +240,7 @@ node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --cases 21 --target dev # 
 | Per workspace | Whatever the config's provisioning needs: Docker DBs, Android SDK + AVD, Flutter… |
 | macOS (recommended) | `cp -c` (APFS clone) for fast dependency copies, launchd for the reaper, Chrome cookie import for tracker login. Elsewhere tf falls back to normal copies and manual cleanup. |
 
-Run `/tf:doctor` to see what is missing.
+Run `/tf:status --doctor` to see what is missing.
 
 ## Troubleshooting
 
@@ -253,9 +248,9 @@ Run `/tf:doctor` to see what is missing.
 |---|---|
 | `lock-conflict` / "another run holds it" | A run is active, or one crashed less than 90 min ago. Check `/workflows`; remove `.pipeline/<slug>/.lock` only when nothing runs. |
 | PM escalates "rejected twice by the hard rules" | Read the rule in the message; usually a judge was put in the same group as a dev, or a PR was a draft. |
-| Tester says `blocked-env` | The environment is missing something (DB, port, emulator, login). `/tf:doctor`, then fix the config's provisioning. |
+| Tester says `blocked-env` | The environment is missing something (DB, port, emulator, login). `/tf:status --doctor`, then fix the config's provisioning. |
 | Flow fails after an intended UI change | The tester marks it `flow-broken`, fixes the selector and re-runs — not an app bug. |
-| Old `-e2e` / `-qc` folders or flat worktrees | `/tf:legacy`, `/tf:migrate`. |
+| Old `-e2e` / `-qc` folders or flat worktrees | `/tf:clean --legacy`, `/tf:clean --migrate`. |
 | Plugin update not picked up | `claude plugin marketplace update sdc && claude plugin update tf@sdc`, then restart. Re-run `install-reaper.sh` after updates. |
 
 ## FAQ
