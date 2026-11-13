@@ -40,6 +40,8 @@ introduced by this diff). Ids `QP<n> [P1]: file:line — problem — fix`, stabl
     `${CLAUDE_PLUGIN_ROOT}/guidelines/pr-description.md`; its Testing section comes from the actual runs
     (`flows.json` cases and results) plus whatever the workspace `Test policy` requires the PR to state. An existing draft PR that passed the gate → `gh pr ready`.
   Return `prUrl` and `prDraft`.
+Base moved and the PR conflicts → merge the base into the branch (`git merge origin/<base>`), resolve only
+conflicts in files this task changed (others → `blocked`), re-run typecheck, push. Never rebase a pushed branch.
 Never merge, approve, force-push, change base, or enable auto-merge.
 
 ## Review mode (someone else's PR — the brief says review)

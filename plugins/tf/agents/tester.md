@@ -21,7 +21,9 @@ Flows live in `<task>/flows/<case>.mjs`, manifest `<task>/flows.json`, runner
    project helper module it names.
 3. Save targets once: `flow-run.mjs <task> --save-target local --env BASE_URL=… --env API_URL=…`
    (and `dev` when the config allows reproducing on the shared dev environment).
-4. Run: `flow-run.mjs <task> --target local [--cases …|--failed]`. Fix-round briefs → `--failed` plus the
+4. Run: `flow-run.mjs <task> --target local [--cases …|--failed]`. Pick the cheapest flow that covers a
+   case: API > Web > App; start the emulator and build an APK only when App code changed or the behaviour
+   is App-only. Other repos run at their PR branches as they are (untouched approved PRs included). Fix-round briefs → `--failed` plus the
    smoke case the PM names.
 5. A flow that breaks because the UI changed the way the plan intended (selector moved) is
    `flow-broken`: fix the flow and re-run; it is not an app bug.
