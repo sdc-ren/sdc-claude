@@ -14,7 +14,7 @@ import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const ROLES = ['pm', 'setup', 'lead', 'dev', 'flows', 'tester', 'reviewer']
+const ROLES = ['pm', 'plan', 'setup', 'lead', 'dev', 'flows', 'tester', 'reviewer']
 // Servers started or killed by hand instead of through serve.mjs (dev/tester rule) — counted, not judged.
 const BY_HAND = /\bnohup\b|\b(npm|pnpm|yarn) (run )?(dev|start)\b|\bp?kill\b/
 const min = (ms) => Math.round(ms / 6000) / 10
@@ -27,6 +27,7 @@ function label(desc) {
   if (pm) return { role: 'pm', repo: '', id: `PM${pm[1]}` }
   // "J2 lead:be" (plan or solo work), "J2 lead:be merge", members "J2a dev:be".
   const j = desc.match(/^(J\d+[a-c]?)\s+(\w+):(\S+)( merge)?/)
+  if (j && j[2] === 'reviewer' && j[3] === 'plan') return { id: j[1], role: 'plan', repo: '' } // J0: the plan check after PM turn 1
   return j ? { id: j[4] ? `${j[1]}m` : j[1], role: j[2], repo: j[3] } : { id: desc, role: 'other', repo: '' }
 }
 

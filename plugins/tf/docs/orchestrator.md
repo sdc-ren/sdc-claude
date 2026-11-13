@@ -83,7 +83,9 @@ rejected; the engine is deliberately not registered as a `/` command): `cp W <di
   "attachments": [ { "title": "…", "kind": "design-system|artifact", "file": "<abs specs/… file>", "url": "…" } ] }
 ```
 
-The user watches `/workflows`. Do not poll.
+The user watches `/workflows`. Do not poll. The run logs a `scope:` line after the PM's first plan (repos
+changed / not changed, cases, risky assumptions) — it is the user's early chance to stop a wrong plan; put it
+in the Report as well.
 
 ## 3. After the run (always, any status)
 

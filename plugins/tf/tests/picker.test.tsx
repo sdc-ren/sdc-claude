@@ -48,6 +48,33 @@ test('the band lists the workspace artifacts and attaches picked ones to the nex
   expect(again.text).toBe('next message')
 })
 
+test('the list follows the session to its workspace after it started in another folder', async ($, on) => {
+  const asked: string[] = []
+  let root = '/spare'
+  on('session.start', (_, e) => ({ cwd: e.cwd }))
+  on('session.root', () => ({ value: root }))
+  on('process.run', (_, e) => {
+    const dir = e.argv[e.argv.length - 1]
+    asked.push(dir)
+    return { value: { exitCode: 0, stdout: JSON.stringify(dir === '/ws' ? LIST : []), stderr: '' } }
+  })
+  on('turn.complete', (_, e) => ({ text: e.answer }))
+  on('ui.render', ($, e) => {
+    const { Text } = $.ui.resolve(e)
+    return <Text>engine</Text>
+  })
+  await $.session.start({ cwd: '/spare', surface: 'desktop', isInteractive: true })
+  await settle()
+  expect(asked).toEqual(['/spare'])
+  root = '/ws' // the host moved the session to the user's folder
+  await $.turn.complete({ answer: 'done' })
+  await settle()
+  expect(asked).toEqual(['/spare', '/ws'])
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ type: 'Button', key: 'tf-open', text: /Artifacts \(2\)/ })).toBeTruthy()
+  await ui.unmount()
+})
+
 test('an empty workspace still shows the band as Artifacts (0) with a hint', async ($, on) => {
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('process.run', () => ({ value: { exitCode: 0, stdout: '[]', stderr: '' } }))
