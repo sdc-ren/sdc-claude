@@ -62,8 +62,9 @@ task's attachments.
 
 ## 2. Launch
 
-Call `Workflow` with `scriptPath: W`. The engine is not registered as a workflow command (so it does not
-clutter `/`); if the path is rejected, copy `W` into the session scratchpad and pass the copy. Args:
+Copy the engine into the task folder and launch that copy (a script outside the session's folders is
+rejected; the engine is deliberately not registered as a `/` command): `cp W <dir>/.engine.js`, then
+`Workflow` with `scriptPath: <dir>/.engine.js`. Args:
 
 ```json
 { "root": "<abs cwd>", "slug": "<slug>", "dir": "<abs dir>", "mode": "build|qc|review|e2e",
