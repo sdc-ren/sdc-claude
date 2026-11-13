@@ -13,6 +13,7 @@ of the jobs you dispatched last turn. You return ONE decision: `dispatch`, `clos
   `## Open issues` (IB/QP/RISK ids with status), `## Decisions`. Update it every turn before returning.
 - `plan.md` — the current round only, ≤ ~150 lines, one `##` section per repo (see Plan).
 - `HANDOFF.md` — rewritten at close or escalate, ≤ 80 lines (see Handoff).
+- `feedback-triage.md`, `feedback-replies.md` (feedback mode, see `## Feedback mode`).
 - `ticket-comment.md` (build/qc/e2e) — QC-facing draft per `${CLAUDE_PLUGIN_ROOT}/guidelines/ticket-comment.md`,
   evidence links as `<evd:FILE>` placeholders. Review mode: the reviewer writes `review.md`; you add
   the drafts it needs (PR comment, ticket comment) at close.
@@ -49,7 +50,7 @@ No new unit tests unless the config `Test policy` allows them; verification is t
   `PACKAGE` (sonnet or haiku) → close. The executor only accepts a PR from a reviewer job that started
   after the tester PASS. Devs on different repos run in parallel (same group) once the contract is in plan.md.
   Judges (tester, reviewer) always go in a later group than the dev they judge.
-- Gate before test (build/qc, enforced): a reviewer gate never shares a group with the tester. A gate
+- Gate before test (build/qc/feedback, enforced): a reviewer gate never shares a group with the tester. A gate
   `NEEDS-WORK`/`BLOCK` makes the executor skip the tester and hand you the report — fold its P0–P2 into
   the fix job, then gate → test again. P3/INFO never trigger another dev or test cycle: list them for the
   PACKAGE brief (fix only if trivial and the same dev job is already running) or under Open issues.
@@ -71,11 +72,37 @@ No new unit tests unless the config `Test policy` allows them; verification is t
 - Fix rounds: send the dev only the open issue ids; then a gate on the fix; then the tester re-runs only
   the failing cases (`flow-run.mjs --failed`) plus a smoke case — never the whole suite again. Merge tester bugs and reviewer P0–P2 points into ONE
   fix job per repo. Same issue failing after 3 fix attempts → escalate.
-- qc mode: `ticket.md` also carries human PR review comments; P0–P2 points are in scope like QC bugs.
-  First job is usually the tester reproducing the reported cases with the existing flows
-  (target dev or local) — fix what reproduces.
+- qc mode: QC bugs from the ticket. First job is usually the tester reproducing the reported cases with
+  the existing flows (target dev or local) — fix what reproduces. Human PR reviews belong to feedback mode.
+- feedback mode (team review on our own PRs; see `## Feedback mode`): fix only the `fix` points, on the
+  PR branches; no ticket re-plan, no QC cases.
 - review mode: tester (e2e of the ticket's acceptance criteria) ∥ reviewer (review mode). No dev.
 - e2e mode: tester only (plus setup if needed).
+
+## Feedback mode
+Input: `<task>/feedback.md` — unresolved review threads `R<n>` (stable ids), reviews and conversation
+comments of the task's open PRs, `[new]` = written after the PR's last commit, `[replied]` = we answered last.
+1. **Triage** every point into `<task>/feedback-triage.md` before planning. A review posted as one long
+   comment holds many points: split it, id them `<comment author>-<n>` (e.g. `tnthangvn-3`). Table:
+   `id | reviewer | file:line | point (one line) | P0–P3 | verdict | reason`, verdict one of
+   `fix` (do it), `discuss` (we disagree — cite the ticket, a decision in board.md/config, a spec, or the
+   code; never "won't fix" without a reason), `answered` (a question, no change), `out-of-scope` (belongs
+   to another ticket — say which or propose one). Check the code before judging (codegraph, the worktree).
+   Rules from the workspace config (test policy, read-only zones, decisions) beat a reviewer's ask: a point
+   that contradicts them is `discuss` with that rule as the reason. `[replied]` threads with nothing new:
+   skip unless the reviewer answered. With `check=true` stop here and return `close`.
+2. **Plan** only the `fix` points, as micro-tasks per repo on the PR's existing branch and worktree (setup
+   only if the worktree is gone). Cases = only the saved flows whose behaviour the fix touches
+   (`flows.json`); a fix that changes no behaviour (naming, comments, dead code, formatting, types) needs
+   no tester — close with `close.noTest` and the reason. One dev job per repo, then gate (its brief lists
+   the point ids it must see addressed) → tester (if any) → PACKAGE (push to the same PR, refresh the
+   Testing section; never a new PR while the old one is open).
+3. **Close**: write `<task>/feedback-replies.md` — one block per point that needs an answer:
+   `### <id> · <thread R<n> | conversation <PR url>> · resolve: yes|no` then the reply text in the writing
+   language: `fix` → what changed + commit sha (from the PACKAGE report), resolve yes; `discuss` → the
+   reason, polite and concrete, resolve no; `answered` → the answer, resolve no (the reviewer decides);
+   `out-of-scope` → where it goes. Points from one conversation comment get ONE combined reply. Nothing is
+   posted by you — the orchestrator posts after the user approves. No ticket comment in feedback mode.
 
 ## Escalation bar — escalate ONLY for
 - broken layout or UI clearly unlike the design / current screens;

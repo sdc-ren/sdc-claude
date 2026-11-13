@@ -15,12 +15,13 @@ You never write, test, or review repo code yourself. Design and rationale: `docs
 |---|---|---|
 | `/tf:build <ticket or text>` | build | PM plans → devs → reviewer gate → tester → ready PR(s), EVD, ticket-comment draft |
 | `/tf:qc <ticket>` | qc | Next round on the same folder/branches: reproduce QC cases with saved flows, fix, re-test, update the PR |
+| `/tf:feedback <ticket or PR url> [--check]` | feedback | Team review on our own PRs: fetch unresolved threads/reviews/comments, triage each point, fix only the `fix` points on the same PR, draft one reply per thread (posted after approval). `--check`: triage only |
 | `/tf:review <PR url or ticket>` | review | e2e of the ticket's acceptance criteria + risk report (risk, impact, UI change, AC coverage, build). No code changes |
 | `/tf:e2e <PR url or ticket> [--cases a,b]` | e2e | Tester only: run/save flows, EVD, ticket-comment draft. `--regression`: run `.pipeline/_regression` flows instead (no workflow) |
 | `/tf:status [--doctor]` | — | Resources per task and what cleanup would free (`resources.mjs list`, `reap --dry-run`); `--doctor` also runs `node $S/doctor.mjs <cwd>` |
 | `/tf:clean <slug> \| --migrate \| --legacy` | — | Free one task, move flat worktrees into `.worktrees/<SLUG>/<repo>/`, or fold old suffixed folders — dry run first, apply only after the user's yes |
 
-Flags: `--attach` (open the checkbox picker for this task, step 6b), `--approve` (stop after the first plan for the user), `--draft` (the user allows a draft PR),
+Flags: `--check` (feedback: triage only, no code), `--attach` (open the checkbox picker for this task, step 6b), `--approve` (stop after the first plan for the user), `--draft` (the user allows a draft PR),
 `--lang <code>` (report language). There is no repo flag: the PM inspects every repo in the config.
 
 Languages (per workspace, from `C` → `## Language`): `lang` = `--lang` → `Report language` → the user's
@@ -42,13 +43,17 @@ language; `writingLang` = `Writing language` → a `Writing language:` line in t
 5. **Housekeeping** — `node $S/resources.mjs register-root <cwd>`, `node $S/resources.mjs reap`;
    `node $S/fresh.mjs <path>:<base> …` for the config repos (report skipped checkouts in one line).
    Reaper missing (`launchctl list | grep task-flow-reap` empty) → offer `sh $S/install-reaper.sh` once (re-run it after a plugin update; it copies the reaper to a stable path).
-6. **Ticket** — read it with the tracker recipe in `C` (own browser via `browser.mjs`). Round 1: save
+6f. **Feedback mode instead of step 6** — no tracker read. PRs = the task's open PRs from `resolve` (`prs`,
+   plus the input PR URL). `node $S/pr-feedback.mjs fetch <dir> <pr urls…>` → `<dir>/feedback.md` + JSON summary.
+   Nothing open (`total` 0, no new reviews or comments) → tell the user in one line and stop (unlock), no
+   workflow. Otherwise show the summary line (PR · decision · open threads · new) and launch. A task without
+   a tf folder (PR made by hand): `resolve` still gives the folder; the PM reads the PR diff instead of HANDOFF.
+6. **Ticket** (not in feedback mode) — read it with the tracker recipe in `C` (own browser via `browser.mjs`). Round 1: save
    everything (description, every comment, attachments list, linked issues) verbatim with the URL to
    `<dir>/ticket.md`. Later rounds: re-read the whole ticket (QC edits comments: compare `updated` with
    `created`), rewrite ticket.md, mark comments new or edited since the last round under
-   `## New since round <n-1>`. Later rounds with open PRs: also add every human review on them
-   (`gh pr view <url> --comments` and `gh api repos/<o>/<r>/pulls/<n>/comments`) under `## PR review comments`,
-   new ones marked — the PM treats P0–P2 review points like QC bugs. PR input: add `gh pr view <url> --json title,body,headRefName,baseRefName,files`
+   `## New since round <n-1>`. Human reviews on our PRs are handled by `/tf:feedback`, not here — if
+   `pr-feedback.mjs fetch` would find open threads, mention it in one line. PR input: add `gh pr view <url> --json title,body,headRefName,baseRefName,files`
    and the PR URL to ticket.md. No ticket → write the user's text.
 6b. **Attachments** — artifacts / design systems mentioned with `@` (`artifact://` resources) or pasted as
    claude.ai artifact links in the command are attached: follow `<PLUGIN>/docs/attach.md` (read, store,
@@ -72,7 +77,7 @@ rejected; the engine is deliberately not registered as a `/` command): `cp W <di
   "cases": "<--cases or QC case ids>", "notes": "<user constraints / escalation answers>",
   "prs": { "<repo>": "<url>" }, "worktrees": { "<repo>": "<path or null>" },
   "worktreePaths": { "<repo>": "<from resolve>" }, "format": "<from resolve>",
-  "flags": { "approve": false, "draft": false }, "approved": false,
+  "flags": { "approve": false, "draft": false, "check": false }, "approved": false,
   "lang": "<report language>", "writingLang": "<Writing language>",
   "scripts": "<abs S>", "config": "<abs C>", "agentPrefix": "tf:",
   "attachments": [ { "title": "…", "kind": "design-system|artifact", "file": "<abs specs/… file>", "url": "…" } ] }
@@ -94,7 +99,9 @@ The user watches `/workflows`. Do not poll.
 
 | status | Action |
 |---|---|
+| `done` (feedback) | Report the triage table, what was fixed (commits, PR links), then show `<dir>/feedback-replies.md`. Post only after the user approves the text (they may edit or drop replies): per thread `node $S/pr-feedback.mjs reply <dir> <R<n>> --body-file <tmp> [--resolve]` (resolve only where the draft says `resolve: yes`), per conversation reply `node $S/pr-feedback.mjs comment <dir> <pr url> --body-file <tmp>`. Then Review lessons (below). |
 | `done` / `verified` / `reviewed` | Report (below). Close-out per `C`: upload `<dir>/evd/`, fill `<evd:FILE>` links in the drafts, show drafts; post only after the user approves the text. |
+| `triaged` (feedback `--check`) | Show `<dir>/feedback-triage.md` as a short table (id · reviewer · point · P · verdict · reason) and ask whether to run `/tf:feedback` without `--check`. |
 | `approve` | Show the plan summary (`<dir>/plan.md`) and ask for approval; on yes relaunch with `approved: true`. |
 | `escalate` | One `🛑` line with the PM's question and options. After the answer relaunch with the same args, the answer in `notes`. The PM resumes from board.md. |
 | `handoff` | Token budget low — relaunch in a new session with the same args. |
