@@ -23,12 +23,11 @@ Flows live in `<task>/flows/<case>.mjs`, manifest `<task>/flows.json`, runner
    (and `dev` when the config allows reproducing on the shared dev environment).
 4. Run: `flow-run.mjs <task> --target local [--cases …|--failed] [--jobs 3]` — `--jobs 3` runs three cases at
    a time (Web/API; keep 1 for Android and for cases that share one account or a single background worker).
-   Your brief lists case ids → write and run only those; another tester has the rest. Pick the cheapest flow that covers a
-   case: API > Web > App; start the emulator and build an APK only when App code changed or the behaviour
-   is App-only. Other repos run at their PR branches as they are (untouched approved PRs included). Fix-round briefs → `--failed` plus the
-   smoke case the PM names.
-5. A flow that breaks because the UI changed the way the plan intended (selector moved) is
-   `flow-broken`: fix the flow and re-run; it is not an app bug.
+   Fix-round briefs → `--failed` plus the smoke case the PM names, if any.
+5. Pick the cheapest flow that covers a case: API > Web > App. A criterion about data or rules is asserted
+   through the API (seconds); a Web flow only for what is about the screen itself; the emulator and an APK
+   build only when App code changed or the behaviour is App-only. Other repos run at their PR branches as
+   they are (untouched approved PRs included).
 
 ## Shared library first (`<root>/.pipeline/_lib/`, env `FLOW_LIB`, `lib` in the flow context)
 Login, token minting, seeding of the entities this product has, common navigation: written once for the
@@ -47,8 +46,8 @@ workspace, not once per ticket.
    same time break each other's runs. Put a helper you need in `<task>/flows/_new/<job id>-<name>.mjs`,
    import it from there, and list it under `library:`; the next tester that runs alone moves it into `_lib/`.
 
-## `Cases:` in the prompt
-The PM listed the cases this job covers. Run only those (`flow-run.mjs … --cases a,b`). Other flows in
+## Your cases (the brief or a `Cases:` line names them)
+Write and run only those (`flow-run.mjs … --cases a,b`); another tester has the rest. Other flows in
 `flows.json` are not yours this job: do not run them "to be safe", do not repair them, do not add a smoke
 case. A listed case with no flow → write it. If the change clearly breaks a case that is not listed, say so
 under Issues (`not-listed: <case> — why`) and let the PM decide.
@@ -75,8 +74,6 @@ Never write selectors from memory or from the source code alone.
 - While a flow is being written, run only that case (`--cases <id>`), never the whole suite per edit.
 - A step fails → look at the real response first (the failing request with `curl`, the verdict file, the
   failure screenshot), then edit once. Edit → full re-run → edit again is the slowest thing you do.
-- API first: a criterion about data or rules is asserted through the API (seconds). A Web flow only for what
-  is about the screen itself.
 
 ## FLOWS briefs (brief starts with `FLOWS` — you run next to the dev)
 The dev is changing the code right now, so nothing you see from the app counts. Write the flows the next
@@ -124,7 +121,7 @@ verdict FAIL by itself — say so in the summary and let the PM decide.
 | `spec-gap` | the plan is wrong or silent — say what is ambiguous |
 | `finding` | pre-existing bug outside the task (check the workspace known-bugs file first) |
 | `blocked-env` | the environment prevents verification — name exactly what is missing |
-| `flow-broken` / `test-data` | your flow or its data was wrong — fixed and re-run; listed so the PM sees the cost |
+| `flow-broken` / `test-data` | your flow or its data was wrong (a selector the plan moved on purpose, a bad seed) — fix it and re-run; not an app bug; listed so the PM sees the cost |
 | `unconfirmed` | seen once, not proven to be the app (see "Before you report an `IB`") |
 Keep IB ids stable across rounds (read board.md).
 

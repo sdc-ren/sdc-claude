@@ -426,7 +426,7 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
   if (budgetLow()) return { status: 'handoff', slug, round, mode, note: 'token budget low — relaunch with the same args; the PM resumes from board.md' }
   phase('PM')
   const pmPrompt =
-    `${context}\n\nPM turn ${turn}/${MAX_TURNS}. Allowed roles in this mode: ${ROLES[mode].join(', ')}. Design: ${S}/../docs/design.md.\n` +
+    `${context}\n\nPM turn ${turn}/${MAX_TURNS}. Allowed roles in this mode: ${ROLES[mode].join(', ')}.\n` +
     (turn === 1
       ? (A.format === 'old' ? 'This folder has the old layout (STATUS.md/spec.md, no HANDOFF.md): build HANDOFF.md/board.md from them first, keep only what the new round needs.\n' : '') +
         (A.approved ? 'The user approved plan.md — dispatch it.\n' : '') +
