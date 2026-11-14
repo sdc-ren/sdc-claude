@@ -18,6 +18,8 @@
 //   promote <root> <slug>                       copy the task's passing flows into .pipeline/_regression/ (reap does it on merge)
 //   list [<root>...]                            print what every task holds (the only resource ledger)
 //   register-root <root>                        add a workspace to the reaper's list
+//   restore-touched <root> <worktree>           put back the files tools rewrite on their own (config
+//                                               "## Tool-touched files"); done automatically before a worktree is freed
 //
 // `when`: run-end = browsers, emulators (freed when a run stops); pr-merged = worktrees, DB clones,
 // cache dbs, ports (kept for review fixes, freed by `reap` once every PR is merged/closed).
@@ -83,9 +85,35 @@ export function taken(root, kind) {
 const sh = (cmd, cwd) => {
   try { return execSync(cmd, { cwd, stdio: 'pipe', shell: SH, windowsHide: true }).toString().trim() } catch { return '' }
 }
+// Files the workspace config lists under "## Tool-touched files": tools rewrite them on their own
+// (`flutter pub get` adds exclude lines to analysis_options.yaml, an IDE re-sorts a lockfile…). They are
+// never part of a change, so a worktree whose only edits are in them holds no work.
+export function toolTouched(root) {
+  const cfg = join(root, '.claude', 'task-flow.md')
+  if (!existsSync(cfg)) return []
+  const txt = readFileSync(cfg, 'utf8')
+  const i = txt.search(/^## Tool-touched files\b/m)
+  if (i < 0) return []
+  const body = txt.slice(i).split('\n').slice(1)
+  const end = body.findIndex((l) => /^## /.test(l))
+  return (end < 0 ? body : body.slice(0, end)).map((l) => (l.match(/^\s*-\s*`([^`]+)`/) || [])[1]).filter(Boolean).map((p) => p.replace(/^\.\//, ''))
+}
+// Put the listed files back as committed when a tool changed them (tracked and modified only — a new or
+// staged file is somebody's work). Returns the files restored.
+export function restoreTouched(root, path) {
+  const list = toolTouched(root)
+  if (!list.length || !existsSync(path)) return []
+  const done = []
+  // `git diff --name-only`: tracked files with unstaged edits — exactly what a tool leaves behind.
+  for (const file of sh('git diff --name-only', path).split(/\r?\n/).filter(Boolean)) {
+    if (list.includes(file)) { sh(`git checkout -- ${JSON.stringify(file)}`, path); done.push(file) }
+  }
+  return done
+}
 // Uncommitted changes, or commits not on the remote branch → the worktree holds work nobody else has.
-function unsavedWork(path) {
+function unsavedWork(path, root) {
   if (!existsSync(path)) return ''
+  if (root) restoreTouched(root, path)
   if (sh('git status --porcelain', path)) return 'uncommitted changes'
   if (sh('git log --oneline -1 HEAD --not --remotes', path)) return 'unpushed commits'
   return ''
@@ -98,7 +126,7 @@ function releaseWhere(root, slug, pick) {
   let failed = 0
   for (const e of d.entries) {
     if (!pick(e)) { keep.push(e); continue }
-    const why = e.kind === 'worktree' ? unsavedWork(e.id) : ''
+    const why = e.kind === 'worktree' ? unsavedWork(e.id, root) : ''
     if (why) { say(`  keep ${slug} worktree ${e.id}: ${why}`); keep.push({ ...e, error: why }); failed++; continue }
     say(`  release ${slug} ${e.kind} ${e.id}`)
     if (!run(e.release, root)) { keep.push({ ...e, error: true }); failed++ }
@@ -269,7 +297,7 @@ export function prune(rootList, maxDays = 7, dryRun = false) {
         if (owned.has(wt)) continue
         const idle = days(statSync(wt).mtimeMs)
         if (idle <= maxDays) continue
-        const why = unsavedWork(wt)
+        const why = unsavedWork(wt, root)
         if (why) { console.log(`stray worktree ${name} kept: ${why}`); continue }
         const common = sh('git rev-parse --path-format=absolute --git-common-dir', wt).replace(/[\\/]\.git$/, '')
         act(`remove stray worktree ${name} (idle ${idle}d)`, () => run(`git -C ${JSON.stringify(common)} worktree remove --force ${JSON.stringify(wt)}`, root))
@@ -297,6 +325,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   }
   const [root, slug] = [pos[0] && resolve(pos[0]), pos[1]]
   switch (cmd) {
+    case 'restore-touched': console.log(JSON.stringify({ restored: restoreTouched(root, resolve(pos[1] || '.')) })); break
     case 'add':
       if (!flags.kind || !flags.id || !flags.release) throw new Error('add needs --kind --id --release')
       add(root, slug, { kind: flags.kind, id: flags.id, release: flags.release, ...(flags.stop && { stop: flags.stop }), when: flags.when || 'pr-merged' })

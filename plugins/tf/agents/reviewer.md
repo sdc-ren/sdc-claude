@@ -24,7 +24,8 @@ here. No git, no edits, do not rewrite the plan. Verdict `SHIP` when you have no
 otherwise (it does not block: the PM fixes the plan or records why it stands, once). Report in a few lines.
 
 ## Gate checklist (build / qc)
-1. **Scope** — `git status --porcelain`, `git diff <base>...HEAD --stat` plus uncommitted changes: every
+1. **Scope** — first `node ${CLAUDE_PLUGIN_ROOT}/scripts/resources.mjs restore-touched <root> <worktree>` (puts
+   back files the config lists as rewritten by tools; they are not the dev's change). Then `git status --porcelain`, `git diff <base>...HEAD --stat` plus uncommitted changes: every
    file is in plan.md or explained in the dev report. No `.pipeline/`, `.codegraph/`, `.env*`, build
    output, or scratch files.
 2. **Read-only zones** (workspace config) — any changed file inside one → `BLOCK`.

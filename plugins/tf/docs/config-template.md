@@ -66,6 +66,11 @@ resources). `"optional": true` = only when named. Put every env override the loc
 
 Forbidden: <ports / databases / checkouts nobody may touch>.
 
+## Tool-touched files (optional — rewritten by tools on their own, never part of a change)
+Repo-relative paths. tf puts them back as committed before the gate reads the diff and before a worktree is
+checked for unsaved work; without this a worktree that only a tool dirtied is never freed.
+- `<path>` — <which tool changes it and how>
+
 ## Doctor (checked by `/tf:status --doctor`; add `(optional)` to only warn)
 - `<shell command>` — <label>
 
