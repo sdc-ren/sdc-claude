@@ -10,9 +10,10 @@
 import { execSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { join, resolve } from 'node:path'
+import { SH } from './platform.mjs'
 
 const sh = (cmd, cwd) => {
-  try { return { ok: true, out: execSync(cmd, { cwd, stdio: 'pipe', shell: '/bin/sh', timeout: 600_000 }).toString().trim() } }
+  try { return { ok: true, out: execSync(cmd, { cwd, stdio: 'pipe', shell: SH, windowsHide: true, timeout: 600_000 }).toString().trim() } }
   catch (e) { return { ok: false, out: String(e.stderr || e.message).trim().split('\n').pop() } }
 }
 

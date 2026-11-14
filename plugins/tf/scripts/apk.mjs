@@ -17,6 +17,7 @@ import { homedir, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, copyFileSync, renameSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
+import { IS_WIN, androidSdk, sdkTool } from './platform.mjs'
 
 const CACHE = join(homedir(), '.cache', 'task-flow', 'apk')
 const MB = 1024 * 1024
@@ -69,7 +70,8 @@ export function get(wt, o) {
     console.error(`building ${name}: ${o.flutter} ${args.join(' ')}`)
     const log = o.log || join(tmpdir(), `tf-apk-${name}.log`)
     try {
-      const out = execFileSync(o.flutter, args, { cwd: wt, maxBuffer: 256 * MB, stdio: ['ignore', 'pipe', 'pipe'] })
+      // On Windows `flutter` is a .bat shim, which only a shell can start.
+      const out = execFileSync(o.flutter, args, { cwd: wt, maxBuffer: 256 * MB, stdio: ['ignore', 'pipe', 'pipe'], shell: IS_WIN, windowsHide: true })
       writeFileSync(log, out)
     } catch (e) {
       writeFileSync(log, `${e.stdout || ''}\n${e.stderr || ''}`)
@@ -82,14 +84,14 @@ export function get(wt, o) {
     renameSync(tmp, cached) // atomic: a parallel task never sees a half-written APK
     prune(o.cacheMb)
   }
-  if (o.install) execSync(`${o.adb} -s ${o.install} install -r ${JSON.stringify(cached)}`, { stdio: 'inherit' })
+  if (o.install) execFileSync(o.adb, ['-s', o.install, 'install', '-r', cached], { stdio: 'inherit' })
   return cached
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const [cmd, ...rest] = process.argv.slice(2)
   const o = { defines: [], mode: 'profile', target: 'lib/main.dart', abi: 'android-arm64', cacheMb: 300,
-    flutter: process.env.FLUTTER || 'flutter', adb: join(process.env.ANDROID_HOME || join(homedir(), 'Library', 'Android', 'sdk'), 'platform-tools', 'adb') }
+    flutter: process.env.FLUTTER || 'flutter', adb: sdkTool(androidSdk(), 'platform-tools', 'adb') }
   const pos = []
   for (let i = 0; i < rest.length; i++) {
     const k = rest[i]

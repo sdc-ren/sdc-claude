@@ -365,7 +365,8 @@ approved comments are posted).
 
 `~/.claude/task-flow/` keeps machine-level state: saved tracker logins (`auth/`) and the reaper copy.
 
-**Cleanup.** The optional reaper (`sh <plugin>/scripts/install-reaper.sh`, macOS launchd, every 30 min)
+**Cleanup.** The optional reaper (`node <plugin>/scripts/reaper.mjs install` — launchd on macOS, a systemd
+user timer or cron on Linux, Task Scheduler on Windows — every 30 min)
 frees resources when all PRs of a task are merged or closed and promotes its passing flows to
 `_regression/`. Tasks idle more than `TF_PRUNE_DAYS` (7) days are freed; archives are slimmed after 7 days
 and deleted after `TF_ARCHIVE_DAYS` (30). Worktrees with uncommitted or unpushed work are never removed.
@@ -407,7 +408,26 @@ node <plugin>/scripts/flow-peek.mjs .pipeline/PROJ-123 /some/screen           # 
 | Node ≥ 20, git, `gh` logged in | `gh auth login` + `gh auth setup-git` for private repos |
 | Playwright | Any package that depends on `@playwright/test`, referenced in the config |
 | Per workspace | Whatever the config's provisioning needs: Docker DBs, Android SDK + AVD, Flutter… |
-| macOS (recommended) | `cp -c` (APFS clone) for fast dependency copies, launchd for the reaper, Chrome cookie import for tracker login. Elsewhere tf falls back to normal copies and manual cleanup. |
+| macOS, Linux or Windows | See the table below. On Windows install [Git for Windows](https://git-scm.com/download/win): tf runs its commands through Git Bash, as Claude Code does. |
+
+### Operating systems
+
+The scripts and the executor's rules are tested on all three in CI (`.github/workflows/tf.yml`). A whole ticket
+run — servers, browser, emulator — has only been done on macOS so far; reports from Linux and Windows are welcome.
+
+| | macOS | Linux | Windows |
+|---|---|---|---|
+| Shell for scripts and config recipes | `/bin/sh` | `/bin/sh` | Git Bash (required) |
+| Reaper (`reaper.mjs install`) | launchd | systemd user timer, else cron | Task Scheduler |
+| Dependency copy for a new worktree | APFS clone (instant) | reflink on btrfs/xfs, else copy | copy |
+| Who owns a busy port | by the process's folder | by the process's folder | the server tf started itself |
+| Tracker login | Chrome cookies, or log in once | log in once in the browser tf opens | log in once in the browser tf opens |
+| Android emulator | yes | needs KVM | needs hardware acceleration (WHPX/AEHD) |
+| Claude Code desktop app | yes | Debian-based only (beta); else the CLI | yes |
+
+Workspace config recipes (`## Provisioning`, `## Doctor`) are yours: write them with commands that exist on the
+systems your team uses. `node <plugin>/scripts/platform.mjs free-port <port>` and `… kill <pid>` work everywhere.
+tf does not run inside WSL sessions of the desktop app (plugins are not loaded there); in WSL use the CLI.
 
 Run `/tf:status --doctor` to see what is missing.
 
@@ -420,7 +440,7 @@ Run `/tf:status --doctor` to see what is missing.
 | Tester says `blocked-env` | The environment is missing something (DB, port, emulator, login). `/tf:status --doctor`, then fix the config's provisioning. |
 | Flow fails after an intended UI change | The tester marks it `flow-broken`, fixes the selector and re-runs — not an app bug. |
 | Old `-e2e` / `-qc` folders or flat worktrees | `/tf:clean --legacy`, `/tf:clean --migrate`. |
-| Plugin update not picked up | `claude plugin marketplace update sdc && claude plugin update tf@sdc`, then restart. Re-run `install-reaper.sh` after updates. |
+| Plugin update not picked up | `claude plugin marketplace update sdc && claude plugin update tf@sdc`, then restart. Re-run `node <plugin>/scripts/reaper.mjs install` after updates. |
 
 ## FAQ
 

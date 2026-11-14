@@ -6,7 +6,8 @@
 //     e.g. --lock package-lock.json --dirs node_modules
 //          --lock pubspec.lock --dirs .dart_tool,lib/core/generated
 //
-// Each dir is copied with `cp -cR` (APFS clonefile: near-instant, copy-on-write, so the worktree gets
+// Each dir is copied the cheapest way the file system has (platform.mjs cloneDir: an APFS clone on macOS —
+// near-instant, copy-on-write — a reflink on Linux btrfs/xfs, else a plain copy), so the worktree gets
 // its own copy and never writes into the main checkout). Prints JSON:
 //   {"cloned":true,"dirs":[…]}                         lockfiles identical, dirs cloned
 //   {"cloned":false,"reason":"lock-differs|no-lock|stale-deps|missing-dir|clone-failed"}  → caller installs normally
@@ -16,8 +17,8 @@
 
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync, mkdirSync } from 'node:fs'
-import { execFileSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
+import { cloneDir } from './platform.mjs'
 
 const [main, wt, ...rest] = process.argv.slice(2)
 const opt = (n) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : undefined }
@@ -62,11 +63,7 @@ for (const d of dirs) {
   if (existsSync(dst)) { cloned.push(`${d} (exists)`); continue }
   if (!existsSync(src)) done({ cloned: false, reason: 'missing-dir', dir: d })
   mkdirSync(dirname(dst), { recursive: true })
-  try {
-    execFileSync('cp', ['-cR', src, dst], { stdio: 'pipe', timeout: 600_000 })
-  } catch {
-    try { execFileSync('cp', ['-R', src, dst], { stdio: 'pipe', timeout: 900_000 }) } catch { done({ cloned: false, reason: 'clone-failed', dir: d }) }
-  }
+  try { cloneDir(src, dst) } catch { done({ cloned: false, reason: 'clone-failed', dir: d }) }
   cloned.push(d)
 }
 done({ cloned: true, dirs: cloned })

@@ -10,9 +10,9 @@
 //   node artifacts-local.mjs --titles '<json [{url,title}]>'   remember titles from an account listing
 //   import { workspaceArtifacts, rememberTitles } from './artifacts-local.mjs'
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { base as baseName, claudeDir, projectDirName, projectMatch, stateDir } from './platform.mjs'
 
 const URL_RE = /https:\/\/claude\.ai\/(?:code\/)?artifact\/([A-Za-z0-9-]{10,})/g
 // Core Artifact type ids (the `type_url` a publish starts from) → kind shown to the user.
@@ -27,7 +27,7 @@ const TYPE_KIND = {
 }
 // Per-transcript cache (path → mtime/size + hits) so repeated lists only re-read changed files,
 // plus a title cache filled from account listings (artifacts whose publish call had no title).
-const STATE = join(homedir(), '.claude', 'task-flow')
+const STATE = stateDir()
 const INDEX = join(STATE, 'artifact-index.json')
 const TITLES = join(STATE, 'artifact-titles.json')
 const loadJson = (f, d) => { try { return JSON.parse(readFileSync(f, 'utf8')) } catch { return d } }
@@ -105,9 +105,8 @@ export function workspaceArtifacts(rootArg, { days = 365 } = {}) {
   }
 
   // 1. Created here — publish calls in this workspace's session transcripts.
-  const enc = root.replace(/[^A-Za-z0-9]/g, '-')
-  const base = join(homedir(), '.claude', 'projects')
-  const dirs = existsSync(base) ? readdirSync(base).filter((d) => d === enc || d.startsWith(`${enc}-`)).map((d) => join(base, d)) : []
+  const base = join(claudeDir(), 'projects')
+  const dirs = existsSync(base) ? readdirSync(base).filter(projectMatch(projectDirName(root))).map((d) => join(base, d)) : []
   const cutoff = Date.now() - days * 86_400_000
   const index = loadJson(INDEX, {})
   let dirty = false
@@ -128,7 +127,7 @@ export function workspaceArtifacts(rootArg, { days = 365 } = {}) {
     if (!existsSync(a)) continue
     try {
       for (const x of JSON.parse(readFileSync(a, 'utf8'))) {
-        put(x.url, { title: x.title, kind: x.kind === 'design-system' ? 'design system' : x.kind, last: new Date(statSync(a).mtimeMs).toISOString() }, `used in ${t.split('/').pop()}`)
+        put(x.url, { title: x.title, kind: x.kind === 'design-system' ? 'design system' : x.kind, last: new Date(statSync(a).mtimeMs).toISOString() }, `used in ${baseName(t)}`)
       }
     } catch {}
   }

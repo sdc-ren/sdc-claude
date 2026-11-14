@@ -16,6 +16,7 @@
 
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs'
 import { spawn, execFileSync } from 'node:child_process'
+import { rootOfTask } from './platform.mjs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -60,7 +61,7 @@ const childEnv = {
   ...(manifest.targets[target] || {}),
   ...opts.env,
   FLOW_KIT: join(HERE, 'flow-kit.mjs'),
-  FLOW_LIB: join(dir.split('/.pipeline/')[0], '.pipeline', '_lib'),
+  FLOW_LIB: join(rootOfTask(dir), '.pipeline', '_lib'),
   EVD_DIR: evd,
   RUN_ID: runId,
   TARGET: target,

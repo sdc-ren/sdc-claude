@@ -8,6 +8,7 @@
 
 import { createRequire } from 'node:module'
 import { execFileSync } from 'node:child_process'
+import { which } from './platform.mjs'
 import { existsSync, readdirSync, readFileSync, writeFileSync, statSync, rmSync } from 'node:fs'
 import { join, resolve, extname } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -24,7 +25,6 @@ function inputs(paths) {
 }
 const outOf = (f) => f.slice(0, -extname(f).length) + '.webp'
 
-const which = (bin) => { try { return execFileSync('/bin/sh', ['-c', `command -v ${bin}`], { stdio: 'pipe' }).toString().trim() } catch { return '' } }
 function cwebp() {
   return which('cwebp') || ['/opt/homebrew/bin/cwebp', '/usr/local/bin/cwebp'].find(existsSync) || ''
 }

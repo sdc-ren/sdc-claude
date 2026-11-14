@@ -42,6 +42,17 @@ test('a tester that only reads the flow library cannot edit it', () => {
   expect(refuse(parseJob('Job J3 · role tester · repo be\nFLOW LIBRARY: you are the only job in this group that may edit /r/.pipeline/_lib; other testers import it.\n', 'tf:tester')!, 'Write', { file_path: '/r/.pipeline/_lib/auth.mjs' })).toBe('')
 })
 
+test('Windows paths: either separator, any case', () => {
+  const wt = 'C:\\Users\\me\\ws\\.worktrees\\T-1\\backend'
+  const m = parseJob(`Job J2b · role dev (member of J2) · repo be\nWorktree: ${wt}\nSHARED WORKTREE: J2a. Your files (edit nothing else): src/c.ts. Their files (do not touch): src\\s.ts. Follow dev.md\n`, 'tf:dev')!
+  expect(refuse(m, 'Edit', { file_path: 'c:/users/me/ws/.worktrees/T-1/backend/src/s.ts' })).toContain('belongs to another member')
+  expect(refuse(m, 'Edit', { file_path: `${wt}\\src\\c.ts` })).toBe('')
+  const r = parseJob('Job J4 · role tester · repo be\nFLOW LIBRARY READ-ONLY: J3 is the only job that may edit C:\\Users\\me\\ws/.pipeline/_lib in this group.\n', 'tf:tester')!
+  expect(refuse(r, 'Write', { file_path: 'C:\\Users\\me\\ws\\.pipeline\\_lib\\auth.mjs' })).toContain('read-only')
+  expect(refuse(r, 'Bash', { command: "sed -i 's/a/b/' /c/Users/me/ws/.pipeline/_lib/be.mjs" })).toContain('read-only')
+  expect(refuse(r, 'Bash', { command: "sed -i 's/a/b/' C:/Users/me/ws/.pipeline/_lib/be.mjs" })).toContain('read-only')
+})
+
 test('other agents and other prompts are left alone', () => {
   expect(parseJob('Summarise this repository', 'general-purpose')).toBe(null)
   expect(parseJob('PM turn 1/12', 'tf:pm')).toBe(null)

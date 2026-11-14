@@ -62,7 +62,7 @@ resources). `"optional": true` = only when named. Put every env override the loc
 | worktree | path `<root>/.worktrees/<SLUG>/<repo dir>` (from `task.mjs resolve`); reuse it if it exists; else `node pool.mjs take <root> <key> <repo> <path> --branch <branch> --base <base> --lock <lockfile>` (warm pool); else `git -C <repo> fetch origin` → `git -C <repo> worktree add -b <branch> <path> origin/<base>`; copy `.env`; deps: `node fastdeps.mjs <repo> <path> --lock <lockfile> --dirs <dirs>`, install only when it prints `cloned:false` | `git -C <repo> worktree remove --force <path>` | — |
 | db | <clone recipe> | <drop recipe> | — |
 | cache | <pick an empty db index> | <flush that index> | — |
-| port | <free port check> | `kill $(lsof -t -iTCP:<p> -sTCP:LISTEN) 2>/dev/null \|\| true` | same |
+| port | <free port check> | `node <plugin>/scripts/platform.mjs free-port <p>` (macOS, Linux, Windows) | same |
 
 Forbidden: <ports / databases / checkouts nobody may touch>.
 

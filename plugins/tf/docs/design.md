@@ -183,7 +183,8 @@ is fixed from what is there, not by re-running.
 
 ## Retention
 
-Runs from launchd every 30 minutes (`install-reaper.sh`; days via `TF_PRUNE_DAYS`, `TF_ARCHIVE_DAYS`):
+Runs from the system's scheduler every 30 minutes (`reaper.mjs install`: launchd on macOS, a systemd user
+timer or cron on Linux, Task Scheduler on Windows; days via `TF_PRUNE_DAYS`, `TF_ARCHIVE_DAYS`):
 
 | What | When | Action |
 |---|---|---|
@@ -204,7 +205,8 @@ archives are slimmed (not deleted) to HANDOFF, journal, flows, ticket, plan, boa
 - `pool.mjs` keeps one warm worktree per repo (`.worktrees/_pool/<key>`: detached at origin/<base>, deps
   cloned, `.env` copied). Setup moves it into the task path and switches branch; the orchestrator refills
   it in the background after a run. Prune never removes `_pool/`. `task.mjs migrate-worktrees` moves the old flat `<slug>-<key>` worktrees.
-- `fastdeps.mjs` clones `node_modules` / `.dart_tool` from the main checkout with `cp -c` when the
+- `fastdeps.mjs` clones `node_modules` / `.dart_tool` from the main checkout (APFS clone on macOS, reflink on
+  Linux btrfs/xfs, a plain copy elsewhere) when the
   lockfile matches and the main checkout's direct dependencies are actually installed at the locked
   versions (`stale-deps` otherwise — its owner pulled without installing). `pool.mjs fill --install` then
   installs inside the pool, in the background.

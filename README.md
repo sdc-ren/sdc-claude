@@ -85,6 +85,7 @@ Issues and pull requests are welcome.
    claude plugin validate plugins/tf
    claude plugin test plugins/tf                # the Artifacts band
    node --test plugins/tf/tests/engine.mjs      # the executor's hard rules, with mock agents
+   node --test plugins/tf/tests/platform.mjs    # ports, processes, shell on your system (CI runs it on macOS, Linux, Windows)
    ```
 4. Bump the plugin's `version` in `plugins/<name>/.claude-plugin/plugin.json` and add a CHANGELOG entry.
 

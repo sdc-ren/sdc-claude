@@ -26,11 +26,11 @@
 
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, rmSync, appendFileSync, renameSync, statSync, copyFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
-import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { SH, stateDir } from './platform.mjs'
 
-const HOME_DIR = join(homedir(), '.claude', 'task-flow')
+const HOME_DIR = stateDir()
 const ROOTS = join(HOME_DIR, 'roots.txt')
 const LOG = join(HOME_DIR, 'reap.log')
 
@@ -57,7 +57,7 @@ function tasks(root) {
 }
 function run(cmd, root) {
   try {
-    execSync(cmd, { cwd: root, stdio: 'pipe', shell: '/bin/sh', timeout: 120_000 })
+    execSync(cmd, { cwd: root, stdio: 'pipe', shell: SH, windowsHide: true, timeout: 120_000 })
     return true
   } catch (e) {
     say(`  ! failed: ${cmd} — ${String(e.stderr || e.message).trim().split('\n')[0]}`)
@@ -81,7 +81,7 @@ export function taken(root, kind) {
 }
 
 const sh = (cmd, cwd) => {
-  try { return execSync(cmd, { cwd, stdio: 'pipe', shell: '/bin/sh' }).toString().trim() } catch { return '' }
+  try { return execSync(cmd, { cwd, stdio: 'pipe', shell: SH, windowsHide: true }).toString().trim() } catch { return '' }
 }
 // Uncommitted changes, or commits not on the remote branch → the worktree holds work nobody else has.
 function unsavedWork(path) {
@@ -95,17 +95,18 @@ function unsavedWork(path) {
 function releaseWhere(root, slug, pick) {
   const d = load(root, slug)
   const keep = []
+  let failed = 0
   for (const e of d.entries) {
     if (!pick(e)) { keep.push(e); continue }
     const why = e.kind === 'worktree' ? unsavedWork(e.id) : ''
-    if (why) { say(`  keep ${slug} worktree ${e.id}: ${why}`); keep.push({ ...e, error: why }); continue }
+    if (why) { say(`  keep ${slug} worktree ${e.id}: ${why}`); keep.push({ ...e, error: why }); failed++; continue }
     say(`  release ${slug} ${e.kind} ${e.id}`)
-    if (!run(e.release, root)) keep.push({ ...e, error: true })
+    if (!run(e.release, root)) { keep.push({ ...e, error: true }); failed++ }
   }
   d.entries = keep
   if (!keep.length && pick({ when: 'pr-merged' })) rmSync(fileOf(root, slug))
   else save(root, slug, d)
-  return keep.length === 0
+  return failed === 0 // true when everything asked for was released (entries not picked stay, and are not a failure)
 }
 export function endRun(root, slug) {
   for (const e of load(root, slug).entries) if (e.stop) run(e.stop, root)
@@ -270,7 +271,7 @@ export function prune(rootList, maxDays = 7, dryRun = false) {
         if (idle <= maxDays) continue
         const why = unsavedWork(wt)
         if (why) { console.log(`stray worktree ${name} kept: ${why}`); continue }
-        const common = sh('git rev-parse --path-format=absolute --git-common-dir', wt).replace(/\/\.git$/, '')
+        const common = sh('git rev-parse --path-format=absolute --git-common-dir', wt).replace(/[\\/]\.git$/, '')
         act(`remove stray worktree ${name} (idle ${idle}d)`, () => run(`git -C ${JSON.stringify(common)} worktree remove --force ${JSON.stringify(wt)}`, root))
       }
       // Empty task parent folders left after their worktrees were freed.

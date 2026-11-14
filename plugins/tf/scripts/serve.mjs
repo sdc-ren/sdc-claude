@@ -23,13 +23,12 @@
 // their command still runs from this task's worktree. Logs: <task>/logs/<name>.log.
 
 import { existsSync, readFileSync, writeFileSync, mkdirSync, openSync } from 'node:fs'
-import { spawn, execSync } from 'node:child_process'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { load, add, drop } from './resources.mjs'
+import { IS_WIN, alive, cwdOf, groupMembers as groupOf, killGroup, nodeCmd, pidsOnPort as listening, spawnShell, tail, under } from './platform.mjs'
 
 const SELF = fileURLToPath(import.meta.url)
-const sh = (cmd) => { try { return execSync(cmd, { stdio: 'pipe', shell: '/bin/sh' }).toString().trim() } catch { return '' } }
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 export function readServers(root) {
@@ -81,14 +80,9 @@ function varsFor(root, slug, name, def, ctx, ports) {
   return { root, slug, dir: ctx.dir, db: ctx.db, cache: ctx.cache, wt, ports, port: ports[name] }
 }
 
-const listening = (port) => sh(`lsof -t -nP -iTCP:${port} -sTCP:LISTEN`).split('\n').filter(Boolean)
-const cwdOf = (pid) => (sh(`lsof -a -p ${pid} -d cwd -Fn`).split('\n').find((l) => l.startsWith('n')) || '').slice(1)
-const groupOf = (pgid) =>
-  sh('ps -A -o pid=,pgid=,command=')
-    .split('\n')
-    .map((l) => l.trim().match(/^(\d+)\s+(\d+)\s+(.*)$/))
-    .filter((m) => m && m[2] === String(pgid))
-    .map((m) => ({ pid: m[1], cmd: m[3] }))
+// Does a process listening on our port belong to this task? Its working directory tells (macOS, Linux);
+// where the system cannot say (Windows) the server we started for this name must still be alive.
+const ownsPort = (pids, wt, proc) => (IS_WIN ? !!(proc && alive(proc.pgid)) : pids.some((p) => under(cwdOf(p), wt)))
 
 async function healthy(url, ms = 3000) {
   try {
@@ -101,13 +95,13 @@ function launch(name, cmd, env, cwd, dir) {
   mkdirSync(join(dir, 'logs'), { recursive: true })
   const log = join(dir, 'logs', `${name}.log`)
   const fd = openSync(log, 'a')
-  const child = spawn('/bin/sh', ['-c', cmd], { cwd, env: { ...process.env, ...env }, detached: true, stdio: ['ignore', fd, fd] })
+  const child = spawnShell(cmd, { cwd, env: { ...process.env, ...env }, stdio: ['ignore', fd, fd] })
   child.unref()
   return { pid: child.pid, log }
 }
 
 function register(root, slug, name) {
-  const cmd = `node ${JSON.stringify(SELF)} stop ${JSON.stringify(root)} ${slug} ${name}`
+  const cmd = nodeCmd(SELF, 'stop', JSON.stringify(root), slug, name)
   add(root, slug, { kind: 'server', id: name, release: cmd, stop: cmd, when: 'run-end' })
 }
 
@@ -119,7 +113,7 @@ async function startOne(root, slug, name, def, ctx, state, timeoutSec) {
   if (def.port) {
     const pids = listening(v.port)
     if (pids.length) {
-      const mine = pids.some((p) => cwdOf(p).startsWith(v.wt))
+      const mine = ownsPort(pids, v.wt, state.procs[name])
       if (!mine) return { name, status: 'error', reason: `port ${v.port} is held by a process outside ${v.wt} — not touched` }
       if (!health || (await healthy(health))) return { name, status: 'running', port: v.port, health, log: (state.procs[name] || {}).log || '' }
       return { name, status: 'error', reason: `port ${v.port} is open but ${health} does not answer — check the log, then \`serve.mjs restart ${name}\``, log: (state.procs[name] || {}).log || '' }
@@ -131,11 +125,11 @@ async function startOne(root, slug, name, def, ctx, state, timeoutSec) {
   register(root, slug, name)
   const deadline = Date.now() + 1000 * (Number(def.timeout) || timeoutSec)
   while (Date.now() < deadline) {
-    if (!groupOf(pid).length) return { name, status: 'error', reason: 'exited during boot', log, tail: sh(`tail -n 30 ${JSON.stringify(log)}`) }
+    if (!groupOf(pid).length) return { name, status: 'error', reason: 'exited during boot', log, tail: tail(log) }
     if (health ? await healthy(health) : def.port ? listening(v.port).length > 0 : true) return { name, status: 'started', port: v.port, health, log }
     await sleep(1000)
   }
-  return { name, status: 'error', reason: `no answer from ${health || `port ${v.port}`} within the timeout (still running, see log)`, log, tail: sh(`tail -n 30 ${JSON.stringify(log)}`) }
+  return { name, status: 'error', reason: `no answer from ${health || `port ${v.port}`} within the timeout (still running, see log)`, log, tail: tail(log) }
 }
 
 export function stopOne(root, slug, name) {
@@ -146,8 +140,8 @@ export function stopOne(root, slug, name) {
   const members = groupOf(p.pgid)
   // Only our own group: its leader must still run from this task's worktree (pid reuse guard).
   const leaderCwd = members.length ? cwdOf(members[0].pid) : ''
-  if (members.length && leaderCwd && !leaderCwd.startsWith(p.wt)) return { name, status: 'error', reason: `process group ${p.pgid} no longer runs from ${p.wt} — not touched` }
-  if (members.length) sh(`kill -TERM -${p.pgid}`)
+  if (members.length && leaderCwd && !under(leaderCwd, p.wt)) return { name, status: 'error', reason: `process group ${p.pgid} no longer runs from ${p.wt} — not touched` }
+  if (members.length) killGroup(p.pgid)
   delete state.procs[name]
   writeState(dir, state)
   drop(root, slug, 'server', name)
@@ -202,7 +196,7 @@ async function main() {
     writeState(ctx.dir, state)
     register(root, slug, flags.name)
     await sleep(3000)
-    return print(groupOf(pid).length ? { name: flags.name, status: 'started', log } : { name: flags.name, status: 'error', reason: 'exited', log, tail: sh(`tail -n 30 ${JSON.stringify(log)}`) })
+    return print(groupOf(pid).length ? { name: flags.name, status: 'started', log } : { name: flags.name, status: 'error', reason: 'exited', log, tail: tail(log) })
   }
   if (cmd === 'start' || cmd === 'restart') {
     const list = names.length ? names : Object.keys(defs).filter((n) => !defs[n].optional)

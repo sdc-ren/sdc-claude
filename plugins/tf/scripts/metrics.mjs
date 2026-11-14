@@ -10,9 +10,9 @@
 //                                                                    plugin version — compare versions
 //   import { runsOf } from './metrics.mjs'
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
-import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { base as baseName, claudeDir, posix, projectDirName, projectMatch } from './platform.mjs'
 
 const ROLES = ['pm', 'plan', 'setup', 'lead', 'dev', 'flows', 'tester', 'reviewer']
 // Servers started or killed by hand instead of through serve.mjs (dev/tester rule) — counted, not judged.
@@ -94,7 +94,7 @@ function agent(file, meta) {
 // Version that ran: the plugin cache path carries it. Installed from a folder, the path has none — then it
 // is that folder's version only when its manifest has not changed since the run ended, else just "dev".
 function versionOf(scripts, endMs) {
-  const m = scripts.match(/\/tf\/(\d+\.\d+\.\d+)\//)
+  const m = posix(scripts).match(/\/tf\/(\d+\.\d+\.\d+)\//)
   if (m) return m[1]
   const manifest = join(scripts, '..', '.claude-plugin', 'plugin.json')
   let fresh = false
@@ -132,7 +132,7 @@ function run(wfDir) {
   const sum = (key) => agents.reduce((s, a) => s + a[key], 0)
   const count = (r) => (byRole[r] ? byRole[r].jobs : 0)
   return {
-    run: wfDir.split('/').pop(), slug: first._slug, mode: first._mode, round: first._round, version: versionOf(first._scripts, end), size,
+    run: baseName(wfDir), slug: first._slug, mode: first._mode, round: first._round, version: versionOf(first._scripts, end), size,
     start: new Date(start).toISOString(), end: new Date(end).toISOString(), wallMin: min(end - start),
     agentMin: Math.round(sum('min') * 10) / 10, agents: agents.length, pmTurns: count('pm'),
     devJobs: new Set(agents.filter((a) => a.role === 'lead' || a.role === 'dev').map((a) => a.id.replace(/[a-cm]$/, ''))).size, devMembers: agents.filter((a) => /^J\d+[a-c]$/.test(a.id)).length, testerJobs: count('tester'), retests: Math.max(0, count('tester') - 1), serversByHand: sum('byHand'), byRole,
@@ -147,11 +147,11 @@ const json2 = (s) => { try { return JSON.parse(s) } catch { return null } }
 // Every tf run launched from this workspace (or a sub-folder), oldest first.
 export function runsOf(rootArg, { slug = '', days = 0 } = {}) {
   const root = resolve(rootArg)
-  const enc = root.replace(/[^A-Za-z0-9]/g, '-')
-  const base = join(process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude'), 'projects')
+  const enc = projectDirName(root)
+  const base = join(claudeDir(), 'projects')
   const cutoff = days ? Date.now() - days * 86_400_000 : 0
   const out = []
-  for (const p of ls(base).filter((d) => d === enc || d.startsWith(`${enc}-`))) {
+  for (const p of ls(base).filter(projectMatch(enc))) {
     for (const s of ls(join(base, p))) {
       const wfs = join(base, p, s, 'subagents', 'workflows')
       for (const w of ls(wfs)) {

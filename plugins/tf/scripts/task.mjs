@@ -18,13 +18,14 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { execSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { SH, base, nodeCmd, under } from './platform.mjs'
 
 const KEY_RE = /\b([A-Za-z][A-Za-z0-9]{1,9})-(\d{1,6})\b/
 const LEGACY_SUFFIX = /-(?:e2e\d*|qc\d*|r\d+|evd|fix|review|view|verify|before|after|app|app-thumb|thumb|header)\b/i
 const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`
 const git = (wt, args) => sh(`git -C ${q(wt)} ${args}`)
-const gitOk = (wt, args) => { try { execSync(`git -C ${q(wt)} ${args}`, { stdio: 'pipe', shell: '/bin/sh', timeout: 30_000 }); return true } catch { return false } }
-const sh = (cmd) => { try { return execSync(cmd, { stdio: 'pipe', shell: '/bin/sh', timeout: 30_000 }).toString().trim() } catch { return '' } }
+const gitOk = (wt, args) => { try { execSync(`git -C ${q(wt)} ${args}`, { stdio: 'pipe', shell: SH, windowsHide: true, timeout: 30_000 }); return true } catch { return false } }
+const sh = (cmd) => { try { return execSync(cmd, { stdio: 'pipe', shell: SH, windowsHide: true, timeout: 30_000 }).toString().trim() } catch { return '' } }
 const out = (o) => console.log(JSON.stringify(o, null, 2))
 
 export function keyFrom(text) {
@@ -112,7 +113,7 @@ export function repoMap(root, flag) {
   const out = []
   if (existsSync(cfg)) for (const m of readFileSync(cfg, 'utf8').matchAll(/^\|\s*([\w-]+)\s*\|\s*`([^`]+)`\s*\|/gm)) {
     if (m[1] === 'key' || m[1] === 'kind') continue
-    out.push({ key: m[1], dir: m[2].replace(/\/+$/, '').split('/').pop() })
+    out.push({ key: m[1], dir: base(m[2]) })
   }
   return out.length ? out : ['be', 'fe', 'mobile'].map((key) => ({ key, dir: key }))
 }
@@ -235,21 +236,21 @@ function legacy(root, repos, apply) {
   const held = new Set()
   for (const f of plan.folders) {
     const ledger = join(f.from, 'resources.json')
-    if (existsSync(ledger) && f.from.startsWith(pipe + '/') && !f.from.includes('/_archive/')) {
-      sh(`node ${JSON.stringify(join(S, 'resources.mjs'))} release ${JSON.stringify(root)} ${JSON.stringify(f.from.split('/').pop())}`)
+    if (existsSync(ledger) && under(f.from, pipe) && !under(f.from, join(pipe, '_archive'))) {
+      sh(nodeCmd(join(S, 'resources.mjs'), 'release', JSON.stringify(root), JSON.stringify(base(f.from))))
     }
     // Anything still registered (release failed, e.g. Docker down) stays tracked: keep the folder where the reaper sees it.
     let left = []
     try { left = JSON.parse(readFileSync(ledger, 'utf8')).entries || [] } catch {}
     if (left.length) {
       left.filter((e) => e.kind === 'worktree').forEach((e) => held.add(e.id))
-      done.kept.push(`${f.from}: still holds ${left.map((e) => `${e.kind}:${String(e.id).split('/').pop()}`).join(', ')} — rerun when they can be freed`)
+      done.kept.push(`${f.from}: still holds ${left.map((e) => `${e.kind}:${base(e.id)}`).join(', ')} — rerun when they can be freed`)
       continue
     }
     const live = join(pipe, f.key)
     const arch = join(pipe, '_archive', f.key)
     const canon = existsSync(live) ? live : existsSync(arch) ? arch : live
-    const dest = join(canon, 'history', 'legacy', f.from.split('/').pop())
+    const dest = join(canon, 'history', 'legacy', base(f.from))
     mkdirSync(dirname(dest), { recursive: true })
     if (existsSync(dest)) { done.kept.push(`${f.from}: ${dest} exists`); continue }
     renameSync(f.from, dest)
