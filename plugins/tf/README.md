@@ -4,7 +4,7 @@
 
 **A PM-led agent team for Claude Code: plan the ticket, build it, test it end to end, ship a ready PR.**
 
-[![Version](https://img.shields.io/badge/version-1.1.0-2ea44f)](CHANGELOG.md)
+[![Changelog](https://img.shields.io/badge/changelog-CHANGELOG.md-2ea44f)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](https://code.claude.com/docs/en/plugins/install.md)
 
@@ -270,24 +270,19 @@ flowchart LR
 5. **Close-out (your session).** Evidence is uploaded per the workspace config, drafts are shown to you,
    `HANDOFF.md` is rewritten for the next round.
 
-### Hard rules (enforced by the executor)
+### Hard rules
+
+The executor enforces these in code; an agent cannot talk its way past them. The full list, with the reason
+for each, is in [docs/design.md](docs/design.md#hard-rules).
 
 | Rule | Why |
 |---|---|
-| Code modes close only when, for every changed repo, a tester passed after that repo's last dev job | No "green on one repo, red on the other"; a fix on one repo does not force a re-test of the other |
-| M/L build/qc: the plan is read once by `tf:reviewer` on the PM's model before any job runs | A second reader of the ticket catches a missing requirement or a repo left out |
-| A reviewer gate runs on the model of the dev lead it judges | The judge is never weaker than the writer |
-| The plan check and the PM still disagree → the run stops and asks you | You are asked exactly when two readers of the ticket differ, not on every plan |
+| No PR until a tester passed the latest code of that repo, and the PR comes from a job started after that pass | Nothing ships untested |
+| Writer ≠ judge: dev, tester and reviewer are separate agents; the gate runs on the dev's model, before the tester | No one marks their own work; no test run thrown away by a gate |
+| Dev jobs never commit, push or merge; a team member never edits another member's file | The reviewer packages; parallel coding without collisions |
+| M/L tasks: a second agent reads the ticket and the plan before any job runs; if it and the PM still disagree, you are asked | A wrong plan is caught before it costs a run |
 | XS/S tasks: the tester runs only the cases the change touches | A one-line fix does not pay for the whole saved suite |
-| Tool guard: a dev job's `git commit/push`, a member's edit of another member's file, a read-only tester's write to the flow library are refused at the tool call | Rules that used to be only a sentence in a prompt |
-| A PR must come from a reviewer `PACKAGE` job that started after that PASS | Nothing ships untested |
-| PRs are ready; draft only with `--draft` | A PR means "done and verified" |
-| Dev and judge are separate agents, never in the same parallel group | Writer ≠ judge |
-| build/qc: the reviewer gate runs in an earlier group than the tester; a NEEDS-WORK gate skips the tester | No test run thrown away by a gate |
-| One dev job per repo; its lead may run 2–3 members only with a separate file list each | Parallel coding inside a repo without two agents editing the same file |
-| A tester `FLOWS` job (writes flows from the plan while the dev works) is never a test and never blocks | Flows are ready when the code is, without weakening writer ≠ judge |
-| Roles allowed per mode (`review` / `e2e` never run a dev) | Review modes never change code |
-| ≤ 12 PM turns, ≤ 12 jobs per dispatch (6 per group), ≤ 6 dev jobs per repo | Non-converging loops escalate to you |
+| PRs are ready (draft only with `--draft`); limits on turns, jobs and fix attempts | A PR means "done and verified"; loops that do not converge escalate to you |
 
 ### When the PM stops to ask you
 
@@ -298,12 +293,9 @@ is decided and listed as *assumptions* in the round report so you can correct it
 
 ### Sizing
 
-| Size | Example | Typical team | Model |
-|---|---|---|---|
-| XS | text, colour, spacing | 1 dev → reviewer gate → tester → package | sonnet; PM on sonnet after turn 1 |
-| S | a field, one screen | same, tester writes 1 flow | sonnet |
-| M | 2 repos or an API change | parallel devs → reviewer gates → testers | sonnet, opus where risky |
-| L | new feature, migration, money, permissions | M + opus on risky jobs | opus where it matters |
+The PM sizes every task XS, S, M or L and staffs it accordingly: a text change gets one dev, a gate and a
+tester on sonnet; a migration or a money change gets a plan check, a lead per repo and opus where it is
+risky. The table is in [docs/design.md](docs/design.md#sizing-and-models-pm-decides).
 
 ## Workspace configuration
 
@@ -365,11 +357,10 @@ approved comments are posted).
 
 `~/.claude/task-flow/` keeps machine-level state: saved tracker logins (`auth/`) and the reaper copy.
 
-**Cleanup.** The optional reaper (`node <plugin>/scripts/reaper.mjs install` — launchd on macOS, a systemd
-user timer or cron on Linux, Task Scheduler on Windows — every 30 min)
-frees resources when all PRs of a task are merged or closed and promotes its passing flows to
-`_regression/`. Tasks idle more than `TF_PRUNE_DAYS` (7) days are freed; archives are slimmed after 7 days
-and deleted after `TF_ARCHIVE_DAYS` (30). Worktrees with uncommitted or unpushed work are never removed.
+**Cleanup.** The optional reaper (`node <plugin>/scripts/reaper.mjs install`, every 30 min) frees a task's
+resources once all its PRs are merged or closed and promotes its passing flows to `_regression/`; idle tasks
+are freed after `TF_PRUNE_DAYS` (7). Worktrees with uncommitted or unpushed work are never removed. The full
+schedule is in [docs/design.md](docs/design.md#retention).
 
 ## E2E flows
 
@@ -456,11 +447,11 @@ comment, e2e). A repo's own conventions (its CLAUDE.md, CONTRIBUTING, commitlint
 **What does it cost?** Fewer agents than a fixed pipeline: XS tasks typically run 3–5 agents. The PM uses
 opus for planning and drops to sonnet for small tasks after the first turn.
 
-## Design
+## More
 
-The full design — roles, dispatch schema, guards, file formats, retention — is in
-[docs/design.md](docs/design.md). The orchestrator procedure the commands follow is in
-[docs/orchestrator.md](docs/orchestrator.md).
+[docs/design.md](docs/design.md) — roles, hard rules, files, retention, metrics.
+[docs/orchestrator.md](docs/orchestrator.md) — what a `/tf:*` command does step by step.
+[CHANGELOG.md](CHANGELOG.md) — what changed in each version.
 
 ## License
 

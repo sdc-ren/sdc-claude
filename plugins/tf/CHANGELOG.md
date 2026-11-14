@@ -4,6 +4,25 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.6.1] — 2026-11-14
+
+### Changed
+- **Docs say each thing once.** `docs/design.md` is the reference for the hard rules, sizing, files and
+  retention; the README links to it instead of repeating the tables; what an agent must do stays in its own
+  file. `design.md`'s hard rules are one ordered list again (it had two rules numbered 3c and still claimed
+  the old limits of 10 turns and 6 jobs per dispatch).
+- `agents/pm.md`: the dispatch rules are grouped (shape of a run, dev, testers, after a FAIL, models and
+  setup, other modes); repeated rules removed; fix rounds no longer ask for a smoke case on XS/S, which
+  contradicted "a small task runs only the cases it touches".
+- `agents/tester.md`: "API before Web before App" and "run only your cases" are each said once.
+- The PM prompt no longer points at `docs/design.md` (no PM opened it in the measured run; its rules are in
+  `agents/pm.md` and in the prompt).
+- README: the version badge (stuck at 1.1.0) links to the changelog instead.
+
+### Added
+- Tests: the limits written in `design.md` must equal the executor's constants, and every plugin file a
+  document points at must exist.
+
 ## [1.6.0] — 2026-11-14
 
 ### Added

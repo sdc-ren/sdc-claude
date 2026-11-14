@@ -1,6 +1,6 @@
 // The executor's hard rules, run against mock agents: no model, no git, no files. Each scenario scripts the
 // PM's decisions and what every job answers, then checks how the run ended and which jobs ran.
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -165,4 +165,28 @@ test('several testers in one group: own scratch folders, one writer of the flow 
   expect(r.prompts['J4 tester:be']).toContain('FLOW LIBRARY READ-ONLY: J3')
   const single = await sim([oneRepo, pack(4), close])
   expect(single.prompts['J3 tester:be']).not.toContain('FLOW LIBRARY')
+})
+
+test('the documented limits are the ones the executor enforces', () => {
+  const num = (name) => Number(src.match(new RegExp(`const ${name} = (\\d+)`))[1])
+  const design = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'design.md'), 'utf8')
+  const line = `${num('MAX_TURNS')} PM turns · ${num('MAX_JOBS')} jobs per dispatch · ${num('MAX_GROUP')} jobs per group · ${num('MAX_DEV_PER_REPO')} dev jobs per repo per run · ${num('MAX_MEMBERS')} members per lead`
+  expect(design).toContain(line)
+})
+
+test('every plugin file a document points at exists', () => {
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..')
+  const docs = ['README.md', 'docs/design.md', 'docs/orchestrator.md', 'docs/pm-feedback.md', 'docs/attach.md', 'docs/config-template.md', 'agents/pm.md', 'agents/lead.md', 'agents/dev.md', 'agents/tester.md', 'agents/reviewer.md']
+  const missing = []
+  for (const d of docs) {
+    const text = readFileSync(join(root, d), 'utf8')
+    for (const m of text.matchAll(/(?:\$\{CLAUDE_PLUGIN_ROOT\}\/|<PLUGIN>\/|<plugin>\/|\]\()((?:docs|agents|guidelines|scripts|hooks|engine|tests|skills)\/[\w./-]+\.(?:md|mjs|js|ts|tsx|sh))/g)) {
+      if (!existsSync(join(root, m[1]))) missing.push(`${d} → ${m[1]}`)
+    }
+    // bare mentions like `guidelines/e2e-testing.md` or `scripts/platform.mjs`
+    for (const m of text.matchAll(/`((?:docs|agents|guidelines|scripts|hooks|engine|tests)\/[\w.-]+\.(?:md|mjs|js|ts|tsx|sh))`/g)) {
+      if (!existsSync(join(root, m[1]))) missing.push(`${d} → ${m[1]}`)
+    }
+  }
+  expect(missing).toEqual([])
 })

@@ -3,6 +3,11 @@
 The SDC `tf` plugin (`tf@sdc`): a PM agent plans each task and staffs dev / tester / reviewer agents; a thin
 executor runs the jobs and enforces the hard rules.
 
+This file is the reference for **why and how the pieces fit**. What each agent must do is in its own file
+and is not repeated here: `agents/*.md` (roles), `docs/orchestrator.md` (what a `/tf:*` command does in the
+session), `docs/pm-feedback.md` (feedback mode), `guidelines/` (git, PR, review, ticket comment, e2e). How
+to use the plugin is in `README.md`.
+
 ## Shape
 
 ```
@@ -22,109 +27,97 @@ names. That makes resume free — relaunch, the PM reads the board and continues
 
 | Role | Owns | Never |
 |---|---|---|
-| `tf:pm` | brief, plan, board, HANDOFF, ticket-comment draft; picks jobs, roles, models, size | edits repo code, runs tests |
+| `tf:pm` | plan, board, HANDOFF, ticket-comment draft; picks jobs, roles, models, size | edits repo code, runs tests |
 | `tf:lead` | one repo's dev job: does it alone, or splits it among ≤ 3 members (disjoint files, agreed interfaces), merges, makes the repo build, one report to the PM | commits, judges its own work |
-| `tf:dev` | member of a lead's team: code changes in its own files for its micro-tasks; micro-tests; reports to the lead | commits, edits another member's files |
-| `tf:tester` | e2e flows (`flows/`), EVD, verdicts | edits repo code |
-| `tf:reviewer` | static gate (scope, contract, quality, tamper, read-only zones); commit + push + PR; review-mode report | edits code, merges |
+| `tf:dev` | member of a lead's team: its own files and micro-tasks; reports to the lead | commits, edits another member's files |
+| `tf:tester` | e2e flows (`flows/`), evidence, verdicts | edits repo code |
+| `tf:reviewer` | plan check; static gate (scope, contract, quality, tamper, read-only zones); commit + push + PR; review-mode report | edits code, merges |
 | `setup` | provisioning per workspace config (generic agent, sonnet) | touches other tasks' resources |
 
 The roster is a menu. The PM uses the fewest roles that satisfy the hard rules.
 
-## Commands and modes
+## Modes
 
 | Command | Mode | Allowed roles | Ends with |
 |---|---|---|---|
-| `/tf:build <ticket|text>` | build | setup, dev, tester, reviewer | PR(s) ready |
+| `/tf:build <ticket\|text>` | build | setup, dev, tester, reviewer | PR(s) ready |
 | `/tf:qc <ticket>` | qc | setup, dev, tester, reviewer | existing PR updated (or new PR if merged) |
-| `/tf:address-review <ticket|PR> [--check]` | feedback | setup, dev, tester, reviewer (none with `--check`) | triage, fixes pushed to the same PR, reply drafts |
-| `/tf:review <PR|ticket>` | review | setup, tester, reviewer | review report + PR/ticket comment drafts |
-| `/tf:e2e <PR|ticket> [--cases a,b]` | e2e | setup, tester | EVD + ticket comment draft |
+| `/tf:address-review <ticket\|PR> [--check]` | feedback | setup, dev, tester, reviewer (none with `--check`) | triage, fixes pushed to the same PR, reply drafts |
+| `/tf:review <PR\|ticket>` | review | setup, tester, reviewer | review report + PR/ticket comment drafts |
+| `/tf:e2e <PR\|ticket> [--cases a,b]` | e2e | setup, tester | evidence + ticket comment draft |
 
-Flags: `--approve` (stop for the user after the first plan), `--draft` (user allows a draft PR),
-`--lang <code>`. There is no `--repos`: the PM inspects every repo the workspace config lists.
+There is no `--repos`: the PM inspects every repo the workspace config lists. Flags are in the README.
 
-## Hard rules (enforced by the executor, not by prompts)
+## Hard rules
 
-1. Roles outside the mode's allowed set are rejected.
-2. Writer ≠ judge: a dev job and a tester/reviewer job are always separate agents.
-2b. One dev job per repo per group. It goes to the repo's lead, which works alone or returns a team of 2–3
-   members sharing the worktree: every member names its `files`, no file twice (an invalid team is sent back
-   once, then the job fails). The lead merges and reports once. Several tester jobs in one group split the
-   cases; all of them must PASS.
-2a. A tester job whose brief starts with `FLOWS` only writes flows from the plan's cases and contract while the
-   dev works (same group allowed). It returns verdict NONE, never counts as a test, never blocks later groups.
-3. Code modes cannot close until, for every repo a dev touched, judged on that repo's own history: a tester
-   covering it PASSed after ITS last dev job (a later dev job on another repo does not undo that; a FAIL is
-   cleared only by a PASS in a later group), and a reviewer `PACKAGE` job that started after that PASS reported
-   `SHIP` with a PR URL. `close.noChange` still needs a tester PASS.
-3c. Plan check (build/qc, size M/L): before the PM's first dispatch (or `approve`) is executed, `tf:reviewer`
-   reads `ticket.md` and `plan.md` once, on the PM's model, for missing requirements, a repo left out and
-   assumptions the ticket contradicts (`jobs/J0-reviewer-plan.md`). It cannot block: with points, the PM gets
-   them next turn and fixes the plan or records why it stands; without, the dispatch runs as returned.
-3d. A reviewer gate runs on the model of the dev lead it judges (the repo's last dev job) — the executor sets
-   it. PACKAGE jobs keep the PM's model.
-3f. Dev jobs never commit. The lead reports the worktree HEAD before and after its job; when it moved, the
-   executor has the commits undone (`task.mjs uncommit`: a mixed reset to the earlier HEAD, refused when the
-   commits are pushed) before the gate runs. If that fails the job is `blocked` and the PM decides.
-3g. Several testers in one group: each gets its own scratch folder (`<task>/tmp/<job>/`), and only the first
-   may edit the shared flow library; the others read it and park new helpers in `flows/_new/`.
-3h. Tool guard (`hooks/guard.ts`, a hooks module — not the executor): when the executor starts a job the guard
-   reads its prompt, and that agent's tool calls are refused when a dev job runs `git commit|push|merge|rebase`,
-   a team member edits a file given to another member, or a tester told `FLOW LIBRARY READ-ONLY` writes to the
-   library. Unrecognised agents and any failure in the guard let the call through.
-3i. After a plan check with points, the PM returns `planKept` (points where it did not change the plan). Any
-   entry stops the run with status `approve` so the user settles the disagreement before a job starts.
-3j. Size XS/S: every tester job names `cases`; the tester runs only those — no other saved flow, no smoke case.
-3e. Limits: 12 PM turns, 12 jobs per dispatch, 6 per group, 6 dev jobs per repo. The PM prompt of turn 1
-   (and of a rejected turn) carries the rules, generated from the same constants the guards use.
-3a. feedback mode: no dev job → `close.noChange`; a fix with no behaviour change may close with
-   `close.noTest` (no tester ran) but still needs a PACKAGE after the last dev; `--check` allows no jobs at all.
-3b. When a job in a group is not `done`, or a reviewer gate returns `NEEDS-WORK`/`BLOCK`, the later groups of that
-   dispatch are skipped and the PM decides.
-3c. Gate before test (build/qc): a reviewer gate and the tester it precedes never share a group — a
-   NEEDS-WORK gate next to a running tester throws the test run away (RVD-293 round 3: ~16 min).
-4. PR is ready. A reviewer report with `prDraft: true` is a violation unless the user passed `--draft`.
-5. Caps: PM turns ≤ 10, jobs per dispatch ≤ 6, dev jobs per repo per run ≤ 6, members per lead ≤ 3, fix cycles per issue id ≤ 3 (PM must escalate), token
-   reserve 80k → handoff.
-6. Two guard violations in a row → escalate.
+Enforced by the executor (`engine/task-flow.js`), not by prompts; covered by `tests/engine.mjs`. The PM gets
+them in its prompt on turn 1 and after a rejection, generated from the same constants the guards use.
 
-Workspace hard rules (read-only zones, forbidden commands, browsers, screenshots) live in the
-workspace config and every agent reads them.
+**Who may run, and with whom**
+1. A role outside the mode's allowed set is rejected.
+2. Writer ≠ judge: a tester or reviewer never shares a group with a dev job on its repo. The one exception is
+   a tester job whose brief starts with `FLOWS`: it only writes flows from the plan while the dev works,
+   returns verdict NONE, never counts as a test and never blocks later groups.
+3. One dev job per repo per group. It goes to the repo's lead, which works alone or returns a team of 2–3
+   members sharing the worktree; every member names its `files`, no file twice (an invalid team is sent back
+   once, then the job fails). The lead merges and reports once.
+4. Gate before test: a reviewer gate never shares a group with a tester of its repo. When a job is not `done`,
+   or a gate returns `NEEDS-WORK`/`BLOCK`, the later groups of that dispatch are skipped and the PM decides —
+   a gate next to a running tester throws the test run away (RVD-293 round 3: ~16 min).
+5. A gate runs on the model of the dev lead it judges (the repo's last dev job); the executor sets it.
+   `PACKAGE` jobs keep the PM's model.
+6. Several testers in one group: each gets its own scratch folder (`<task>/tmp/<job>/`); only the first may
+   edit the shared flow library, the others read it and park new helpers in `flows/_new/`.
 
-## Sizing (PM decides)
+**What a job may leave behind**
+7. Dev jobs never commit. The lead reports the worktree HEAD before and after; when it moved, the executor has
+   the commits undone (`task.mjs uncommit`: a mixed reset, refused when the commits are pushed) before the
+   gate runs. If that fails the job is `blocked` and the PM decides.
+8. A PR is ready. `prDraft: true` is a violation unless the user passed `--draft`.
+
+**The plan**
+9. Plan check (build/qc, size M/L): before the PM's first dispatch or `approve` is executed, `tf:reviewer`
+   reads `ticket.md` and `plan.md` once, on the PM's model (`jobs/J0-reviewer-plan.md`). It cannot block: with
+   points, the PM gets them next turn and fixes the plan or records why it stands, returning `planKept` for
+   the points it did not take. Any `planKept` entry stops the run with status `approve`, so the user settles
+   the disagreement before a job starts.
+10. Size XS/S: every tester job names `cases` and the tester runs only those — no other saved flow, no smoke
+    case.
+
+**Closing**
+11. Code modes close only when, for every repo a dev touched, judged on that repo's own history: a tester
+    covering it PASSed after its last dev job (a later dev job on another repo does not undo that; a FAIL is
+    cleared only by a PASS in a later group), and a reviewer `PACKAGE` job that started after that PASS
+    reported `SHIP` with a PR URL. `close.noChange` (no dev job) still needs a tester PASS.
+12. Feedback mode: no dev job → `close.noChange`; a fix with no behaviour change may close with `close.noTest`
+    but still needs a `PACKAGE` after the last dev; `--check` allows no jobs at all.
+
+**Limits**
+13. 12 PM turns · 12 jobs per dispatch · 6 jobs per group · 6 dev jobs per repo per run · 3 members per lead.
+    Two guard violations in a row → escalate. Token reserve 80k → handoff. (Three fix attempts on one issue →
+    the PM escalates; that one is the PM's rule, not the executor's.)
+
+**Tool guard** (`hooks/guard.ts`, a hooks module beside the executor; `tests/guard.test.ts`): when the
+executor starts a job the guard reads its prompt, and that agent's tool calls are refused when a dev job runs
+`git commit|push|merge|rebase`, a team member edits a file given to another member, or a tester told
+`FLOW LIBRARY READ-ONLY` writes to the library. Unrecognised agents and any failure in the guard let the
+call through.
+
+Workspace hard rules (read-only zones, forbidden commands, browsers, screenshots) live in the workspace config
+and every agent reads them.
+
+## Sizing and models (PM decides)
 
 | Size | Typical task | Typical staffing |
 |---|---|---|
-| XS | text, colour, spacing, show/hide | PM (short) → dev → reviewer gate → tester → reviewer PACKAGE |
-| S | add a field/column, one screen, one repo | dev ∥ tester FLOWS → gate → tester → PACKAGE |
-| M | 2 repos or API change | one lead per repo in parallel (each alone or with members) ∥ tester FLOWS → reviewer gates → tester(s) |
+| XS | text, colour, spacing, show/hide | dev → gate → tester (named cases) → PACKAGE |
+| S | add a field/column, one screen, one repo | dev ∥ tester FLOWS → gate → tester (named cases) → PACKAGE |
+| M | 2 repos or API change | plan check; one lead per repo in parallel ∥ tester FLOWS → gates → tester(s) → PACKAGE |
 | L | new feature, migration, money, permissions | M + opus where risky |
 
-Model per job: haiku < sonnet < opus. Default sonnet; opus only for risky logic or judgement.
-The PM itself runs on opus for turn 1 (sizing and planning); after that XS/S tasks run the PM on
-sonnet, M/L stay on opus, and any guard violation puts the next PM turn back on opus.
-
-## Plan format (micro-tasks)
-
-`plan.md` holds the current round only (≤ ~150 lines), one section per repo:
-
-```
-## be — branch fix/PROJ-301-x (base develop)
-- [M1] Modify `src/services/x.service.ts` — what changes. How: only for contracts.
-  done-when: `npm run typecheck` clean; `curl … /api/x` → 200 {…}
-```
-
-What + Where are mandatory. How only at boundaries (API contract, shared types, migrations,
-non-obvious decisions). Micro-tests are cheap checks (typecheck, lint of the file, curl, one flow
-step) — never new unit tests unless the workspace `Test policy` allows them.
-
-## Escalation bar (PM)
-
-Stop and ask the user only for: broken layout / UI clearly unlike the design or current screens;
-a flow or logic totally different from before; a spec change the ticket does not settle; risk to
-money, permissions, data, or security; any edit inside a workspace read-only zone. Everything else:
-decide, record under `Assumptions` in `board.md`, list them in the round report.
+Model per job: haiku < sonnet < opus. Default sonnet; opus only for risky logic or judgement. The PM runs on
+opus for turn 1; after that XS/S tasks run it on sonnet, M/L stay on opus, and any guard violation puts the
+next PM turn back on opus.
 
 ## Files (one folder per ticket)
 
@@ -132,7 +125,7 @@ decide, record under `Assumptions` in `board.md`, list them in the round report.
 .pipeline/<SLUG>/
   ticket.md        verbatim ticket (session)                       read by PM
   HANDOFF.md       ≤ 80 lines, rewritten by PM at close             read FIRST every round
-  plan.md          current round micro-tasks (PM)                   jobs read their section
+  plan.md          current round micro-tasks, contract, cases (PM)  jobs read their section
   board.md         PM ledger: dispatches, results, assumptions, open issues
   journal.md       append-only, 1–3 lines per job (each agent)      grep only
   jobs/J<n>-<role>-<repo>.md   brief + report (the job's agent)     PM
@@ -145,46 +138,31 @@ decide, record under `Assumptions` in `board.md`, list them in the round report.
   metrics.json     measured cost of every run (metrics.mjs)
 ```
 
-`HANDOFF.md` header lines are machine-read by `task.mjs`:
-
-```
-Slug: PROJ-301
-Round: 2
-Status: done | escalated | in-progress
-Mode: build
-PR be: https://github.com/…/pull/649
-Worktree be: /…/.worktrees/PROJ-301/backend
-```
-
 One ticket = one folder and one worktree folder `.worktrees/<SLUG>/` holding one subfolder per repo, named
-like the repo folder (`backend/`, `frontend/`, `mobile/`), for every mode and round. `task.mjs resolve` normalises the key, finds the folder case-insensitively (moving it
-back from `_archive/`), and reports legacy suffixed folders (`-e2e`, `-qc`, `-r2`…) without creating
-new ones.
+like the repo folder, for every mode and round. `task.mjs resolve` normalises the key, finds the folder
+case-insensitively (moving it back from `_archive/`), and reports legacy suffixed folders (`-e2e`, `-qc`,
+`-r2`…) without creating new ones. The `HANDOFF.md` header lines (`Slug:`, `Round:`, `Status:`, `Mode:`,
+`PR <repo>:`, `Worktree <repo>:`) are machine-read by `task.mjs`; their exact form is in `agents/pm.md`.
 
 ## E2E flows
 
-Standard: `guidelines/e2e-testing.md` (in the plugin). The kit adds a 15 s step ceiling (not a delay), `waitApi` /
-`ready` / `gotoReady` to wait for the app instead of the clock, console-error and 5xx warnings in every
-verdict, and a Playwright trace only with `TRACE=1`.
+The standard is `guidelines/e2e-testing.md`; the tester's procedure is `agents/tester.md`. What the design
+adds:
 
-Contract (generic, in the skill): a flow is `flows/<case>.mjs`, reads `BASE_URL`, `API_URL`,
-`EVD_DIR`, `RUN_ID`, `TARGET`, `PLAYWRIGHT_FROM` / `ANDROID_SERIAL` from env, writes
-`<EVD_DIR>/<case>.verdict.json` and screenshots. `flow-kit.mjs` gives `webFlow()` / `androidFlow()`
-helpers; `flow-run.mjs` runs flows, converts screenshots to WebP, updates `flows.json`.
-Project-specific helpers, accounts and targets come from the workspace config `## Flows` section.
-Flows stay in the task folder; a later round re-runs them instead of re-driving the UI.
-
-Two things keep writing them cheap. **Shared library**: `<root>/.pipeline/_lib/` (`FLOW_LIB`) holds login,
-seeding and other helpers for the whole workspace, indexed in its `README.md`; a task's flows import it and the
-tester adds what a later ticket would need again, so no task starts from an empty folder. **Look before
-writing**: `flow-peek.mjs` opens a screen (after optional steps) and prints the real test ids, labels and
-role + name locators; a failed web step saves the same description of the page it failed on, so a selector
-is fixed from what is there, not by re-running.
+- **A flow is a file that is kept.** `flows/<case>.mjs` reads `BASE_URL`, `API_URL`, `EVD_DIR`, `RUN_ID`,
+  `TARGET`, `PLAYWRIGHT_FROM` / `ANDROID_SERIAL` from env and writes `<EVD_DIR>/<case>.verdict.json` plus
+  screenshots. `flow-kit.mjs` gives `webFlow()` / `androidFlow()`; `flow-run.mjs` runs flows, converts
+  screenshots to WebP and updates `flows.json`. A later round re-runs them instead of re-driving the UI.
+- **Shared library.** `<root>/.pipeline/_lib/` (`FLOW_LIB`) holds login, seeding and other helpers for the
+  whole workspace, indexed in its `README.md`, so no task starts from an empty folder.
+- **Look before writing.** `flow-peek.mjs` opens a screen and prints the real test ids, labels and role + name
+  locators; a failed web step saves the same description of the page it failed on, so a selector is fixed
+  from what is there, not by re-running.
 
 ## Retention
 
-Runs from the system's scheduler every 30 minutes (`reaper.mjs install`: launchd on macOS, a systemd user
-timer or cron on Linux, Task Scheduler on Windows; days via `TF_PRUNE_DAYS`, `TF_ARCHIVE_DAYS`):
+`reaper.mjs install` registers a job with the system's scheduler (launchd, a systemd user timer or cron, Task
+Scheduler) that runs `resources.mjs reap` every 30 minutes; days via `TF_PRUNE_DAYS`, `TF_ARCHIVE_DAYS`.
 
 | What | When | Action |
 |---|---|---|
@@ -196,20 +174,17 @@ timer or cron on Linux, Task Scheduler on Windows; days via `TF_PRUNE_DAYS`, `TF
 | Leftover/empty `.worktrees/<SLUG>/` folders | prune | delete |
 | APK cache | every `apk.mjs get` | trimmed to 300 MB, least recently used first |
 
-`resources.mjs`: `reap` frees resources when every PR is merged/closed and archives the folder;
-archives are slimmed (not deleted) to HANDOFF, journal, flows, ticket, plan, board for
-`TF_ARCHIVE_DAYS` (default 30) so a late QC round still has its flows.
+The handoff set is HANDOFF, journal, flows, ticket, plan, board: a late QC round still has its flows.
 
 ## Speed helpers
 
 - `pool.mjs` keeps one warm worktree per repo (`.worktrees/_pool/<key>`: detached at origin/<base>, deps
   cloned, `.env` copied). Setup moves it into the task path and switches branch; the orchestrator refills
-  it in the background after a run. Prune never removes `_pool/`. `task.mjs migrate-worktrees` moves the old flat `<slug>-<key>` worktrees.
+  it in the background after a run. Prune never removes `_pool/`.
 - `fastdeps.mjs` clones `node_modules` / `.dart_tool` from the main checkout (APFS clone on macOS, reflink on
-  Linux btrfs/xfs, a plain copy elsewhere) when the
-  lockfile matches and the main checkout's direct dependencies are actually installed at the locked
-  versions (`stale-deps` otherwise — its owner pulled without installing). `pool.mjs fill --install` then
-  installs inside the pool, in the background.
+  Linux btrfs/xfs, a plain copy elsewhere) when the lockfile matches and the main checkout's direct
+  dependencies are installed at the locked versions (`stale-deps` otherwise — its owner pulled without
+  installing). `pool.mjs fill --install` then installs inside the pool, in the background.
 - `serve.mjs` starts the task's app servers once per run from the config `## Servers` (task ports, DB,
   cache filled in), waits for their health checks, and keeps them up across jobs; jobs call `start`
   again (a no-op when they answer). Each is a `server` run-end resource, so `end-run` stops it.
@@ -218,22 +193,30 @@ archives are slimmed (not deleted) to HANDOFF, journal, flows, ticket, plan, boa
 
 `metrics.mjs` measures every run from the transcripts Claude Code keeps for each workflow agent — the
 engine cannot (its token budget is one shared counter and it has no clock per job). Per job: minutes, time
-waiting on tools vs model time, turns, tokens, the slowest commands. Per run: wall time, minutes per role,
-PM turns, dev/tester jobs, re-tests, plugin version. The plan check is its own column (`plan`). The orchestrator runs it after every run and keeps the
-history in `<task>/metrics.json`; `/tf:status --metrics` lists all runs so two plugin versions can be
-compared. A change made for speed names the number it should move and is checked against the next runs.
+waiting on tools vs model time, turns, tokens, the slowest commands. Per run: wall time, minutes per role
+(the plan check is its own column), PM turns, dev/tester jobs, re-tests, plugin version. The orchestrator
+runs it after every run and keeps the history in `<task>/metrics.json`; `/tf:status --metrics` lists all runs
+so two plugin versions can be compared. A change made for speed names the number it should move and is
+checked against the next runs.
+
+## Operating systems
+
+Everything that differs between macOS, Linux and Windows is in `scripts/platform.mjs` (shell, ports and
+process trees, dependency copies, paths); `tests/platform.mjs` exercises it for real and CI runs it on all
+three. The support table is in the README.
 
 ## Maintenance commands
 
 - `task.mjs legacy <root> [--apply]` folds old suffixed folders into `<SLUG>/history/legacy/` and removes
-  clean legacy worktrees (dry run unless `--apply`).
-- `resources.mjs reap` promotes a merged task's passing flows into `.pipeline/_regression/`
-  (`resources.mjs promote` by hand); `/tf:e2e --regression` runs them.
+  clean legacy worktrees; `task.mjs migrate-worktrees` moves old flat `<slug>-<key>` worktrees (both are a
+  dry run unless `--apply`).
+- `resources.mjs promote` copies a task's passing flows into `.pipeline/_regression/` by hand (reap does it
+  on merge); `/tf:e2e --regression` runs them.
 - `doctor.mjs <root>` checks tools, agents, config, repos, Playwright and the config's `## Doctor` lines.
 
-## Global vs workspace
+## Plugin vs workspace
 
-Plugin (`tf@sdc`: skills, agents, workflow, scripts, guidelines): orchestration, roles, hard
-rules, file layout, flow contract, formats. Workspace (`<root>/.claude/task-flow.md`): repos,
-excluded and read-only paths, test policy, tracker, spec sources, provisioning recipes, flow
-targets/helpers, evidence and close-out rules, language.
+Plugin (`tf@sdc`: skills, agents, engine, scripts, guidelines): orchestration, roles, hard rules, file
+layout, flow contract, formats. Workspace (`<root>/.claude/task-flow.md`): repos, excluded and read-only
+paths, test policy, tracker, spec sources, provisioning recipes, flow targets/helpers, evidence and close-out
+rules, language.
