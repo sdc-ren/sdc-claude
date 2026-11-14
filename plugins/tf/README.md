@@ -405,7 +405,7 @@ node <plugin>/scripts/flow-peek.mjs .pipeline/PROJ-123 /some/screen           # 
 | Need | Notes |
 |---|---|
 | Claude Code with Workflows enabled | Paid plan or API; allow the Workflow tool when asked |
-| Node ≥ 20, git, `gh` logged in | `gh auth login` + `gh auth setup-git` for private repos |
+| Node ≥ 22 (a supported LTS line, kept patched), git, `gh` logged in | `gh auth login` + `gh auth setup-git` for private repos |
 | Playwright | Any package that depends on `@playwright/test`, referenced in the config |
 | Per workspace | Whatever the config's provisioning needs: Docker DBs, Android SDK + AVD, Flutter… |
 | macOS, Linux or Windows | See the table below. On Windows install [Git for Windows](https://git-scm.com/download/win): tf runs its commands through Git Bash, as Claude Code does. |

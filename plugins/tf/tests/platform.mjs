@@ -177,3 +177,14 @@ test('doctor and the reaper status run on this system', () => {
   assert.match(status, /installed/)
   rmSync(root, { recursive: true, force: true })
 })
+
+test('task.mjs: a PR link cannot smuggle a command into the shell', () => {
+  const root = tmp('inject')
+  const mark = join(root, 'pwned')
+  // No "/" in the payload (the link pattern stops at one): the file would appear in the working directory.
+  for (const input of ['https://github.com/a;touch${IFS}pwned;b/r/pull/1', 'https://github.com/o/$(touch${IFS}pwned)/pull/1', 'https://github.com/o/`touch${IFS}pwned`/pull/2']) {
+    try { node('task.mjs', ['resolve', root, input], { cwd: root, env: { ...process.env, HOME: root, USERPROFILE: root } }) } catch {}
+  }
+  assert.ok(!existsSync(mark), 'no command ran')
+  rmSync(root, { recursive: true, force: true })
+})

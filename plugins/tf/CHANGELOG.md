@@ -26,6 +26,12 @@ All notable changes to the `tf` plugin are documented here. The format follows
 ### Changed
 - Tracker login from Chrome cookies is macOS only; elsewhere `browser.mjs auth` opens a browser to log in once.
 
+### Security
+- `task.mjs resolve`: the owner and repo of a pasted PR link went into a shell command unescaped; a crafted
+  link could run a command. They are now limited to GitHub's name characters and passed to `gh` without a shell.
+- Node 20 is end-of-life: tf now needs Node ≥ 22, CI runs 22, 24 and 26, and doctor warns when the running
+  Node is older than the latest security release it knows (2026-11-11: 22.23.5, 24.22.3, 26.13.1).
+
 ### Fixed
 - `resources.mjs end-run` exited 1 whenever the task still held a worktree, DB or port (which is always,
   until the PR merges). It now fails only when a resource it tried to release could not be released.

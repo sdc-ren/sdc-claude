@@ -25,7 +25,14 @@ const check = (label, ok, detail = '', required = true) => rows.push({ label, st
 
 // Tools
 const nodeMajor = Number(process.versions.node.split('.')[0])
-check('node ≥ 20', nodeMajor >= 20, process.version)
+check('node ≥ 22', nodeMajor >= 22, nodeMajor >= 22 ? process.version : `${process.version} — Node 20 and older are end-of-life and get no security fixes`)
+// Security floor per supported line (Node.js security releases of 2026-11-11). A newer release may have
+// raised it since: https://nodejs.org/en/blog/vulnerability
+const FLOOR = { 22: [22, 23, 5], 24: [24, 22, 3], 26: [26, 13, 1] }
+const ver = process.versions.node.split('.').map(Number)
+const floor = FLOOR[nodeMajor]
+const behind = floor && (ver[1] < floor[1] || (ver[1] === floor[1] && ver[2] < floor[2]))
+if (nodeMajor >= 22) check('node has the latest known security fixes', !behind && nodeMajor % 2 === 0, floor ? `${process.version} is older than v${floor.join('.')} (security release 2026-11-11) — update Node` : `${process.version} is not an LTS line — use 22, 24 or 26`, false)
 check('git', sh('git --version').ok, sh('git --version').out)
 const gh = sh('gh auth status 2>&1')
 check('gh installed + logged in', gh.ok, gh.ok ? 'authenticated' : gh.out)

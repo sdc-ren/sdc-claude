@@ -15,7 +15,7 @@
 //   legacy <root> [--repos a,b] [--apply]   fold old suffixed folders/worktrees into the ticket folder (dry run by default)
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, appendFileSync } from 'node:fs'
-import { execSync } from 'node:child_process'
+import { execSync, execFileSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { SH, base, nodeCmd, under } from './platform.mjs'
@@ -35,10 +35,13 @@ export function keyFrom(text) {
 
 function prKey(input) {
   // https://github.com/o/r/pull/12 or o/r#12
-  const m = String(input).match(/github\.com\/([^/\s]+)\/([^/\s]+)\/pull\/(\d+)/) || String(input).match(/^([\w.-]+)\/([\w.-]+)#(\d+)$/)
+  // Owner and repo are limited to the characters GitHub allows: this text can come from a ticket or a pasted
+  // link, and it must never reach a shell as anything but a name.
+  const m = String(input).match(/github\.com\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)(?![\w.-])/) || String(input).match(/^([\w.-]+)\/([\w.-]+)#(\d+)$/)
   if (!m) return null
   const [, owner, repo, num] = m
-  const info = sh(`gh pr view ${num} --repo ${owner}/${repo} --json title,headRefName,body`)
+  let info = ''
+  try { info = execFileSync('gh', ['pr', 'view', num, '--repo', `${owner}/${repo}`, '--json', 'title,headRefName,body'], { stdio: 'pipe', timeout: 30_000, windowsHide: true }).toString() } catch {}
   let key = null
   try {
     const j = JSON.parse(info)
