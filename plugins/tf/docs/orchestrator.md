@@ -42,7 +42,7 @@ language; `writingLang` = `Writing language` → a `Writing language:` line in t
    `node $S/task.mjs new-round <dir> <round>` (moves plan/board/jobs into `history/`).
 5. **Housekeeping** — `node $S/resources.mjs register-root <cwd>`, `node $S/resources.mjs reap`;
    `node $S/fresh.mjs <path>:<base> …` for the config repos (report skipped checkouts in one line).
-   Reaper missing (`launchctl list | grep task-flow-reap` empty) → offer `sh $S/install-reaper.sh` once (re-run it after a plugin update; it copies the reaper to a stable path).
+   Reaper missing (`node $S/reaper.mjs status` exits 1) → offer `node $S/reaper.mjs install` once (macOS launchd, Linux systemd timer or cron, Windows Task Scheduler; re-run it after a plugin update — it copies the reaper to a stable path).
 6f. **Feedback mode instead of step 6** — no tracker read. PRs = every PR of the task from `resolve` (`prs`, open AND merged — the
    PM needs to know which may not be pushed to — plus the input PR URL). `node $S/pr-feedback.mjs fetch <dir> <pr urls…>` → `<dir>/feedback.md` + JSON summary.
    Nothing open (`total` 0, no new reviews or comments) → tell the user in one line and stop (unlock), no

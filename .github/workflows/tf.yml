@@ -1,0 +1,33 @@
+name: tf
+
+on:
+  pull_request:
+    paths: ['plugins/tf/**', '.github/workflows/tf.yml']
+  push:
+    branches: [main]
+    paths: ['plugins/tf/**', '.github/workflows/tf.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: ${{ matrix.os }} · node ${{ matrix.node }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+        node: [22, 24, 26]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - name: Scripts parse
+        shell: bash
+        run: for f in plugins/tf/scripts/*.mjs; do node --check "$f"; done
+      - name: Executor rules (mock agents)
+        run: node --test plugins/tf/tests/engine.mjs
+      - name: Platform layer (this operating system)
+        run: node --test plugins/tf/tests/platform.mjs

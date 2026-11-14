@@ -13,13 +13,15 @@
 // The pool is not a task resource (no resources.json entry); prune never removes `_pool/*` worktrees.
 
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, writeFileSync, copyFileSync, readdirSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync, copyFileSync, readdirSync, rmSync } from 'node:fs'
 import { execSync, execFileSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+import { SH } from './platform.mjs'
+
 const HERE = dirname(fileURLToPath(import.meta.url))
-const sh = (cmd, cwd) => execSync(cmd, { cwd, stdio: 'pipe', shell: '/bin/sh', timeout: 900_000 }).toString().trim()
+const sh = (cmd, cwd) => execSync(cmd, { cwd, stdio: 'pipe', shell: SH, windowsHide: true, timeout: 900_000 }).toString().trim()
 const trySh = (cmd, cwd) => { try { return { ok: true, out: sh(cmd, cwd) } } catch (e) { return { ok: false, out: String(e.stderr || e.message).trim() } } }
 const q = JSON.stringify
 const out = (o) => { console.log(JSON.stringify(o)); process.exit(0) }
@@ -57,7 +59,7 @@ function fill([root, key, repoPath], o) {
   if (o.lock && o.dirs) {
     const stamp = existsSync(join(pool, STAMP)) ? JSON.parse(readFileSync(join(pool, STAMP), 'utf8')) : {}
     const now = hash(join(pool, o.lock))
-    if (stamp.lock && stamp.lock !== now) for (const d of o.dirs.split(',')) trySh(`rm -rf ${q(join(pool, d))}`)
+    if (stamp.lock && stamp.lock !== now) for (const d of o.dirs.split(',')) rmSync(join(pool, d), { recursive: true, force: true })
     try { deps = JSON.parse(execFileSync(process.execPath, [join(HERE, 'fastdeps.mjs'), repo, pool, '--lock', o.lock, '--dirs', o.dirs], { stdio: 'pipe', timeout: 900_000 }).toString()) } catch {}
     // fastdeps could not clone (lock differs / main checkout's deps are stale): install in the pool itself —
     // fill runs in the background, so the slow install happens here instead of in the next task's setup.

@@ -11,21 +11,24 @@
 //   auth <name> --url <site> [--playwright <package.json>] [--profile "Profile 1"]
 //     Ensure ~/.claude/task-flow/auth/<name>.json holds a logged-in session for <site>:
 //     1) existing saved session still valid → done
-//     2) else copy the cookies of the user's Chrome profile that has cookies for the site
+//     2) macOS only: else copy the cookies of the user's Chrome profile that has cookies for the site
 //        (macOS asks the user to allow "Chrome Safe Storage" once) → save if logged in
 //     3) else open a visible browser and wait for the user to log in → save
 //   check <name> --url <site>   exit 0 if the saved session is still logged in
 
 import { createRequire } from 'node:module'
-import { homedir, tmpdir } from 'node:os'
+import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { existsSync, mkdirSync, mkdtempSync, copyFileSync, readdirSync, rmSync, chmodSync, writeFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { add, drop } from './resources.mjs'
+import { chromeProfiles, killCmd, stateDir } from './platform.mjs'
 
-const AUTH_DIR = join(homedir(), '.claude', 'task-flow', 'auth')
-const CHROME_DIR = join(homedir(), 'Library', 'Application Support', 'Google', 'Chrome')
+const AUTH_DIR = join(stateDir(), 'auth')
+// Reading Chrome's cookie store is implemented for macOS only; elsewhere this is '' and `auth` goes
+// straight to the visible browser where the user logs in once.
+const CHROME_DIR = chromeProfiles()
 const LOGIN_RE = /next_path=|\/login|\/signin|\/sign-in|id\.atlassian\.com|accounts\.google\.com|\/auth\//i
 
 export const authFile = (name) => join(AUTH_DIR, `${name}.json`)
@@ -44,7 +47,7 @@ export async function openBrowser({ root, slug, playwrightFrom, auth, headless =
   const { chromium } = playwright(playwrightFrom)
   const server = await chromium.launchServer({ headless })
   const pid = server.process().pid
-  if (root && slug) add(root, slug, { kind: 'browser', id: String(pid), release: `kill ${pid} 2>/dev/null || true`, when: 'run-end' })
+  if (root && slug) add(root, slug, { kind: 'browser', id: String(pid), release: killCmd(pid), when: 'run-end' })
   const browser = await chromium.connect(server.wsEndpoint())
   const storageState = auth && existsSync(authFile(auth)) ? authFile(auth) : undefined
   const context = await browser.newContext({ ...contextOptions, ...(storageState && { storageState }) })
@@ -75,7 +78,7 @@ export async function checkAuth(name, url, playwrightFrom) {
 }
 
 function chromeProfileFor(host, wanted) {
-  if (!existsSync(CHROME_DIR)) return null
+  if (!CHROME_DIR || !existsSync(CHROME_DIR)) return null
   const profiles = wanted ? [wanted] : readdirSync(CHROME_DIR).filter((d) => d === 'Default' || d.startsWith('Profile '))
   const domain = host.split('.').slice(-2).join('.')
   for (const p of profiles) {

@@ -13,27 +13,40 @@ import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
+import { SH, info, which } from './platform.mjs'
+import { reaperInstalled } from './reaper.mjs'
 
 const root = resolve(process.argv[2] || '.')
 const cfgPath = join(root, '.claude', 'task-flow.md')
 const cfg = existsSync(cfgPath) ? readFileSync(cfgPath, 'utf8') : ''
-const sh = (cmd, timeout = 20_000) => { try { return { ok: true, out: execSync(cmd, { stdio: 'pipe', shell: '/bin/sh', timeout, cwd: root }).toString().trim() } } catch (e) { return { ok: false, out: String(e.stderr || e.stdout || e.message).trim() } } }
+const sh = (cmd, timeout = 20_000) => { try { return { ok: true, out: execSync(cmd, { stdio: 'pipe', shell: SH, windowsHide: true, timeout, cwd: root }).toString().trim() } } catch (e) { return { ok: false, out: String(e.stderr || e.stdout || e.message).trim() } } }
 const rows = []
 const check = (label, ok, detail = '', required = true) => rows.push({ label, status: ok ? 'ok' : required ? 'FAIL' : 'warn', detail: ok && !required ? '' : String(detail).split('\n')[0].slice(0, 110) })
 
 // Tools
 const nodeMajor = Number(process.versions.node.split('.')[0])
-check('node ≥ 20', nodeMajor >= 20, process.version)
+check('node ≥ 22', nodeMajor >= 22, nodeMajor >= 22 ? process.version : `${process.version} — Node 20 and older are end-of-life and get no security fixes`)
+// Security floor per supported line (Node.js security releases of 2026-11-11). A newer release may have
+// raised it since: https://nodejs.org/en/blog/vulnerability
+const FLOOR = { 22: [22, 23, 5], 24: [24, 22, 3], 26: [26, 13, 1] }
+const ver = process.versions.node.split('.').map(Number)
+const floor = FLOOR[nodeMajor]
+const behind = floor && (ver[1] < floor[1] || (ver[1] === floor[1] && ver[2] < floor[2]))
+if (nodeMajor >= 22) check('node has the latest known security fixes', !behind && nodeMajor % 2 === 0, floor ? `${process.version} is older than v${floor.join('.')} (security release 2026-11-11) — update Node` : `${process.version} is not an LTS line — use 22, 24 or 26`, false)
 check('git', sh('git --version').ok, sh('git --version').out)
 const gh = sh('gh auth status 2>&1')
 check('gh installed + logged in', gh.ok, gh.ok ? 'authenticated' : gh.out)
-check('codegraph CLI', sh('command -v codegraph').ok, 'used by PM/reviewer for impact search', false)
-check('WebP encoder (cwebp/ffmpeg)', sh('command -v cwebp').ok || sh('command -v ffmpeg').ok, 'falls back to Playwright Chromium', false)
-const tmp = mkdtempSync(join(tmpdir(), 'tf-doctor-'))
-writeFileSync(join(tmp, 'a'), 'x')
-check('APFS clone (cp -c) for fastdeps', sh(`cp -c ${JSON.stringify(join(tmp, 'a'))} ${JSON.stringify(join(tmp, 'b'))}`).ok, 'without it fastdeps copies normally (slower)', false)
-rmSync(tmp, { recursive: true, force: true })
-check('reaper (launchd) installed', sh('launchctl list 2>/dev/null | grep -q task-flow-reap').ok, 'run: sh <plugin>/scripts/install-reaper.sh', false)
+check('codegraph CLI', !!which('codegraph'), 'used by PM/reviewer for impact search', false)
+check('WebP encoder (cwebp/ffmpeg)', !!which('cwebp') || !!which('ffmpeg'), 'falls back to Playwright Chromium', false)
+// What this operating system offers (scripts/platform.mjs).
+const sys = info()
+check(`system: ${sys.os}`, true)
+check(`shell: ${sys.shell}`, sys.shellOk, sys.shellOk ? '' : 'Windows needs Git for Windows (Git Bash): the scripts and the config recipes run through it. Install it, or set CLAUDE_CODE_GIT_BASH_PATH to bash.exe')
+check(`port lookup (${sys.portTool || 'none'})`, !!sys.portTool, 'install lsof: without it serve.mjs cannot tell whether a port is taken', false)
+if (!sys.cwdOfProcess) check('owner of a busy port', false, 'Windows cannot tell which folder a process runs from: serve.mjs trusts the server it started itself', false)
+if (!sys.chromeCookieImport) check('tracker login from Chrome cookies', false, 'macOS only — here `browser.mjs auth` opens a browser once for you to log in', false)
+check(`dependency copy for new worktrees: ${sys.clone}`, sys.os === 'macos', 'a plain copy works, it is only slower', false)
+check('reaper installed', reaperInstalled(), 'run: node <plugin>/scripts/reaper.mjs install', false)
 
 // Claude setup
 const PLUGIN = resolve(dirname(fileURLToPath(import.meta.url)), '..')

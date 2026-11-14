@@ -27,7 +27,7 @@ for (let i = 2; i < argv.length; i++) {
 }
 const manifest = existsSync(join(dir, 'flows.json')) ? JSON.parse(readFileSync(join(dir, 'flows.json'), 'utf8')) : {}
 const target = opts.target || 'local'
-const root = dir.split('/.pipeline/')[0]
+const root = rootOfTask(dir)
 const env = { ...process.env, ...((manifest.targets || {})[target] || {}), ...opts.env, TARGET: target, TF_ROOT: root, TF_SLUG: basename(dir), FLOW_LIB: join(root, '.pipeline', '_lib') }
 if (opts.playwright) env.PLAYWRIGHT_FROM = resolve(opts.playwright)
 Object.assign(process.env, env)

@@ -9,53 +9,54 @@
 // Use the serial everywhere: `adb -s <serial> …`, `maestro --device <serial> test …`.
 
 import { spawn, execSync } from 'node:child_process'
-import { homedir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { existsSync, openSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { add, drop, load, taken } from './resources.mjs'
+import { SH, androidSdk, pidsOnPort, posix, sdkTool } from './platform.mjs'
 
-const sdkPath = (flag) => flag || process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || join(homedir(), 'Library', 'Android', 'sdk')
-const sh = (cmd) => { try { return execSync(cmd, { stdio: 'pipe' }).toString() } catch { return '' } }
+const sdkPath = androidSdk
+const sh = (cmd) => { try { return execSync(cmd, { stdio: 'pipe', shell: SH, windowsHide: true }).toString() } catch { return '' } }
+const qp = (p) => `"${posix(p)}"`
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 function freePort(root, adb) {
   const mine = new Set(taken(root, 'emulator'))
-  const running = sh(`${adb} devices`)
+  const running = sh(`${qp(adb)} devices`)
   for (let p = 5560; p <= 5680; p += 2) {
     const serial = `emulator-${p}`
     if (mine.has(serial) || running.includes(serial)) continue
-    if (sh(`lsof -nP -iTCP:${p} -sTCP:LISTEN`) || sh(`lsof -nP -iTCP:${p + 1} -sTCP:LISTEN`)) continue
+    if (pidsOnPort(p).length || pidsOnPort(p + 1).length) continue
     return p
   }
   throw new Error('no free emulator port in 5560–5680')
 }
 
 async function start(root, slug, avd, sdk, windowed) {
-  const adb = join(sdk, 'platform-tools', 'adb')
-  const emulator = join(sdk, 'emulator', 'emulator')
+  const adb = sdkTool(sdk, 'platform-tools', 'adb')
+  const emulator = sdkTool(sdk, 'emulator', 'emulator')
   if (!existsSync(emulator)) throw new Error(`emulator not found under ${sdk}`)
-  if (!sh(`${emulator} -list-avds`).split('\n').includes(avd)) throw new Error(`AVD "${avd}" not found`)
+  if (!sh(`${qp(emulator)} -list-avds`).split(/\r?\n/).includes(avd)) throw new Error(`AVD "${avd}" not found`)
   const port = freePort(root, adb)
   const serial = `emulator-${port}`
-  add(root, slug, { kind: 'emulator', id: serial, release: `${adb} -s ${serial} emu kill 2>/dev/null || true`, when: 'run-end' })
+  add(root, slug, { kind: 'emulator', id: serial, release: `${qp(adb)} -s ${serial} emu kill 2>/dev/null || true`, when: 'run-end' })
   const log = openSync(join(root, '.pipeline', slug, `${serial}.log`), 'a')
   const args = ['-avd', avd, '-port', String(port), '-read-only', '-no-snapshot-save', '-no-boot-anim', '-no-audio']
   if (!windowed) args.push('-no-window')
-  spawn(emulator, args, { detached: true, stdio: ['ignore', log, log] }).unref()
+  spawn(emulator, args, { detached: true, windowsHide: true, stdio: ['ignore', log, log] }).unref()
   for (let i = 0; i < 150; i++) {
     await sleep(2000)
-    if (sh(`${adb} -s ${serial} shell getprop sys.boot_completed`).trim() === '1') return serial
+    if (sh(`${qp(adb)} -s ${serial} shell getprop sys.boot_completed`).trim() === '1') return serial
   }
-  sh(`${adb} -s ${serial} emu kill`)
+  sh(`${qp(adb)} -s ${serial} emu kill`)
   drop(root, slug, 'emulator', serial)
   throw new Error(`${serial} did not boot within 5 minutes (see .pipeline/${slug}/${serial}.log)`)
 }
 
 function stop(root, slug, sdk) {
-  const adb = join(sdk, 'platform-tools', 'adb')
+  const adb = sdkTool(sdk, 'platform-tools', 'adb')
   for (const e of load(root, slug).entries.filter((x) => x.kind === 'emulator')) {
-    sh(`${adb} -s ${e.id} emu kill`)
+    sh(`${qp(adb)} -s ${e.id} emu kill`)
     drop(root, slug, 'emulator', e.id)
     console.log(`stopped ${e.id}`)
   }

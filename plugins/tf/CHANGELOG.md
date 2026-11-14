@@ -4,6 +4,38 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.6.0] — 2026-11-14
+
+### Added
+- **Linux and Windows.** Everything that differs between systems now lives in `scripts/platform.mjs`; no
+  other script calls `lsof`, `launchctl`, `/bin/sh` or a macOS path.
+  - Shell: `/bin/sh`, or Git Bash on Windows (`CLAUDE_CODE_GIT_BASH_PATH` honoured) — doctor fails without it.
+  - Ports and processes: `lsof` or `ss` on Linux, `netstat` + `taskkill` on Windows; servers are started as a
+    process tree that `serve.mjs stop` takes down on every system.
+  - Reaper: `scripts/reaper.mjs install|status|uninstall` — launchd, a systemd user timer (cron without
+    systemd), or a Task Scheduler task. `install-reaper.sh` still works and calls it.
+  - Dependency copies: APFS clone, reflink where Linux has it, a plain copy elsewhere.
+  - Paths: separators, `~/.claude` via `CLAUDE_CONFIG_DIR`, Android SDK defaults, `.exe`/`.bat` tools,
+    Windows paths in the tool guard.
+  - `node platform.mjs free-port <port>` and `kill <pid>` for workspace configs (the template uses them).
+- **CI** (`.github/workflows/tf.yml`): script syntax, the executor rules and `tests/platform.mjs` — real
+  ports, process trees, a server started and stopped by `serve.mjs`, resources released — on Ubuntu, macOS
+  and Windows, Node 20 and 22.
+- `/tf:status --doctor` shows the system, its shell, and what works differently there.
+
+### Changed
+- Tracker login from Chrome cookies is macOS only; elsewhere `browser.mjs auth` opens a browser to log in once.
+
+### Security
+- `task.mjs resolve`: the owner and repo of a pasted PR link went into a shell command unescaped; a crafted
+  link could run a command. They are now limited to GitHub's name characters and passed to `gh` without a shell.
+- Node 20 is end-of-life: tf now needs Node ≥ 22, CI runs 22, 24 and 26, and doctor warns when the running
+  Node is older than the latest security release it knows (2026-11-11: 22.23.5, 24.22.3, 26.13.1).
+
+### Fixed
+- `resources.mjs end-run` exited 1 whenever the task still held a worktree, DB or port (which is always,
+  until the PR merges). It now fails only when a resource it tried to release could not be released.
+
 ## [1.5.0] — 2026-11-13
 
 ### Added
