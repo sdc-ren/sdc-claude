@@ -188,3 +188,46 @@ test('task.mjs: a PR link cannot smuggle a command into the shell', () => {
   assert.ok(!existsSync(mark), 'no command ran')
   rmSync(root, { recursive: true, force: true })
 })
+
+test('resources.mjs: a worktree only a tool dirtied is freed; real work still keeps it', () => {
+  const root = tmp('touched')
+  const env = { ...process.env, HOME: root, USERPROFILE: root }
+  mkdirSync(join(root, '.claude'), { recursive: true })
+  writeFileSync(join(root, '.claude', 'task-flow.md'), '# config\n\n## Tool-touched files\n- `analysis_options.yaml` — flutter pub get adds exclude lines\n- `./ios/Podfile.lock`\n\n## Doctor\n- `not-a-file.txt`\n')
+  const make = (slug) => {
+    const wt = join(root, '.worktrees', slug, 'mobile')
+    mkdirSync(wt, { recursive: true })
+    mkdirSync(join(root, '.pipeline', slug), { recursive: true })
+    const git = (args) => sh(`git -c user.email=t@example.com -c user.name=t -c commit.gpgsign=false ${args}`, wt)
+    git('init -q')
+    writeFileSync(join(wt, 'analysis_options.yaml'), 'analyzer:\n')
+    writeFileSync(join(wt, 'main.dart'), 'void main() {}\n')
+    git('add .')
+    git('commit -q -m base')
+    // Pushed to a remote, so the only thing that can keep the worktree is an uncommitted change.
+    const origin = join(root, `${slug}-origin.git`)
+    sh(`git init -q --bare ${JSON.stringify(origin)}`, root)
+    git(`remote add origin ${JSON.stringify(origin)}`)
+    git('push -q origin HEAD')
+    git('fetch -q origin')
+    node('resources.mjs', ['add', root, slug, '--kind', 'worktree', '--id', wt, '--release', 'echo freed'], { env })
+    return wt
+  }
+  const held = (slug) => { const f = join(root, '.pipeline', slug, 'resources.json'); return existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')).entries.length : 0 }
+
+  const tool = make('T-1')
+  writeFileSync(join(tool, 'analysis_options.yaml'), 'analyzer:\n  exclude:\n    - build/**\n')
+  assert.deepEqual(JSON.parse(node('resources.mjs', ['restore-touched', root, tool], { env })).restored, ['analysis_options.yaml'])
+  writeFileSync(join(tool, 'analysis_options.yaml'), 'analyzer:\n  exclude:\n    - build/**\n')
+  node('resources.mjs', ['release', root, 'T-1'], { env })
+  assert.equal(held('T-1'), 0, 'freed: its only change was a tool-touched file')
+  assert.equal(readFileSync(join(tool, 'analysis_options.yaml'), 'utf8'), 'analyzer:\n')
+
+  const work = make('T-2')
+  writeFileSync(join(work, 'analysis_options.yaml'), 'analyzer:\n  exclude:\n    - build/**\n')
+  writeFileSync(join(work, 'main.dart'), 'void main() { print(1); }\n')
+  try { node('resources.mjs', ['release', root, 'T-2'], { env }) } catch {}
+  assert.equal(held('T-2'), 1, 'kept: main.dart is real work')
+  assert.equal(readFileSync(join(work, 'main.dart'), 'utf8'), 'void main() { print(1); }\n')
+  rmSync(root, { recursive: true, force: true })
+})

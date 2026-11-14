@@ -4,6 +4,16 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.6.2] — 2026-11-14
+
+### Fixed
+- **Worktrees a tool dirtied were never freed.** `flutter pub get` rewrites `analysis_options.yaml` on its
+  own, so every mobile worktree counted as "uncommitted changes" and the reaper kept it for good (five of
+  them on the measured workspace); the same file cost RVD-289 a gate round as an out-of-plan change. A
+  workspace can now list such files under `## Tool-touched files`: tf puts them back as committed before a
+  worktree is checked for unsaved work, and the reviewer gate does the same before reading the diff
+  (`resources.mjs restore-touched <root> <worktree>`). Only tracked, modified, listed files are restored.
+
 ## [1.6.1] — 2026-11-14
 
 ### Changed
