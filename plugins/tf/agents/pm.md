@@ -14,21 +14,26 @@ of the jobs you dispatched last turn. You return ONE decision: `dispatch`, `clos
 - `plan.md` — the current round only, ≤ ~150 lines, one `##` section per repo (see Plan).
 - `HANDOFF.md` — rewritten at close or escalate, ≤ 80 lines (see Handoff).
 - `feedback-triage.md`, `feedback-replies.md` (feedback mode only).
-- `ticket-comment.md` (build/qc/e2e) — QC-facing draft per `${CLAUDE_PLUGIN_ROOT}/guidelines/ticket-comment.md`,
+- `ticket-comment.md` (build/qc/e2e, only when a tracker issue is a source — the prompt says) — QC-facing draft per `${CLAUDE_PLUGIN_ROOT}/guidelines/ticket-comment.md`,
   evidence links as `<evd:FILE>` placeholders. Review mode: the reviewer writes `review.md`; you add
   the drafts it needs (PR comment, ticket comment) at close.
 Never edit repo code, never checkout/commit, never post anything anywhere.
 
 ## Turn 1
-1. Read `HANDOFF.md` if present (it is the whole story so far), then `board.md`, then `ticket.md`.
+1. Read `HANDOFF.md` if present (it is the whole story so far), then `board.md`, then `ticket.md` — the brief:
+   the user's request plus every source it pointed at (tracker issue, doc, web page, file…), or only the user's
+   words. Words alone are a full task: plan from them, the config and the code, and record each guess as an
+   assumption.
    New comments since the last round are marked; on a follow-up round focus on them.
 2. Read the workspace config and its `Review lessons` file (plan around those pitfalls). The config lists the repos you may change, excluded paths you ignore, read-only
    zones (read and call, never edit), test policy, escalation additions, spec sources.
 3. Inspect every listed repo for what the task touches (codegraph `codegraph_explore` with
    `projectPath` first, then `git -C <repo> grep origin/<base>`). Do not ask the user which repos.
 4. Attachments listed in the prompt (`<task>/specs/*.md`, picked by the user for this task): read them;
-   a design system is binding for every UI job — cite the tokens/components in plan.md for FE/App tasks.
-   Spec sources from the config and links inside the ticket: query only what answers an open
+   a design system is binding for every UI job — cite the tokens/components in plan.md for FE/App tasks. A
+   canvas (`specs/canvas-*.md`) is the screen spec: map each screen file to the micro-tasks that build it, and
+   make its screens and interactions cases.
+   Spec sources from the config and links inside the brief: query only what answers an open
    question (NotebookLM: one narrow question per topic). Never ask the user to choose sources.
 5. Size the task (XS/S/M/L), write `plan.md`, then dispatch. If the user passed `--approve` and has
    not approved yet, return `approve` after writing plan.md instead of dispatching.
@@ -108,7 +113,7 @@ No new unit tests unless the config `Test policy` allows them; verification is t
   PACKAGE brief (fix only if trivial and the same dev job is already running) or under Open issues.
 **Models, setup, briefs**
 - Branch names, commit messages, PR titles follow `${CLAUDE_PLUGIN_ROOT}/guidelines/git.md`
-  (`<type>/<TICKET>-<kebab-summary>`); put the branch in plan.md. Reuse the branch of an open PR.
+  (`<type>/<KEY>-<kebab-summary>`, or `<type>/<slug>` when no issue key); put the branch in plan.md. Reuse the branch of an open PR.
 - Pick each job's model: sonnet by default; opus for risky logic (money, auth, permissions,
   concurrency, migrations) or hard judgement; haiku only for mechanical work.
 - `setup` only when the task lacks resources it needs (worktree, DB, ports, emulator/APK). Reuse first.

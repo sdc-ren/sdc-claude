@@ -40,11 +40,12 @@ The roster is a menu. The PM uses the fewest roles that satisfy the hard rules.
 
 | Command | Mode | Allowed roles | Ends with |
 |---|---|---|---|
-| `/tf:build <ticket\|text>` | build | setup, dev, tester, reviewer | PR(s) ready |
-| `/tf:qc <ticket>` | qc | setup, dev, tester, reviewer | existing PR updated (or new PR if merged) |
-| `/tf:address-review <ticket\|PR> [--check]` | feedback | setup, dev, tester, reviewer (none with `--check`) | triage, fixes pushed to the same PR, reply drafts |
-| `/tf:review <PR\|ticket>` | review | setup, tester, reviewer | review report + PR/ticket comment drafts |
-| `/tf:e2e <PR\|ticket> [--cases a,b]` | e2e | setup, tester | evidence + ticket comment draft |
+| `/tf:build <anything>` | build | setup, dev, tester, reviewer | PR(s) ready |
+| `/tf:qc <task>` | qc | setup, dev, tester, reviewer | existing PR updated (or new PR if merged) |
+| `/tf:address-review <task\|PR> [--check]` | feedback | setup, dev, tester, reviewer (none with `--check`) | triage, fixes pushed to the same PR, reply drafts |
+| `/tf:review <PR\|task>` | review | setup, tester, reviewer | review report + PR/ticket comment drafts |
+| `/tf:e2e <PR\|task> [--cases a,b]` | e2e | setup, tester | evidence + ticket comment draft |
+| `/tf:demo <canvas> [words]` | — (no workflow, `docs/demo.md`) | none | clickable demo of the canvas, local or one artifact |
 
 There is no `--repos`: the PM inspects every repo the workspace config lists. Flags are in the README.
 
@@ -123,7 +124,7 @@ next PM turn back on opus.
 
 ```
 .pipeline/<SLUG>/
-  ticket.md        verbatim ticket (session)                       read by PM
+  ticket.md        the brief: request + every source verbatim       read by PM
   HANDOFF.md       ≤ 80 lines, rewritten by PM at close             read FIRST every round
   plan.md          current round micro-tasks, contract, cases (PM)  jobs read their section
   board.md         PM ledger: dispatches, results, assumptions, open issues

@@ -24,9 +24,11 @@ Keep sections short; link to longer docs instead of copying them.
 ## Escalation additions (on top of the PM's built-in bar)
 - <extra cases that must stop for the user, or "none">
 
-## Tracker and spec sources
-- Ticket tracker: <URL> — `browser.mjs auth <name> --url <URL> --playwright <package.json>`
-- Spec sources the PM may query: <NotebookLM notebook, docs paths, Figma>
+## Sources (optional — any link works without a line here; a line says how to read a host that needs it)
+- <name>: <URL or host> — <tracker | docs | design | spec> — <how to read: connector, `browser.mjs auth <name> --url <URL> --playwright <package.json>`, or public fetch> [— keys: PROJ, OPS]
+- e.g. jira: https://acme.atlassian.net — tracker — `browser.mjs auth jira …` — keys: PROJ
+- e.g. notion: notion.so — docs — Notion connector
+- Spec sources the PM may query: <NotebookLM notebook, docs paths>
 
 ## Design & artifacts (optional — the `@` list already finds this workspace's items itself)
 - Design system: <title — https://claude.ai/artifact/…>   (pin a default, also listed under `@`)

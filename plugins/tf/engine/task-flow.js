@@ -5,7 +5,7 @@
 // the PM, and repeats until the PM closes or escalates. No filesystem here: agents write their own files,
 // the orchestrator handles lock/unlock and close-out around the run.
 //
-// args: { root, slug, dir, mode: 'build'|'qc'|'feedback'|'review'|'e2e', round, input, description?, cases?, notes?,
+// args: { root, slug, dir, mode: 'build'|'qc'|'feedback'|'review'|'e2e', round, input, description?, sources?, tracker?, cases?, notes?,
 //         prs?: {repo: url}, worktrees?: {repo: path|null}, worktreePaths?: {repo: path}, format?: 'new'|'old'|'current',
 //         flags?: { approve?: bool, draft?: bool, check?: bool (feedback: triage only) }, approved?: bool, lang?, writingLang?, scripts, config }
 // returns { status: 'done'|'triaged'|'verified'|'reviewed'|'escalate'|'approve'|'handoff'|'error', … }
@@ -153,12 +153,14 @@ let seq = 0
 const context =
   `Task ${slug} · mode ${mode} · round ${round}\nWorkspace root: ${root}\nTask folder: ${dir}\nWorkspace config: ${cfg}\nScripts: ${S}\n` +
   `Input: ${A.input || ''}\n` + (A.description ? `Description: ${A.description}\n` : '') +
+  `Brief: ${dir}/ticket.md (the user's request and every source it points at${A.sources ? `: ${A.sources}` : ''}). ` +
+  (A.tracker === false ? 'No tracker issue is a source: skip ticket-comment.md; put the QC-facing summary in HANDOFF.md.\n' : 'A tracker issue is a source: ticket-comment.md is drafted at close.\n') +
   (A.cases ? `Target cases: ${A.cases}\n` : '') + (A.notes ? `User notes: ${A.notes}\n` : '') +
   `PRs: ${JSON.stringify(prs)}\nWorktrees (existing): ${JSON.stringify(worktrees)}\nWorktree paths (one folder per task, one subfolder per repo — use exactly these): ${JSON.stringify(A.worktreePaths || {})}\n` +
   `Flags: approve=${!!flags.approve} draft=${!!flags.draft}${mode === 'feedback' ? ` check=${!!flags.check}` : ''}\n` +
   (mode === 'feedback' ? `PR feedback: ${dir}/feedback.md (fetched review threads R<n>, reviews, conversation comments) · triage: ${dir}/feedback-triage.md · reply drafts: ${dir}/feedback-replies.md\n` : '') +
   (Array.isArray(A.attachments) && A.attachments.length
-    ? `Attachments (read the files; the design system binds UI work): ${A.attachments.map((x) => `${x.kind}: ${x.title} → ${x.file}`).join(' · ')}\n`
+    ? `Attachments (read the files; the design system binds UI work; a canvas's screens are the exact markup to build from — its summary lists them): ${A.attachments.map((x) => `${x.kind}: ${x.title} → ${x.file}`).join(' · ')}\n`
     : '') +
   langRule
 

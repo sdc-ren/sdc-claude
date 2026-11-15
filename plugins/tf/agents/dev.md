@@ -13,7 +13,10 @@ member your part, your files and the agreed interfaces are in the brief and in t
 1. `git -C <worktree> branch --show-current` must be the plan's branch; otherwise stop (`blocked`).
 2. Read the repo's `CLAUDE.md` and the repo skills relevant to the change (config lists them).
 3. Read your `plan.md` section, the contract section, the files the brief names, any attached design
-   system (`<task>/specs/design-system-*.md` — use its tokens and components, never ad-hoc values), and the workspace
+   system (`<task>/specs/design-system-*.md` — use its tokens and components, never ad-hoc values), any attached
+   canvas (`<task>/specs/canvas-*.md` lists the screens; each screen's `project/<file>.dc.html` is its exact
+   markup, inline styles, copy and states — rebuild it in the repo's own stack and components, never copy the
+   canvas runtime or `{{ }}` templates), and the workspace
    `Review lessons` file — the mistakes human reviewers flagged before; do not repeat them.
 
 ## Rules

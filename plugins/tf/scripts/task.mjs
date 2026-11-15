@@ -3,7 +3,9 @@
 // letting a model invent slugs, so one ticket always maps to one folder and one worktree per repo.
 //
 //   resolve <root> <input> [--repos be,fe,mobile]
-//       input = ticket key (proj-301, PROJ-301), PR URL, owner/repo#n, or free text.
+//       input = anything the user typed: an issue key (PROJ-301), a PR or any other link, owner/repo#n, plain words.
+//       --name <name> names the task instead (e.g. a canvas's title). Slug: PR key → --name → the issue key the
+//       input points at (sources.mjs) → the user's words → the first link (host + path + short hash).
 //       Prints JSON: { slug, dir, created, restoredFromArchive, round, nextRound, status, mode, prs{},
 //       worktrees{}, legacyDirs[], legacyWorktrees[], format: 'current'|'old'|'new', locked }
 //   lock <dir> [--ttl 5400]      → {"conflict":false} or {"conflict":true,"holder":…}
@@ -18,20 +20,18 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { execSync, execFileSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createHash } from 'node:crypto'
 import { SH, base, nodeCmd, under } from './platform.mjs'
+import { classify, keyFrom } from './sources.mjs'
 
-const KEY_RE = /\b([A-Za-z][A-Za-z0-9]{1,9})-(\d{1,6})\b/
+export { keyFrom }
+
 const LEGACY_SUFFIX = /-(?:e2e\d*|qc\d*|r\d+|evd|fix|review|view|verify|before|after|app|app-thumb|thumb|header)\b/i
 const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`
 const git = (wt, args) => sh(`git -C ${q(wt)} ${args}`)
 const gitOk = (wt, args) => { try { execSync(`git -C ${q(wt)} ${args}`, { stdio: 'pipe', shell: SH, windowsHide: true, timeout: 30_000 }); return true } catch { return false } }
 const sh = (cmd) => { try { return execSync(cmd, { stdio: 'pipe', shell: SH, windowsHide: true, timeout: 30_000 }).toString().trim() } catch { return '' } }
 const out = (o) => console.log(JSON.stringify(o, null, 2))
-
-export function keyFrom(text) {
-  const m = String(text || '').match(KEY_RE)
-  return m ? `${m[1].toUpperCase()}-${m[2]}` : null
-}
 
 function prKey(input) {
   // https://github.com/o/r/pull/12 or o/r#12
@@ -50,9 +50,30 @@ function prKey(input) {
   return { key: key || `PR-${repo}-${num}`, url: `https://github.com/${owner}/${repo}/pull/${num}` }
 }
 
-function slugFromText(text) {
-  return String(text).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd')
-    .replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').split('-').slice(0, 5).join('-') || 'task'
+// Words that carry no meaning in a folder name (Vietnamese and English).
+const FILLER = new Set(['toi', 'muon', 'can', 'hay', 'giup', 'lam', 'cho', 'minh', 'ban', 'nhe', 'nha', 'voi', 'va', 'cua', 'cac', 'nhung', 'mot', 'la', 'de', 'thi', 'se', 'da', 'dang', 'nay', 'do', 'please', 'i', 'we', 'want', 'to', 'the', 'a', 'an', 'for', 'and', 'of', 'in', 'on', 'with', 'make', 'need', 'can', 'you'])
+export function slugFromText(text) {
+  const words = String(text).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd')
+    .replace(/[^a-z0-9]+/g, ' ').trim().split(' ').filter(Boolean)
+  const kept = words.filter((w) => !FILLER.has(w))
+  return (kept.length ? kept : words).slice(0, 5).join('-') || 'task'
+}
+const hash6 = (s) => createHash('sha1').update(String(s)).digest('hex').slice(0, 6)
+// A task given only as links: name it after the first one, with a short hash so two pages never share a folder.
+function slugFromSource(src) {
+  if (!src) return 'task'
+  if (src.kind === 'artifact') return `artifact-${String(src.id || '').slice(0, 8).toLowerCase()}`
+  if (src.kind === 'file') return slugFromText(base(src.ref).replace(/\.[^.]+$/, ''))
+  let u
+  try { u = new URL(src.ref) } catch { return `link-${hash6(src.ref)}` }
+  const seg = u.pathname.split('/').filter(Boolean).pop() || ''
+  const head = slugFromText(`${u.hostname.replace(/^www\./, '').split('.')[0]} ${decodeURIComponent(seg).replace(/[-_]+[0-9a-f]{12,}$/i, '')}`).split('-').slice(0, 4).join('-')
+  return `${head}-${hash6(src.ref)}`
+}
+export function slugFor(root, input, name) {
+  if (name) return keyFrom(name) && /^[A-Za-z][A-Za-z0-9]{1,9}-\d{1,6}$/.test(String(name).trim()) ? keyFrom(name) : slugFromText(name)
+  const c = classify(root, input)
+  return c.key || (c.request ? slugFromText(c.request) : slugFromSource(c.sources[0]))
 }
 
 export function header(dir) {
@@ -121,14 +142,14 @@ export function repoMap(root, flag) {
   return out.length ? out : ['be', 'fe', 'mobile'].map((key) => ({ key, dir: key }))
 }
 
-function resolveTask(root, input, repos) {
+function resolveTask(root, input, repos, name) {
   root = resolve(root)
   const pipe = join(root, '.pipeline')
   mkdirSync(pipe, { recursive: true })
   let slug = null
   let prUrl = null
   const pr = prKey(input)
-  if (pr) { slug = pr.key; prUrl = pr.url } else slug = keyFrom(input) || slugFromText(input)
+  if (pr) { slug = pr.key; prUrl = pr.url } else slug = slugFor(root, input, name)
   const hits = findDir(pipe, slug)
   let dir = hits.live
   let restored = false
@@ -329,7 +350,8 @@ if (isMain) {
     switch (cmd) {
       case 'resolve': {
         const repos = repoMap(a[0], flag('repos'))
-        out(resolveTask(a[0], a.slice(1).join(' '), repos))
+        const name = flag('name')
+        out(resolveTask(a[0], a.slice(1).join(' '), repos, name))
         break
       }
       case 'lock': out(lock(resolve(a[0]), Number(flag('ttl', 5400)))); break
@@ -370,7 +392,7 @@ if (isMain) {
         break
       }
       default:
-        console.error('usage: task.mjs resolve <root> <input> [--repos a,b] | lock <dir> | unlock <dir> | new-round <dir> <n> | journal <dir> <text> | handoff-get <dir> | head <worktree> | uncommit <worktree> <sha> | legacy <root> [--apply]')
+        console.error('usage: task.mjs resolve <root> <input> [--repos a,b] [--name N] | lock <dir> | unlock <dir> | new-round <dir> <n> | journal <dir> <text> | handoff-get <dir> | head <worktree> | uncommit <worktree> <sha> | legacy <root> [--apply]')
         process.exit(1)
     }
   } catch (e) {
