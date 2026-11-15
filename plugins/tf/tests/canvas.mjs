@@ -184,3 +184,56 @@ test('the runtime renders holes, loops, branches, handlers, imports and links li
   assert.equal(box.DCRuntime.href('/Main.dc.html#top', '../'), '../Main.html#top')
   assert.equal(box.DCRuntime.href('https://x.dev/a.dc.html', ''), 'https://x.dev/a.dc.html')
 })
+
+test('each screen has a Feedback button: claude.ai comments first, the --feedback link otherwise', async () => {
+  const root = canvasFixture()
+  const out = join(tmp(), 'demo')
+  const r = exportDemo(root, out, { lang: 'vi', title: 'Shop', feedback: 'mailto:pm@example.com' })
+  assert.deepEqual(r.warnings, ['Main.dc.html: links to Missing.dc.html, which is not on the canvas'])
+  const page = readFileSync(join(out, 'Cart.html'), 'utf8')
+  assert.match(page, /<div id="screen-Cart" class="dc-stage"/)
+  assert.match(page, /_demo\/feedback\.js/)
+  assert.equal(JSON.parse(readFileSync(join(out, 'demo.json'), 'utf8')).screens.find((s) => s.file === 'Cart.dc.html').anchor, 'screen-Cart')
+  const cfg = page.match(/id="dc-feedback">([\s\S]*?)<\/script>/)[1]
+  const js = readFileSync(join(out, '_demo', 'feedback.js'), 'utf8')
+  // A tiny DOM: the button, the stage, the config, and links the script opens.
+  const run = (cfgText, claude) => {
+    const opened = []
+    const btn = { hidden: true, on: null, addEventListener: (_, f) => { btn.on = f } }
+    const stage = { id: 'screen-Cart' }
+    const document = {
+      getElementById: (id) => (id === 'dc-feedback' ? { textContent: cfgText } : id === 'dc-fb' ? btn : null),
+      querySelector: () => stage,
+      createElement: () => ({ click() { opened.push(this.href) }, remove() {} }),
+      body: { appendChild() {} },
+    }
+    const window = { claude }
+    vm.runInNewContext(js, { document, window, location: { href: 'https://x/Cart.html' }, encodeURIComponent, JSON })
+    return { btn, stage, opened }
+  }
+  // Inside an artifact where the viewer can comment: the button opens claude.ai's composer on this screen.
+  const calls = []
+  const a = run(cfg, { use: async (n) => (n === 'comments' ? { openComposer: async (t) => { calls.push(t); return { opened: true } } } : null) })
+  await new Promise((ok) => setTimeout(ok, 0))
+  assert.equal(a.btn.hidden, false)
+  a.btn.on()
+  assert.equal(calls[0].element, a.stage)
+  assert.deepEqual(a.opened, [])
+  // No comments here (local demo, or a viewer who cannot comment): an email about this screen.
+  const b = run(cfg, undefined)
+  assert.equal(b.btn.hidden, false)
+  b.btn.on()
+  assert.match(b.opened[0], /^mailto:pm@example\.com\?subject=%5BShop%5D%20App%20%C2%B7%20Cart&body=M%C3%A0n%20h%C3%ACnh%3A%20App%20%C2%B7%20Cart%20\(Cart\.dc\.html\)%0ALink%3A%20https%3A%2F%2Fx%2FCart\.html/)
+  // A form link gets the screen filled in.
+  const c = run(cfg.replace('mailto:pm@example.com', 'https://forms.example.com/f?entry.1={screen}'), undefined)
+  c.btn.on()
+  assert.equal(c.opened[0], 'https://forms.example.com/f?entry.1=Cart.dc.html')
+  // Neither: no button.
+  assert.equal(run(cfg.replace('"mailto:pm@example.com"', 'null'), undefined).btn.hidden, true)
+  // A bare address is an email; a re-export without --feedback keeps it; a bad value is reported and dropped.
+  const d2 = join(tmp(), 'd2')
+  exportDemo(root, d2, { feedback: 'qc@example.com' })
+  exportDemo(root, d2)
+  assert.equal(JSON.parse(readFileSync(join(d2, 'demo.json'), 'utf8')).feedback, 'mailto:qc@example.com')
+  assert.ok(exportDemo(root, join(tmp(), 'd3'), { feedback: 'ftp://x' }).warnings.some((w) => /--feedback ftp:\/\/x: not a mailto/.test(w)))
+})
