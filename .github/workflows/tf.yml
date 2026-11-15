@@ -35,3 +35,5 @@ jobs:
         run: node --test plugins/tf/tests/sources.mjs
       - name: Canvas → clickable demo
         run: node --test plugins/tf/tests/canvas.mjs
+      - name: Chat digest (Zalo reader, stub page)
+        run: node --test plugins/tf/tests/digest.mjs

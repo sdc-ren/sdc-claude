@@ -4,6 +4,17 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.9.0] — 2026-11-15
+
+### Added
+- **`/tf:digest` — a digest of your Zalo group chats.** Name the chats (or `all` from the config's new
+  `## Chat sources`) and a window (`hôm nay`, `hôm qua`, a date, a range, `6h`, `since-last`): tf reads them in
+  Zalo Web in your own Chrome and writes, per chat, what needs you, what was decided, what is still being
+  discussed and the to-dos, each point with its time and sender. The window is counted from the page's own
+  message metadata before reading, so the digest says exactly how much was read; stickers and system notices are
+  skipped, an album is one line, and the photos people replied to are opened and read. A checkpoint per chat
+  makes the next run start where this one stopped. Read-only: no login, no sending, no calls to Zalo's servers.
+
 ## [1.8.0] — 2026-11-15
 
 ### Added
