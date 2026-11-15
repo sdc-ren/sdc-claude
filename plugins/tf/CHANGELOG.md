@@ -4,6 +4,16 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] — 2026-11-15
+
+### Added
+- **Client feedback on every demo screen.** `/tf:demo` puts a Feedback button on each screen. In the published
+  artifact it opens claude.ai's own comment box pinned to that screen (composer-only: the page posts nothing and
+  asks no consent); clients invited by email at Commenter sign in and comment there. Where comments are not
+  available (not signed in, a public link, the local demo) it opens `--feedback`: an email with the screen in the
+  subject, or a form link with `{screen}` `{title}` `{demo}` `{url}` filled in; with neither, it is hidden.
+  `--comments` reads the artifact's threads into `demo-feedback.md`, grouped by role and screen.
+
 ## [1.7.0] — 2026-11-15
 
 ### Added

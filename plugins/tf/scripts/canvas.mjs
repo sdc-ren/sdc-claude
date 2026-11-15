@@ -5,9 +5,13 @@
 // in project/canvas.json (frames, title notes, order) and its design system under project/ds/<folder>/. The
 // orchestrator downloads those files with the Artifact tool (docs/demo.md); this script does the rest.
 //
-//   node canvas.mjs export <src> <out> [--lang vi|en] [--title T] [--url <canvas url>]
+//   node canvas.mjs export <src> <out> [--lang vi|en] [--title T] [--url <canvas url>] [--feedback <mailto:… | https://…>]
 //       <src> = the folder holding project/ (or project/ itself). Writes <out>/index.html (role picker + screen list),
 //       one <out>/<path>.html per screen, the design-system files, _demo/ (runtime + css) and demo.json.
+//       Every screen gets a Feedback button: inside a published artifact it opens claude.ai's own comment box on
+//       that screen (anchor `#screen-<file>`); elsewhere, or for a viewer who cannot comment, it opens --feedback
+//       (an email with the screen filled in, or a form URL; {screen} {title} {demo} {url} are filled in). With
+//       neither available the button stays hidden.
 //       Prints JSON { out, title, screens, groups[{slug,name,start,count}], warnings[] }.
 //   node canvas.mjs summary <src> [--url <canvas url>]   markdown for specs/: groups, screens, devices, links, notes
 //   node canvas.mjs blobs <src>                          uploaded assets the screens use: [{ id, have }] — fetch the
@@ -251,25 +255,45 @@ function smoke(name, sources) {
 const json = (x) => JSON.stringify(x).replace(/</g, '\\u003c').replace(/[\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16)}`)
 const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
 const L = {
-  en: { screens: 'screens', start: 'Start', all: 'All roles', phone: 'App', web: 'Web', fixed: 'Frame', open: 'Open', list: 'Screens', groups: 'groups', back: 'All screens', made: 'Clickable demo exported from the design canvas', missing: 'not in this demo' },
-  vi: { screens: 'màn hình', start: 'Bắt đầu', all: 'Tất cả', phone: 'App', web: 'Web', fixed: 'Khung', open: 'Mở', list: 'Danh sách màn hình', groups: 'nhóm', back: 'Tất cả màn hình', made: 'Bản demo bấm được, xuất từ canvas thiết kế', missing: 'không có trong demo' },
+  en: { screens: 'screens', start: 'Start', all: 'All roles', phone: 'App', web: 'Web', fixed: 'Frame', open: 'Open', list: 'Screens', groups: 'groups', back: 'All screens', made: 'Clickable demo exported from the design canvas', missing: 'not in this demo', feedback: 'Feedback on this screen', screen: 'Screen', link: 'Link' },
+  vi: { screens: 'màn hình', start: 'Bắt đầu', all: 'Tất cả', phone: 'App', web: 'Web', fixed: 'Khung', open: 'Mở', list: 'Danh sách màn hình', groups: 'nhóm', back: 'Tất cả màn hình', made: 'Bản demo bấm được, xuất từ canvas thiết kế', missing: 'không có trong demo', feedback: 'Góp ý màn hình này', screen: 'Màn hình', link: 'Link' },
 }
 
 const DEMO_CSS = `html,body{margin:0}
 body.dc-phone,body.dc-fixed{height:100vh;background:#1c2027;overflow:hidden}
-#dc-stage{position:relative}
-body.dc-phone #dc-stage,body.dc-fixed #dc-stage{position:fixed;left:50%;top:50%;overflow:hidden;transform:translate(-50%,-50%) scale(var(--dc-k,1));transform-origin:center center;background:#fff}
-body.dc-phone #dc-stage{border-radius:44px;box-shadow:0 0 0 10px #0b0d10,0 0 0 11px #3a3f48,0 30px 80px rgba(0,0,0,.55)}
-body.dc-fixed #dc-stage{box-shadow:0 20px 60px rgba(0,0,0,.45)}
-@media (max-width:520px){body.dc-phone{height:auto;overflow:auto;background:none}body.dc-phone #dc-stage{position:relative;left:auto;top:auto;border-radius:0;box-shadow:none;transform:none}}
+#dc-stage,.dc-stage{position:relative}
+body.dc-phone .dc-stage,body.dc-fixed .dc-stage{position:fixed;left:50%;top:50%;overflow:hidden;transform:translate(-50%,-50%) scale(var(--dc-k,1));transform-origin:center center;background:#fff}
+body.dc-phone .dc-stage{border-radius:44px;box-shadow:0 0 0 10px #0b0d10,0 0 0 11px #3a3f48,0 30px 80px rgba(0,0,0,.55)}
+body.dc-fixed .dc-stage{box-shadow:0 20px 60px rgba(0,0,0,.45)}
+@media (max-width:520px){body.dc-phone{height:auto;overflow:auto;background:none}body.dc-phone .dc-stage{position:relative;left:auto;top:auto;border-radius:0;box-shadow:none;transform:none}}
 .dc-demo-nav{position:fixed;right:14px;bottom:14px;z-index:2147483000;width:38px;height:38px;border-radius:19px;display:grid;place-items:center;background:rgba(20,24,32,.72);color:#fff;text-decoration:none;opacity:.55;transition:opacity .15s;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+.dc-demo-fb{right:60px;border:0;padding:0;cursor:pointer;font:inherit}
+.dc-demo-fb[hidden]{display:none}
 .dc-demo-nav:hover,.dc-demo-nav:focus-visible{opacity:1}
 .dc-demo-nav svg{width:18px;height:18px;fill:none;stroke:currentColor;stroke-width:2}
 `
-const FIT = `(function(){var s=document.getElementById('dc-stage');var b=document.body;if(!s||!/dc-(phone|fixed)/.test(b.className))return;function f(){var w=s.offsetWidth,h=s.offsetHeight,k=Math.min(1,(innerWidth-48)/w,(innerHeight-48)/h);s.style.setProperty('--dc-k',String(k))}addEventListener('resize',f);f()})();`
+const FIT = `(function(){var s=document.querySelector('.dc-stage');var b=document.body;if(!s||!/dc-(phone|fixed)/.test(b.className))return;function f(){var w=s.offsetWidth,h=s.offsetHeight,k=Math.min(1,(innerWidth-48)/w,(innerHeight-48)/h);s.style.setProperty('--dc-k',String(k))}addEventListener('resize',f);f()})();`
 const NAV_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="4" width="6" height="6" rx="1.5"/><rect x="14" y="4" width="6" height="6" rx="1.5"/><rect x="4" y="14" width="6" height="6" rx="1.5"/><rect x="14" y="14" width="6" height="6" rx="1.5"/></svg>'
 
-function pageHtml({ file, sc, imports, board, group, lang, t, blob }) {
+const FB_ICON = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 5h14a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H10l-4 3.5V16H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z"/></svg>'
+// The Feedback button (one file for every screen). claude.ai's comment box first — the composer-only grant, so
+// nothing is posted by the page and nobody is asked for consent; the --feedback link when that box is not here.
+const FEEDBACK_JS = `(function(){var cfg;try{cfg=JSON.parse(document.getElementById('dc-feedback').textContent)}catch(e){return}
+var btn=document.getElementById('dc-fb'),stage=document.querySelector('.dc-stage');if(!btn||!stage)return;var comments=null;
+function show(){btn.hidden=!(comments||cfg.to)}
+function enc(k){return encodeURIComponent(k==='url'?location.href:cfg[k]||'')}
+function open(href){var a=document.createElement('a');a.href=href;a.target='_blank';a.rel='noopener';document.body.appendChild(a);a.click();a.remove()}
+function fallback(){var to=cfg.to;if(!to)return;var q=to.indexOf('?')<0?'?':'&';
+if(/^mailto:/i.test(to)){open(to+q+'subject='+encodeURIComponent('['+cfg.demo+'] '+cfg.title)+'&body='+encodeURIComponent(cfg.labels.screen+': '+cfg.title+' ('+cfg.screen+')\\n'+cfg.labels.link+': '+location.href+'\\n\\n'));return}
+open(/\\{(screen|title|demo|url)\\}/.test(to)?to.replace(/\\{(screen|title|demo|url)\\}/g,function(m,k){return enc(k)}):to+q+'screen='+enc('screen'))}
+btn.addEventListener('click',function(){if(!comments)return fallback();comments.openComposer({element:stage}).catch(function(e){var c=e&&e.code;if(c==='rate_limited')return;if(c==='unavailable'){comments=null;show()}fallback()})});
+show();
+try{if(window.claude&&typeof window.claude.use==='function')window.claude.use('comments').then(function(c){comments=c||null;show()},function(){})}catch(e){}})();
+`
+// A stable, unique element id per screen: the comment anchor claude.ai stores, and how feedback maps back to a file.
+export const anchorOf = (file) => `screen-${String(file).replace(/\.dc\.html$|\.html$/, '').replace(/[^A-Za-z0-9_-]+/g, '-')}`
+
+function pageHtml({ file, sc, imports, board, group, lang, t, blob, anchor, feedback, demo }) {
   const depth = file.split('/').length - 1
   const root = '../'.repeat(depth)
   const dev = deviceOf(board)
@@ -290,14 +314,17 @@ ${helmets}
 <link rel="stylesheet" href="${root}_demo/demo.css">
 </head>
 <body class="dc-${dev}">
-<div id="dc-stage"${stage}><div id="dc-root"></div></div>
-<a class="dc-demo-nav" href="${root}index.html#${esc(group)}" title="${esc(t.list)}" aria-label="${esc(t.list)}">${NAV_ICON}</a>
+<div id="${esc(anchor)}" class="dc-stage"${stage}><div id="dc-root"></div></div>
+<a class="dc-demo-nav" href="${root}index.html#${esc(group)}" title="${esc(t.list)}" aria-label="${esc(t.list)}" data-uncommentable>${NAV_ICON}</a>
+<button type="button" id="dc-fb" class="dc-demo-nav dc-demo-fb" title="${esc(t.feedback)}" aria-label="${esc(t.feedback)}" data-uncommentable hidden>${FB_ICON}</button>
+<script type="application/json" id="dc-feedback">${json({ screen: board.file, title: board.title || sc.title || file, demo, to: feedback || null, labels: { screen: t.screen, link: t.link } })}</script>
 <script type="application/json" id="dc-page">${json({ root, main: 'main', props: sc.props })}</script>
 ${comps.map((c) => `<script type="application/json" data-dc-tpl="${esc(c.name)}">${json(blob(c.sc.tpl))}</script>\n<script type="text/plain" data-dc-logic="${esc(c.name)}">${blob(c.sc.logic).replace(/<\/script/gi, '<\\/script')}</script>`).join('\n')}
 <script src="${REACT}" crossorigin="anonymous"></script>
 <script src="${REACT_DOM}" crossorigin="anonymous"></script>
 <script src="${root}_demo/dc-runtime.js"></script>
 <script>${FIT}</script>
+<script src="${root}_demo/feedback.js"></script>
 </body>
 </html>
 `
@@ -362,12 +389,17 @@ ${url ? `<p class="meta" style="margin-top:40px">Canvas: ${esc(url)}</p>` : ''}
 `
 }
 
-export function exportDemo(src, out, { lang = 'en', title, url } = {}) {
+export function exportDemo(src, out, { lang = 'en', title, url, feedback } = {}) {
   const { proj, canvas } = readCanvas(src)
   const t = L[lang] || L.en
   out = resolve(out)
   mkdirSync(out, { recursive: true })
   const warnings = []
+  // A bare address is an email; no --feedback on a re-export keeps the one the last export used.
+  if (!feedback && existsSync(join(out, 'demo.json'))) try { feedback = JSON.parse(readFileSync(join(out, 'demo.json'), 'utf8')).feedback || null } catch {}
+  if (feedback && /^[^\s@:/]+@[^\s@/]+\.[a-z]{2,}$/i.test(feedback)) feedback = `mailto:${feedback}`
+  if (feedback && !/^(mailto:[^\s]+|https?:\/\/[^\s]+)$/i.test(feedback)) { warnings.push(`--feedback ${feedback}: not a mailto: or http(s) link — ignored`); feedback = null }
+  const demoName = title || canvas.title || 'Demo'
   const groups = layout(canvas)
   const exists = new Set(Object.keys(canvas.boards))
   const blobDir = join(resolve(proj, '..'), '_blob')
@@ -415,8 +447,9 @@ export function exportDemo(src, out, { lang = 'en', title, url } = {}) {
       const outFile = b.file.replace(/\.dc\.html$/, '.html')
       const depth = outFile.split('/').length - 1
       mkdirSync(dirname(join(out, outFile)), { recursive: true })
-      writeFileSync(join(out, outFile), pageHtml({ file: outFile, sc, imports, board: b, group: g.slug, lang, t, blob: blobFix('../'.repeat(depth)) }))
-      screens.push({ file: b.file, page: outFile, title: b.title || sc.title || b.file, group: g.slug, section: b.section, device: deviceOf(b), w: b.w, h: b.h, interactive: !!b.is_interactive, links })
+      const anchor = anchorOf(b.file)
+      writeFileSync(join(out, outFile), pageHtml({ file: outFile, sc, imports, board: b, group: g.slug, lang, t, blob: blobFix('../'.repeat(depth)), anchor, feedback, demo: demoName }))
+      screens.push({ file: b.file, page: outFile, title: b.title || sc.title || b.file, group: g.slug, section: b.section, device: deviceOf(b), w: b.w, h: b.h, interactive: !!b.is_interactive, links, anchor })
     }
   }
   // Design-system files and any other support file the screens reference (css, fonts, images, json).
@@ -430,15 +463,16 @@ export function exportDemo(src, out, { lang = 'en', title, url } = {}) {
   if (missingBlobs.size) warnings.push(`uploaded assets not downloaded (run \`canvas.mjs blobs\`): ${[...missingBlobs].join(', ')}`)
   mkdirSync(join(out, '_demo'), { recursive: true })
   writeFileSync(join(out, '_demo', 'demo.css'), DEMO_CSS)
+  writeFileSync(join(out, '_demo', 'feedback.js'), FEEDBACK_JS)
   copyFileSync(join(HERE, 'canvas-runtime.js'), join(out, '_demo', 'dc-runtime.js'))
   const byFile = Object.fromEntries(screens.map((s) => [s.file, s]))
   const gs = groups.map((g) => ({
     slug: g.slug, name: g.name, start: g.start, startHref: (byFile[g.start] || {}).page || '',
     screens: g.screens.filter((b) => byFile[b.file]).map((b) => ({ ...byFile[b.file], href: byFile[b.file].page })),
   })).filter((g) => g.screens.length)
-  const name = title || canvas.title || 'Demo'
+  const name = demoName
   writeFileSync(join(out, 'index.html'), indexHtml({ title: name, groups: gs, lang, t, url }))
-  const manifest = { title: name, url: url || '', exportedAt: new Date().toISOString(), groups: gs.map(({ slug, name: n, start, startHref, screens: s }) => ({ slug, name: n, start, startHref, count: s.length })), screens, warnings }
+  const manifest = { title: name, url: url || '', exportedAt: new Date().toISOString(), feedback: feedback || null, groups: gs.map(({ slug, name: n, start, startHref, screens: s }) => ({ slug, name: n, start, startHref, count: s.length })), screens, warnings }
   writeFileSync(join(out, 'demo.json'), JSON.stringify(manifest, null, 2))
   return { out, title: name, screens: screens.length, groups: manifest.groups, files: walk(out).length, warnings }
 }
@@ -498,9 +532,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const [cmd, a, b, ...rest] = process.argv.slice(2)
   const all = process.argv.slice(2)
   const flag = (n) => { const i = all.indexOf(`--${n}`); return i >= 0 ? all[i + 1] : undefined }
-  const usage = () => { console.error('usage: canvas.mjs export <src> <out> [--lang vi|en] [--title T] [--url U] | summary <src> [--url U] | blobs <src> | serve <out> [--port N]'); process.exit(2) }
+  const usage = () => { console.error('usage: canvas.mjs export <src> <out> [--lang vi|en] [--title T] [--url U] [--feedback mailto:…|https://…] | summary <src> [--url U] | blobs <src> | serve <out> [--port N]'); process.exit(2) }
   void rest
-  if (cmd === 'export' && a && b) console.log(JSON.stringify(exportDemo(a, b, { lang: flag('lang'), title: flag('title'), url: flag('url') }), null, 2))
+  if (cmd === 'export' && a && b) console.log(JSON.stringify(exportDemo(a, b, { lang: flag('lang'), title: flag('title'), url: flag('url'), feedback: flag('feedback') }), null, 2))
   else if (cmd === 'summary' && a) console.log(summary(a, { url: flag('url') }))
   else if (cmd === 'blobs' && a) console.log(JSON.stringify(blobs(a)))
   else if (cmd === 'serve' && a) serve(a, flag('port')).then((s) => console.log(JSON.stringify({ url: s.url, port: s.port })))

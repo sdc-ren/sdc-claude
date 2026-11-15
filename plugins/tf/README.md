@@ -207,7 +207,7 @@ drafts the ticket comment.
 ### `/tf:demo`
 
 ```
-/tf:demo <canvas link> [what to show] [--publish] [--name <name>] [--lang <code>] [--attach]
+/tf:demo <canvas link> [what to show] [--publish] [--feedback <email | form link>] [--comments] [--name <name>] [--lang <code>] [--attach]
 ```
 
 A Claude **Design canvas** → a clickable demo for a client. Every screen of the canvas becomes a page that runs
@@ -224,10 +224,16 @@ canvas's Play mode. No repo, no worktree, no PR, no agents — it takes a minute
   whose code throws, a link to a screen that is not on the canvas, or a missing asset is reported.
 - **Where it runs.** Locally (`http://localhost:4173`) by default. `--publish` also publishes it as **one
   private artifact** you can share; a later run updates the same artifact.
+- **Feedback on each screen.** Every screen has a Feedback button. In the published artifact it opens claude.ai's
+  comment box pinned to that screen; share the artifact by email at **Commenter** and the client signs in to
+  claude.ai with that email to comment. People who cannot comment (not signed in, a public link, the local demo)
+  are sent to `--feedback` instead: an email with the screen in the subject, or a form link with `{screen}` filled
+  in. `/tf:demo <canvas link> --comments` collects the comments into `demo-feedback.md`, grouped by role and screen.
 
 ```
 /tf:demo https://claude.ai/artifact/J1vh43YkirYZdRj5r1sZFu
-/tf:demo https://claude.ai/artifact/J1vh43YkirYZdRj5r1sZFu cho khách xem role kỹ thuật và khách hàng --publish
+/tf:demo https://claude.ai/artifact/J1vh43YkirYZdRj5r1sZFu cho khách xem role kỹ thuật và khách hàng --publish --feedback pm@acme.vn
+/tf:demo https://claude.ai/artifact/J1vh43YkirYZdRj5r1sZFu --comments
 ```
 
 It is the canvas's screens with their sample data — no backend, nothing saved. Only words and a design system,
