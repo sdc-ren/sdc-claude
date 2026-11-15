@@ -4,6 +4,32 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.7.0] — 2026-11-15
+
+### Added
+- **`/tf:demo` — a design canvas becomes a clickable client demo.** Give it a Claude Design canvas link: every
+  screen becomes a page that runs the screen's own code (`scripts/canvas.mjs` + `scripts/canvas-runtime.js`, React 18),
+  so buttons, tabs, toggles, fields and the links between screens work as in the canvas's Play mode. Screens are
+  grouped by role from the canvas's title notes, each role has a Start button and its own link (`#slug`), phone
+  frames show in a device frame, web pages fill the window. Every screen is test-rendered in Node with each handler
+  pressed before you see it. Runs locally; `--publish` makes it one private artifact. No repo, PR or agents.
+  Measured on a 75-screen canvas: 8 roles found, every screen rendered, no warnings.
+- **Any link, or no link at all.** Task commands take plain words, an issue key, or any link — tracker (Jira, Linear,
+  YouTrack, GitHub issue), PR, Notion / Google Docs / Confluence, Figma, any web page, a claude.ai artifact, canvas
+  or design system, a local file — alone or together (`scripts/sources.mjs`). `ticket.md` is now the brief: the
+  user's words plus every source verbatim. Words alone are a complete task. Workspaces can say how to read a host
+  in a new `## Sources` config section (the old `Tracker and spec sources` still works).
+- **A canvas attached to `/tf:build`** is kept whole: every screen's source, a summary (roles, screens, devices,
+  links, notes) and a clickable export. Devs rebuild screens from the real markup; testers compare against the export.
+
+### Changed
+- **Task folders from words and links read well and never collide.** `fix utf-8 encoding` no longer becomes task
+  `UTF-8` (keys in plain words must be written in capitals, or use a prefix the config lists); Vietnamese filler
+  words are dropped (`dung-demo-man-hinh-dat`); a link-only task is named after the page plus a short hash;
+  `task.mjs resolve --name` names it outright.
+- A ticket-comment draft is written only when a tracker issue is a source; branches of tasks without an issue key
+  use the task slug.
+
 ## [1.6.2] — 2026-11-14
 
 ### Fixed

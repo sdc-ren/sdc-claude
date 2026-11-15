@@ -13,13 +13,22 @@ You never write, test, or review repo code yourself. Design and rationale: `docs
 
 | Command | Mode | What happens |
 |---|---|---|
-| `/tf:build <ticket or text>` | build | PM plans → devs → reviewer gate → tester → ready PR(s), EVD, ticket-comment draft |
-| `/tf:qc <ticket>` | qc | Next round on the same folder/branches: reproduce QC cases with saved flows, fix, re-test, update the PR |
-| `/tf:address-review <ticket or PR url> [--check]` | feedback | Team review on our own PRs: fetch unresolved threads/reviews/comments, triage each point, fix only the `fix` points on the same PR, draft one reply per thread (posted after approval). `--check`: triage only |
-| `/tf:review <PR url or ticket>` | review | e2e of the ticket's acceptance criteria + risk report (risk, impact, UI change, AC coverage, build). No code changes |
-| `/tf:e2e <PR url or ticket> [--cases a,b]` | e2e | Tester only: run/save flows, EVD, ticket-comment draft. `--regression`: run `.pipeline/_regression` flows instead (no workflow) |
+| `/tf:build <anything>` | build | PM plans → devs → reviewer gate → tester → ready PR(s), EVD, ticket-comment draft (when a tracker issue is the source) |
+| `/tf:qc <task>` | qc | Next round on the same folder/branches: reproduce QC cases with saved flows, fix, re-test, update the PR |
+| `/tf:address-review <task or PR url> [--check]` | feedback | Team review on our own PRs: fetch unresolved threads/reviews/comments, triage each point, fix only the `fix` points on the same PR, draft one reply per thread (posted after approval). `--check`: triage only |
+| `/tf:review <PR url or task>` | review | e2e of the brief's acceptance criteria + risk report (risk, impact, UI change, AC coverage, build). No code changes |
+| `/tf:e2e <PR url or task> [--cases a,b]` | e2e | Tester only: run/save flows, EVD, ticket-comment draft (tracker source only). `--regression`: run `.pipeline/_regression` flows instead (no workflow) |
+| `/tf:demo <canvas link> [words]` | — | No workflow: `<PLUGIN>/docs/demo.md` — a Design canvas → a clickable demo (every screen, grouped by role), local, `--publish` as one artifact |
 | `/tf:status [--doctor] [--metrics [slug]]` | — | Resources per task and what cleanup would free (`resources.mjs list`, `reap --dry-run`); `--doctor` also runs `node $S/doctor.mjs <cwd>`; `--metrics` shows what runs cost (`metrics.mjs`) |
 | `/tf:clean <slug> \| --migrate \| --legacy` | — | Free one task, move flat worktrees into `.worktrees/<SLUG>/<repo>/`, or fold old suffixed folders — dry run first, apply only after the user's yes |
+
+`<task>` = anything that names an existing task: its key, its link, its folder slug, or the same words.
+
+**Input** is whatever the user typed: an issue key (`PROJ-12`), a link to anything (tracker issue, PR, GitHub
+issue, Notion/Google Docs/Confluence page, Figma, any web page, a claude.ai artifact, canvas or design system), a
+local file path, plain words — or several of these at once. Plain words alone are a complete task: they become
+the brief. `node $S/sources.mjs <cwd> "<input>"` splits it into `request` (the user's words) and `sources`
+(kind + how to read each); step 6 reads them.
 
 Flags: `--check` (feedback: triage only, no code), `--attach` (open the checkbox picker for this task, step 6b), `--approve` (stop after the first plan for the user), `--draft` (the user allows a draft PR),
 `--lang <code>` (report language). There is no repo flag: the PM inspects every repo in the config.
@@ -32,7 +41,8 @@ language; `writingLang` = `Writing language` → a `Writing language:` line in t
 
 1. **Config** — read `C`. Missing → ask the user for repos, excluded and read-only paths, test policy,
    tracker, provisioning; write it from `<PLUGIN>/docs/config-template.md`; show it.
-2. **Identity** — `node $S/task.mjs resolve <cwd> "<input>"` (repos come from the config table). It returns
+2. **Identity** — `node $S/task.mjs resolve <cwd> "<input>" [--name <name>]` (repos come from the config table;
+   the slug is the PR's or issue's key, else `--name`, else the user's words, else the first link). It returns
    `slug`, `dir`, `round`, `nextRound`, `status`, `prs`, `worktrees`, `worktreePaths` (`.worktrees/<SLUG>/<repo dir>`),
    `oldLayout`, `legacyDirs`, `locked`, `format`. `oldLayout` non-empty → suggest `/tf:clean --migrate` once.
    Use exactly that slug and folder — never invent suffixes. `locked: true` → stop: another run holds
@@ -48,21 +58,38 @@ language; `writingLang` = `Writing language` → a `Writing language:` line in t
    Nothing open (`total` 0, no new reviews or comments) → tell the user in one line and stop (unlock), no
    workflow. Otherwise show the summary line (PR · decision · open threads · new) and launch. A task without
    a tf folder (PR made by hand): `resolve` still gives the folder; the PM reads the PR diff instead of HANDOFF.
-6. **Ticket** (not in feedback mode) — read it with the tracker recipe in `C` (own browser via `browser.mjs`). Round 1: save
-   everything (description, every comment, attachments list, linked issues) verbatim with the URL to
-   `<dir>/ticket.md`. Later rounds: re-read the whole ticket (QC edits comments: compare `updated` with
-   `created`), rewrite ticket.md, mark comments new or edited since the last round under
-   `## New since round <n-1>`. Human reviews on our PRs are handled by `/tf:address-review`, not here — if
-   `pr-feedback.mjs fetch` would find open threads, mention it in one line. PR input: add `gh pr view <url> --json title,body,headRefName,baseRefName,files`
-   and the PR URL to ticket.md. No ticket → write the user's text.
-6b. **Attachments** — artifacts / design systems mentioned with `@` (`artifact://` resources) or pasted as
-   claude.ai artifact links in the command are attached: follow `<PLUGIN>/docs/attach.md` (read, store,
+6. **Sources → brief** (not in feedback mode) — `node $S/sources.mjs <cwd> "<input>"`, then read each source by
+   its kind. Hosts listed in `C` `## Sources` follow their line there (reader, sign-in) before these defaults:
+
+   | kind | read with |
+   |---|---|
+   | `tracker` (key or tracker link) | the tracker line in `C` (own browser via `browser.mjs`; a connector when one is set up) |
+   | `pr` | `gh pr view <url> --json title,body,headRefName,baseRefName,files` |
+   | `issue` (GitHub) | `gh issue view <n> --repo <o/r> --comments` |
+   | `artifact` | `docs/attach.md` — a canvas, a design system or a page; stored in `specs/` |
+   | `figma` | the Figma connector when connected, else `browser.mjs` |
+   | `doc`, `url` | a connector for that service when connected; else fetch the page (public) or `browser.mjs` (sign-in) |
+   | `file` | Read it |
+
+   Write `<dir>/ticket.md` — the task brief whatever the source (the name is kept for older tasks):
+   `## Request` = the user's words verbatim (or "—"); then one `## Source: <kind> <ref>` per source except
+   artifacts (those go to `specs/`, step 6b), with what it says verbatim (issue: description, every comment,
+   attachments list, linked issues). A source that cannot be read (sign-in, no access) → one line saying so;
+   go on with the rest, and stop only when nothing of the task is left to work from.
+   Plain words only: `## Request` is the whole brief — the PM plans from it, the config and the code, and
+   records what it had to assume.
+   Later rounds: re-read every source, rewrite ticket.md, mark comments new or edited since the last round
+   (`updated` vs `created`) under `## New since round <n-1>`. Human reviews on our PRs are handled by
+   `/tf:address-review`, not here — if `pr-feedback.mjs fetch` would find open threads, mention it in one line.
+   `tracker` = `hasTracker` from `sources.mjs` (a tracker issue or a GitHub issue is a source).
+6b. **Attachments** — artifacts, canvases and design systems mentioned with `@` (`artifact://` resources) or
+   pasted as claude.ai links in the command are attached: follow `<PLUGIN>/docs/attach.md` (read, store,
    record). `--attach` → run the Picker of attach.md first. `<dir>/attachments.json` from earlier rounds is
    reused silently.
 7. **Session title** — `<SLUG> · <3–6 word summary>` via `mcp__ccd_session_mgmt__set_session_title`
    (`session_id: "self"`; load via ToolSearch if deferred; missing → skip).
 
-Do not ask the user which spec sources to use: the PM uses the config defaults, links in the ticket, and the
+Do not ask the user which spec sources to use: the PM uses the config defaults, links in the brief, and the
 task's attachments.
 
 ## 2. Launch
@@ -73,14 +100,15 @@ rejected; the engine is deliberately not registered as a `/` command): `cp W <di
 
 ```json
 { "root": "<abs cwd>", "slug": "<slug>", "dir": "<abs dir>", "mode": "build|qc|review|e2e",
-  "round": <n>, "input": "<ticket key / PR url / text>", "description": "<one line>",
+  "round": <n>, "input": "<what the user typed>", "description": "<one line>",
+  "sources": "<kinds read, e.g. tracker, doc, artifact>", "tracker": <hasTracker>,
   "cases": "<--cases or QC case ids>", "notes": "<user constraints / escalation answers>",
   "prs": { "<repo>": "<url>" }, "worktrees": { "<repo>": "<path or null>" },
   "worktreePaths": { "<repo>": "<from resolve>" }, "format": "<from resolve>",
   "flags": { "approve": false, "draft": false, "check": false }, "approved": false,
   "lang": "<report language>", "writingLang": "<Writing language>",
   "scripts": "<abs S>", "config": "<abs C>", "agentPrefix": "tf:",
-  "attachments": [ { "title": "…", "kind": "design-system|artifact", "file": "<abs specs/… file>", "url": "…" } ] }
+  "attachments": [ { "title": "…", "kind": "design-system|canvas|artifact|doc|url|file", "file": "<abs specs/… file>", "url": "…" } ] }
 ```
 
 The user watches `/workflows`. Do not poll. The run logs a `scope:` line after the PM's first plan (repos
@@ -127,8 +155,9 @@ slowest jobs with their slowest command when a job took over 10 minutes.
 - Never merge, approve, force-push, or enable auto-merge. PRs stop at the link.
 - Never commit `.pipeline/`, `.codegraph/`, `.env*`, scratch files.
 - Never touch the shared main checkouts — work happens in the task worktrees.
-- One ticket = one `.pipeline/<SLUG>/` folder and one `.worktrees/<SLUG>/` folder (one subfolder per repo, named like the repo folder), for every mode and round.
+- One task = one `.pipeline/<SLUG>/` folder and one `.worktrees/<SLUG>/` folder (one subfolder per repo, named like the repo folder), for every mode and round.
 - Browsers and emulators: only ones this task started (`browser.mjs`, `emulator.mjs`). You read and
   post on the tracker through `browser.mjs` too.
-- Nothing is posted (ticket, PR comment) without the user's approval of the exact text.
+- Nothing is posted (tracker comment, PR comment) without the user's approval of the exact text. No tracker
+  source → there is nothing to post a ticket comment to; the Report carries the summary instead.
 - Report outcomes plainly; no filler.

@@ -135,7 +135,9 @@ files, then issues. Return `verdict: PASS` only when every case in scope passed;
 ## Design system
 When the task has an attached design system (`<task>/specs/design-system-*.md`), UI cases also check what
 it fixes (colours, type, spacing, components) on the changed screens; a mismatch is an `IB` with the
-token it breaks.
+token it breaks. An attached canvas has a clickable reference (`<task>/specs/canvas-*/demo/`, serve it with
+`node <scripts>/canvas.mjs serve <that folder>`): shoot the same screen at the same viewport in both and compare
+layout, copy and states; a difference the plan did not accept is an `IB` naming the screen file.
 
 ## Review-mode briefs (someone else's PR)
 Same flows; cases come from the ticket's acceptance criteria, not from the diff. For screens the

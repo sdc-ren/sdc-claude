@@ -2,13 +2,13 @@
 
 # tf — task-flow
 
-**A PM-led agent team for Claude Code: plan the ticket, build it, test it end to end, ship a ready PR.**
+**A PM-led agent team for Claude Code: plan the task, build it, test it end to end, ship a ready PR — from a ticket, any link, or plain words. Plus clickable client demos straight from a design canvas.**
 
 [![Changelog](https://img.shields.io/badge/changelog-CHANGELOG.md-2ea44f)](CHANGELOG.md)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](https://code.claude.com/docs/en/plugins/install.md)
 
-`/tf:build` · `/tf:qc` · `/tf:address-review` · `/tf:review` · `/tf:e2e`
+`/tf:build` · `/tf:qc` · `/tf:address-review` · `/tf:review` · `/tf:e2e` · `/tf:demo`
 
 </div>
 
@@ -60,8 +60,24 @@ Then, in your workspace (the folder that holds your repos):
 
 ## Commands
 
-Seven commands. The five task commands take a **ticket key** (`PROJ-123`), a **PR URL**
-(`https://github.com/org/repo/pull/12`) or, for `build`, plain text. Everything after the input is optional.
+Eight commands. Everything after the input is optional.
+
+**What you can give a task command** — any of these, alone or together:
+
+| Input | Example | tf reads it with |
+|---|---|---|
+| Plain words | `/tf:build thêm nút xuất Excel cho trang đơn hàng` | nothing to read: your words are the brief; the PM plans from them, the config and the code, and lists what it assumed |
+| Issue key | `PROJ-123` | the tracker in your config (`## Sources`) |
+| Tracker link | Jira, Linear, YouTrack, GitHub issue | the tracker line in the config, or `gh` for GitHub |
+| PR link | `https://github.com/org/repo/pull/12`, `org/repo#12` | `gh` |
+| Doc or web page | Notion, Google Docs, Confluence, any URL | a connector when you have one, else a public fetch or tf's own browser for sign-in pages |
+| Design | Figma link; claude.ai artifact, **canvas** or **design system** | Figma connector; the Artifact tool (a canvas keeps every screen's real markup) |
+| Local file | `./docs/spec.md` | read directly |
+
+The first issue key or tracker link names the task folder; without one the folder is named after your words
+(`.pipeline/them-nut-xuat-excel-trang/`), or after the first link. `--name` on `/tf:demo` (or a later round
+with the same words) reuses it. Only a tracker source gets a ticket-comment draft — there is nowhere else to
+post one.
 
 | Command | Use it to |
 |---|---|
@@ -70,6 +86,7 @@ Seven commands. The five task commands take a **ticket key** (`PROJ-123`), a **P
 | [`/tf:address-review`](#tfaddress-review) | Check and answer the team's review on the PRs tf pushed |
 | [`/tf:review`](#tfreview) | Review a teammate's PR (e2e + risk report, no code changes) |
 | [`/tf:e2e`](#tfe2e) | Run e2e only, or the regression suite |
+| [`/tf:demo`](#tfdemo) | Turn a design canvas into a clickable demo for a client — no repo, no PR |
 | [`/tf:status`](#tfstatus) | See what tasks hold; check the machine |
 | [`/tf:clean`](#tfclean) | Free a task, migrate old layouts |
 
@@ -77,12 +94,12 @@ Seven commands. The five task commands take a **ticket key** (`PROJ-123`), a **P
 
 | Option | Works with | Effect |
 |---|---|---|
-| `--attach` | build · qc · review · e2e | Before the PM starts, show a checkbox list of this workspace's artifacts and design systems; ticked items are read into `specs/` and used by the PM, devs and testers |
+| `--attach` | build · qc · review · e2e · demo | Before the PM starts, show a checkbox list of this workspace's artifacts and design systems; ticked items are read into `specs/` and used by the PM, devs and testers |
 | `--lang <code>` | build · qc · feedback · review · e2e | Report language for this run (`vi`, `en`, …); overrides the workspace config |
 | `--approve` | build · qc | Stop after the PM writes the plan and wait for your approval |
 | `--check` | feedback | Only fetch and triage the review points — no code, nothing posted |
 | `--draft` | build · qc | Allow a draft PR. Without it every PR is opened ready, and agents never choose draft |
-| pasted `https://claude.ai/artifact/…` | build · qc · review · e2e | Attach that artifact directly (same as ticking it) |
+| pasted `https://claude.ai/artifact/…` | build · qc · review · e2e · demo | Attach that artifact directly (same as ticking it) |
 
 You can also pick artifacts with the **Artifacts (n)** band above the chat input before sending the command
 (see [Attaching artifacts](#attaching-artifacts-and-design-systems)).
@@ -90,17 +107,23 @@ You can also pick artifacts with the **Artifacts (n)** band above the chat input
 ### `/tf:build`
 
 ```
-/tf:build <ticket | text> [--attach] [--approve] [--draft] [--lang <code>]
+/tf:build <key | link(s) | words> [--attach] [--approve] [--draft] [--lang <code>]
 ```
 
-New task end to end: the PM reads the ticket, plans micro-tasks, staffs devs / tester / reviewer, and closes
-with a **ready PR per changed repo**, e2e evidence and a ticket-comment draft.
+New task end to end: the PM reads the brief (your words plus every source you pointed at), plans micro-tasks,
+staffs devs / tester / reviewer, and closes with a **ready PR per changed repo**, e2e evidence, and a
+ticket-comment draft when a tracker issue was the source.
 
 ```
 /tf:build PROJ-123
 /tf:build PROJ-123 --attach --approve
 /tf:build "Add an export button to the orders page" --lang en
+/tf:build làm màn đặt lịch theo https://www.notion.so/acme/Booking-spec-1a2b
+/tf:build dựng app kỹ thuật theo canvas https://claude.ai/artifact/J1vh43YkirYZdRj5r1sZFu
 ```
+
+With a canvas attached, devs build each screen from its real markup (layout, styles, copy, states) in the
+repo's own stack, and testers compare every screen against the canvas's clickable export.
 
 ### `/tf:qc`
 
@@ -181,6 +204,36 @@ drafts the ticket comment.
 /tf:e2e --regression --target dev
 ```
 
+### `/tf:demo`
+
+```
+/tf:demo <canvas link> [what to show] [--publish] [--name <name>] [--lang <code>] [--attach]
+```
+
+A Claude **Design canvas** → a clickable demo for a client. Every screen of the canvas becomes a page that runs
+the screen's own code: buttons, tabs, toggles, form fields and the links between screens work as in the
+canvas's Play mode. No repo, no worktree, no PR, no agents — it takes a minute.
+
+- **Grouped by role.** The canvas's biggest title notes (e.g. *Kỹ thuật · App*, *Văn phòng · Web*) become
+  groups, smaller ones sections. The index has one card per role with a **Start** button, and each role has its
+  own link (`…/#ky-thuat`) to send to the people who use that role. Screens shared between roles and the links
+  between them keep working, because it is one demo.
+- **Phone and web.** Frames up to 500 px wide show in a phone frame on a computer and full screen on a phone;
+  web pages (`expand: fill`) fill the window.
+- **Checked before you see it.** Every screen is rendered once in Node with each handler pressed; a screen
+  whose code throws, a link to a screen that is not on the canvas, or a missing asset is reported.
+- **Where it runs.** Locally (`http://localhost:4173`) by default. `--publish` also publishes it as **one
+  private artifact** you can share; a later run updates the same artifact.
+
+```
+/tf:demo https://claude.ai/artifact/J1vh43YkirYZdRj5r1sZFu
+/tf:demo https://claude.ai/artifact/J1vh43YkirYZdRj5r1sZFu cho khách xem role kỹ thuật và khách hàng --publish
+```
+
+It is the canvas's screens with their sample data — no backend, nothing saved. Only words and a design system,
+no canvas yet? tf offers to draw the screens on a new canvas first. To build the real app from the same canvas:
+`/tf:build <description> <canvas link>`.
+
 ### `/tf:status`
 
 ```
@@ -231,6 +284,9 @@ or pinned in its config. No setup, and other projects' items never appear.
 
 Attached items are saved to `.pipeline/<TICKET>/specs/` and `attachments.json`: the PM plans from them, devs
 use the design system's tokens and components, testers check the UI against it, and later rounds reuse them.
+A **canvas** is kept whole: every screen's `.dc.html` source, a summary (roles, screens, devices, which screen
+links where, the canvas's notes) and a clickable export testers compare against. Any other link or file can be
+attached the same way — pass it with the command.
 The band appears once the session has started (after your first message in a new session). It shows
 `Artifacts (0)` when the workspace has none yet; open it for how items get there.
 
@@ -330,7 +386,7 @@ tf reads `<workspace>/.claude/task-flow.md`. Start from [docs/config-template.md
 …
 ```
 
-Other sections: tracker and spec sources, knowledge files (known bugs, env recipes, decisions,
+Other sections: sources (how to read hosts that need it — trackers, docs; any link works without a line), knowledge files (known bugs, env recipes, decisions,
 **review lessons** — rules learned from human reviews that devs and reviewers check before every job),
 provisioning recipes (worktree, DB, cache, ports), doctor checks, and close-out (where evidence goes, how
 approved comments are posted).

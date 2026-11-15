@@ -31,3 +31,7 @@ jobs:
         run: node --test plugins/tf/tests/engine.mjs
       - name: Platform layer (this operating system)
         run: node --test plugins/tf/tests/platform.mjs
+      - name: Task input (any link, plain words, keys)
+        run: node --test plugins/tf/tests/sources.mjs
+      - name: Canvas → clickable demo
+        run: node --test plugins/tf/tests/canvas.mjs

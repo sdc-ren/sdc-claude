@@ -1,6 +1,7 @@
 # Git naming
 
-The ticket ID takes the place of the scope. No ticket → use a scope, or drop it.
+The issue key (`SCRUM-132`, `GH-WEB-9`) takes the place of the scope. A task with no issue key (plain words, a
+doc or a canvas) → use a scope, or drop it; its branch uses the task slug: `feat/booking-screen-1a2b3c`.
 
 | What | Format | Example |
 |---|---|---|
