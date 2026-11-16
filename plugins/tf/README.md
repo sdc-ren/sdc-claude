@@ -8,7 +8,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Claude Code](https://img.shields.io/badge/Claude%20Code-plugin-d97757)](https://code.claude.com/docs/en/plugins/install.md)
 
-`/tf:build` · `/tf:qc` · `/tf:address-review` · `/tf:review` · `/tf:e2e` · `/tf:demo`
+`/tf:build` · `/tf:qc` · `/tf:address-review` · `/tf:review` · `/tf:e2e` · `/tf:demo` · `/tf:digest`
 
 </div>
 
@@ -87,6 +87,7 @@ post one.
 | [`/tf:review`](#tfreview) | Review a teammate's PR (e2e + risk report, no code changes) |
 | [`/tf:e2e`](#tfe2e) | Run e2e only, or the regression suite |
 | [`/tf:demo`](#tfdemo) | Turn a design canvas into a clickable demo for a client — no repo, no PR |
+| [`/tf:digest`](#tfdigest) | Read your Zalo group chats for a day (or since last time) and get what was decided, what is open, what needs you |
 | [`/tf:status`](#tfstatus) | See what tasks hold; check the machine |
 | [`/tf:clean`](#tfclean) | Free a task, migrate old layouts |
 
@@ -234,6 +235,37 @@ canvas's Play mode. No repo, no worktree, no PR, no agents — it takes a minute
 /tf:demo https://claude.ai/artifact/J1vh43YkirYZdRj5r1sZFu
 /tf:demo https://claude.ai/artifact/J1vh43YkirYZdRj5r1sZFu cho khách xem role kỹ thuật và khách hàng --publish --feedback pm@acme.vn
 /tf:demo https://claude.ai/artifact/J1vh43YkirYZdRj5r1sZFu --comments
+```
+
+### `/tf:digest`
+
+```
+/tf:digest <chat name(s) | all> [hôm nay | hôm qua | YYYY-MM-DD | DD/MM | A..B | 6h | since-last] [--photos N] [--focus "…"] [--lang <code>]
+```
+
+Too many project groups to read all day? `/tf:digest` reads the ones you name in **Zalo Web** — your own account,
+in your own Chrome (Claude in Chrome) — and writes a digest per chat: **Cần bạn** (questions and mentions waiting
+on you), **Đã chốt**, **Đang bàn**, **Việc cần làm**, ideas for later. Every point carries its time and sender so
+you can find it in Zalo.
+
+- **Exact window.** Zalo Web keeps each message's time, sender and type in the browser, so tf counts the window
+  first (`306 messages, 07:08–18:28`) and then reads exactly those — no guessing where "yesterday" starts. The
+  digest says how many were read of how many; anything not read is listed, never dropped.
+- **Noise out.** Stickers and system notices are skipped. Photos sent together are one line; the photos people
+  replied to or talked about are opened and read (`--photos`, default 6), the rest stay `[ảnh]`.
+- **Since last time.** With no time given it reads from where the last digest of that chat stopped
+  (`.pipeline/digest/state.json`).
+- **What it does not do.** It never logs in for you, never sends, reacts or types in a chat, never calls Zalo's
+  servers or decrypts anything: it reads what the page shows you. Opening a chat marks it read, as when you open
+  it. Zalo Web runs in one tab: if yours is open, tf takes over in its own tab and yours asks you to press
+  *Kích hoạt* to use it again. The messages are read into this Claude session; only the digest file is written.
+- **Your chats in the config** (optional): `## Chat sources` in `.claude/task-flow.md`,
+  `- NhatLinh: zalo g1705741417791397411 — 8fix app; client feedback on the demo`, then `/tf:digest all hôm nay`.
+
+```
+/tf:digest NhatLinh hôm nay
+/tf:digest NhatLinh hôm qua --focus "thanh toán"
+/tf:digest all
 ```
 
 It is the canvas's screens with their sample data — no backend, nothing saved. Only words and a design system,

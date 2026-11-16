@@ -30,6 +30,9 @@ Keep sections short; link to longer docs instead of copying them.
 - e.g. notion: notion.so — docs — Notion connector
 - Spec sources the PM may query: <NotebookLM notebook, docs paths>
 
+## Chat sources (optional — chats `/tf:digest` reads; `/tf:digest all` reads every line)
+- <name>: zalo <conversation id, e.g. g1705741417791397411> — <what the chat is about, what to watch for>
+
 ## Design & artifacts (optional — the `@` list already finds this workspace's items itself)
 - Design system: <title — https://claude.ai/artifact/…>   (pin a default, also listed under `@`)
 
