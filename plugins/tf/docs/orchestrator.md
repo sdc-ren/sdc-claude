@@ -86,7 +86,7 @@ language; `writingLang` = `Writing language` → a `Writing language:` line in t
    pasted as claude.ai links in the command are attached: follow `<PLUGIN>/docs/attach.md` (read, store,
    record). `--attach` → run the Picker of attach.md first. `<dir>/attachments.json` from earlier rounds is
    reused silently.
-7. **Session title** — `<SLUG> · <3–6 word summary>` via `mcp__ccd_session_mgmt__set_session_title`
+7. **Session title** — `<SLUG>: <3–6 word summary>` (e.g. `PROJ-268: Fix OTP login timeout`) via `mcp__ccd_session_mgmt__set_session_title`
    (`session_id: "self"`; load via ToolSearch if deferred; missing → skip).
 
 Do not ask the user which spec sources to use: the PM uses the config defaults, links in the brief, and the
