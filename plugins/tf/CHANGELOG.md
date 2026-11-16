@@ -4,6 +4,12 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.9.1] — 2026-11-16
+
+### Changed
+- Session title is now `<SLUG>: <summary>` (was `<SLUG> · <summary>`), so the ticket key reads as
+  `PROJ-268: Fix OTP login timeout` in the session list.
+
 ## [1.9.0] — 2026-11-15
 
 ### Added
