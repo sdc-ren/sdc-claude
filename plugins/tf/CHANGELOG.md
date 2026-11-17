@@ -4,6 +4,38 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.10.0] — 2026-11-17
+
+From a review of two days of runs (28 runs, 35 human review points on five tasks).
+
+### Added
+- **Existing tests are run.** The dev lead runs the repo's existing suite (new config section `## Checks`) and
+  says for every failure whether its change broke it or it also fails on the base; the gate checks that. A
+  test the diff broke and left red is P2; one deleted or skipped to get green is tamper. "No new unit tests"
+  no longer reads as "do not run the old ones".
+- **Impact check at the gate.** The reviewer lists the other users of every shared function, helper, component
+  or query the diff changes; a user no case covers becomes an `IMPACT<n>` line, and the executor adds those to
+  the tester jobs of that repo later in the same dispatch. They are cases, not defects: the verdict is unchanged.
+- **Cases human reviewers ask for.** The plan carries a case at each limit, one per mode where FE and BE must
+  agree, a regression case per other user of shared code, and a measurable statement of a visual defect; the
+  plan check raises a missing one.
+- **Visual cases must show a change.** Before and after shots of the region the ticket names must differ and
+  the after state is asserted by measurement; identical shots are never a PASS.
+- PR Testing section lists `branch → flow case → result` for the logic a PR adds, and the existing-tests result.
+- `task.mjs engine <dir> <engine> [--title T]`: the task's copy of the engine is `<SLUG>.js` with the task id as
+  the workflow's name, so `/workflows` shows `PROJ-268` instead of one `task-flow` per run.
+
+### Fixed
+- `flow-peek.mjs` crashed on start since 1.6.0 (`rootOfTask` was not imported), so testers could not look at a
+  screen before writing its selectors.
+- A tester that did not PASS now skips the later groups of its dispatch (build, qc, feedback): a `PACKAGE` job
+  dispatched after it could commit and push code that had just failed.
+
+### Changed
+- Agent files say each rule once: text the executor already puts in every prompt (scratch folder, flow library
+  owner, named cases, languages) and rules copied between `pm.md`, `lead.md`, `dev.md`, `tester.md` and
+  `guidelines/e2e-testing.md` were merged or replaced by a pointer. No rule was dropped.
+
 ## [1.9.1] — 2026-11-16
 
 ### Changed

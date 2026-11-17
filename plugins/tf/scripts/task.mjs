@@ -18,7 +18,7 @@
 
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, appendFileSync } from 'node:fs'
 import { execSync, execFileSync } from 'node:child_process'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createHash } from 'node:crypto'
 import { SH, base, nodeCmd, under } from './platform.mjs'
@@ -367,6 +367,22 @@ if (isMain) {
       case 'handoff-get': out(header(resolve(a[0]))); break
       // Dev jobs never commit (the reviewer packages). `head` is what a dev job reports before and after its
       // work; `uncommit` turns commits a dev job made back into uncommitted changes — nothing is lost.
+      case 'engine': {
+        // The workflow list shows the script's own name: give each task's copy the task id instead of one
+        // shared "task-flow". meta must stay a pure literal, so the name is written into the copy.
+        const dir = resolve(a[0]); const slug = basename(dir)
+        const lit = (s) => `'${String(s).replace(/[\\'\n\r]/g, ' ').trim()}'`
+        const src = readFileSync(resolve(a[1]), 'utf8')
+        if (!/name: 'task-flow',/.test(src)) throw new Error('engine: meta.name not found in ' + a[1])
+        const title = flag('title', '')
+        let text = src.replace("name: 'task-flow',", `name: ${lit(slug)},`)
+        if (title) text = text.replace(/description: '[^'\n]*',/, `description: ${lit(`${slug}: ${title}`)},`)
+        rmSync(join(dir, '.engine.js'), { force: true })
+        const file = join(dir, `${slug}.js`)
+        writeFileSync(file, text)
+        out({ script: file, name: slug })
+        break
+      }
       case 'head': out({ head: git(resolve(a[0]), 'rev-parse HEAD') }); break
       case 'uncommit': {
         const wt = resolve(a[0]); const sha = a[1] || ''
@@ -392,7 +408,7 @@ if (isMain) {
         break
       }
       default:
-        console.error('usage: task.mjs resolve <root> <input> [--repos a,b] [--name N] | lock <dir> | unlock <dir> | new-round <dir> <n> | journal <dir> <text> | handoff-get <dir> | head <worktree> | uncommit <worktree> <sha> | legacy <root> [--apply]')
+        console.error('usage: task.mjs resolve <root> <input> [--repos a,b] [--name N] | lock <dir> | unlock <dir> | new-round <dir> <n> | journal <dir> <text> | handoff-get <dir> | engine <dir> <engine.js> [--title T] | head <worktree> | uncommit <worktree> <sha> | legacy <root> [--apply]')
         process.exit(1)
     }
   } catch (e) {

@@ -39,6 +39,8 @@ fragile selectors silently.
 ## Evidence
 
 - `after` screenshot for every case; `before` only when the change is visual. Name `<case>-<state>`.
+- A visual case passes only when before and after differ in the region the requirement names, and the
+  after state is asserted by measurement. Two identical screenshots are not evidence of a fix.
 - Failure screenshot is automatic. Playwright trace only on request (`TRACE=1`) when a failure is not
   clear from the screenshot and error — tracing slows every action, so normal runs skip it.
 - WebP for stored images. Respect the workspace screenshot budget and viewports.

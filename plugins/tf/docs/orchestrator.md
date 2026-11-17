@@ -95,8 +95,10 @@ task's attachments.
 ## 2. Launch
 
 Copy the engine into the task folder and launch that copy (a script outside the session's folders is
-rejected; the engine is deliberately not registered as a `/` command): `cp W <dir>/.engine.js`, then
-`Workflow` with `scriptPath: <dir>/.engine.js`. Args:
+rejected; the engine is deliberately not registered as a `/` command):
+`node $S/task.mjs engine <dir> W --title "<the 3–6 word summary of step 7>"` → `script` (`<dir>/<SLUG>.js`, the
+engine with the task id as the workflow's name, so `/workflows` lists `PROJ-268`, not one `task-flow` per run),
+then `Workflow` with `scriptPath: <that script>`. Args:
 
 ```json
 { "root": "<abs cwd>", "slug": "<slug>", "dir": "<abs dir>", "mode": "build|qc|review|e2e",

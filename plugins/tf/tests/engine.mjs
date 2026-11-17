@@ -85,6 +85,29 @@ test('no PR counts unless its PACKAGE job started after the tester PASS', async 
   expect(r.out.status).toBe('escalate')
 })
 
+test('a tester FAIL skips the later groups: PACKAGE never pushes code that just failed', async () => {
+  const pm = [D([...oneRepo.jobs, J('J4', 'reviewer', 'be', 4, 'PACKAGE')]), escalate]
+  const r = await sim(pm, l => (l === 'J3 tester:be' ? ok('FAIL', { issues: ['IB1'] }) : std(l)))
+  expect(r.ran.some(x => x.startsWith('J4'))).toBe(false)
+  expect(r.pmPrompts[1]).toContain('its tester did not PASS')
+  // the skipped id is free again, and a PASS lets the same dispatch run through
+  const pass = await sim([D([...oneRepo.jobs, J('J4', 'reviewer', 'be', 4, 'PACKAGE')]), close])
+  expect(pass.out.status).toBe('done')
+  // review mode: the tester's verdict is the result, it stops nothing
+  const review = await sim([D([J('J1', 'tester', 'all', 1), J('J2', 'reviewer', 'all', 2)]), close], l => (l.includes('tester') ? ok('FAIL') : std(l)), { mode: 'review' })
+  expect(review.ran.some(x => x.startsWith('J2'))).toBe(true)
+})
+
+test('IMPACT lines of a gate reach the testers of the same repo later in the dispatch', async () => {
+  const impact = 'IMPACT1: sports.ts:949 — basketball slots — expected: as on the base'
+  const pm = [D([J('J1', 'dev', 'be', 1), J('J2', 'dev', 'fe', 1), ...gates(['be', 'fe'], 2, 3), J('J5', 'tester', 'be', 3), J('J6', 'tester', 'fe', 3)]), pack(7, ['be', 'fe']), close]
+  const r = await sim(pm, l => (l === 'J3 reviewer:be' ? ok('SHIP', { issues: [impact, 'QP1 [P3]: x'] }) : std(l)))
+  expect(r.out.status).toBe('done')
+  expect(r.prompts['J5 tester:be']).toContain(impact)
+  expect(r.prompts['J5 tester:be']).not.toContain('QP1')
+  expect(r.prompts['J6 tester:fe']).not.toContain('Impact cases')
+})
+
 test('plan check: points go back to the PM once and the first dispatch is not run', async () => {
   const r = await sim([oneRepo, D([J('J1', 'dev', 'be', 1)]), escalate], l => (l === 'J0 reviewer:plan' ? ok('NEEDS-WORK', { issues: ['PP1: "also on the web admin" — no fe section'] }) : std(l)))
   expect(r.ran).toEqual(['J0 reviewer:plan(opus)', 'J1 lead:be(sonnet)'])

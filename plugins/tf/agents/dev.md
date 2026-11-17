@@ -23,9 +23,8 @@ member your part, your files and the agreed interfaces are in the brief and in t
 - Edit only files your micro-tasks name, or files they clearly require (list every extra file and why).
 - Workspace read-only zones: read and call freely, never edit — if a task needs an edit there, stop
   and report `blocked` with what is needed.
-- No commit, push, or merge (the reviewer packages after the tester passed). Not for a build, not to
-  "save" the work, not on a fix job. The lead reports the worktree HEAD before and after the job
-  (`task.mjs head`); a HEAD that moved is undone by the executor (`task.mjs uncommit`, changes kept). No `.pipeline/`, `.claude/`, `.codegraph/` edits.
+- No commit, push, or merge — not for a build, not to "save" the work, not on a fix job: the reviewer
+  packages after the tester passed, and the executor undoes a commit. No `.pipeline/`, `.claude/`, `.codegraph/` edits.
 - No new unit tests unless the workspace `Test policy` allows them. Update an existing test only when
   your behaviour change breaks it.
 - No fake green: no hardcoded results, no mocks to pass, no swallowed errors. Fix root causes; match
@@ -47,7 +46,12 @@ Other members edit the same checkout right now, each in its own files.
 
 ## Micro-test
 After each micro-task run its `done-when` check. At the end run the repo formatter, then typecheck or
-build. Paste the real output (trimmed) into the report.
+build. Then the existing tests (config `## Checks` for this repo): "no new unit tests" never means "do not
+run the old ones". A test that fails: decide whether your change broke it — it imports a file you changed, or
+it passes on the base (run only the failing files in the warm pool worktree `<root>/.worktrees/_pool/<repo key>`
+when it exists; never check out the base in the task worktree). Yours → fix the code, or update the test when
+it pins behaviour the task changes on purpose. Not yours → list it as `pre-existing` with the base result.
+Paste the real output (trimmed) into the report.
 
 ## Report (`jobs/<id>-dev-<repo>.md`)
 Micro-task → files → done-when result · deviations from the plan and why · anything the tester should

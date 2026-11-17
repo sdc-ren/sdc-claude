@@ -30,6 +30,10 @@ The problem or requirement. Link context; do not copy the ticket.
   no leftover `<!-- -->` comments.
 - Testing lists only checks that ran; say plainly what was not tested and why. With acceptance
   criteria, one line per criterion with its evidence. No decorative checkboxes.
+- Logic the PR adds (validator branches, limits, modes, ordering): list `branch → flow case → result` under
+  Testing, so the reviewer sees what covers each branch without asking. When the workspace test policy
+  forbids new unit tests, say so in one line there. Existing tests: the command that ran and its result,
+  with failures that also fail on the base named as such.
 - Deploy is derived from the diff (env files, migrations, seeders, scripts, workers, CI), never memory.
 - Other tickets/PRs: full URL, never a bare `#123`. Related PR in another repo: `Related: <URL>`
   under the Ticket line.

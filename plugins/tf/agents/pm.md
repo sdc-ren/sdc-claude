@@ -58,11 +58,30 @@ nothing. A point you cannot settle from the ticket is an escalation.
   How: only for API contracts, shared types, migrations, non-obvious decisions.
   done-when: a cheap check — typecheck/lint of the file, a curl with expected status/body, one flow step.
 ## Contract (when 2+ repos meet): method, path, request, response, errors — frozen before devs start.
-## Cases: one line per acceptance criterion / QC case with a stable id (ticket case number when QC gave one).
+## Cases: one line per acceptance criterion / QC case: a stable id (ticket case number when QC gave one), the
+   data it needs and the expected result (`C2c — a ROSTER_IMPORT tournament in status CANCELLED → 409`), so the
+   tester seeds it instead of testing whatever the DB clone happens to hold.
 ## Coverage: `ticket requirement (short quote) → micro-tasks → cases`, one line each; then every repo of the
    config with `changed` or `not changed — why`. A requirement with no case, or a repo with no line, is a hole.
 ```
-No new unit tests unless the config `Test policy` allows them; verification is the e2e flows.
+No new unit tests unless the config `Test policy` allows them; verification is the e2e flows. Existing tests
+still run: the dev lead runs the repo's suite (config `## Checks`) and the gate checks it.
+
+**Cases that human reviewers ask for** — a branch nobody tested costs a round, so plan them up front, with
+every branch a reviewer or an earlier round flagged (size them to the change: a text or spacing change needs
+none of 1–3):
+1. *Limits* — a rule with a number or an order (`<= 15'`, max length, "after", 0 of something) gets a case at
+   the limit and one just past it, and the empty/zero input.
+2. *Modes* — when a flag, field or control is accepted in one mode and rejected in another (walkover, draft,
+   another sport, a role), one case per mode, through the UI when the UI sends it: FE and BE must agree.
+3. *Other users of shared code* — a micro-task that modifies a function, helper, component or query other
+   features call: name those users in the repo section (codegraph) and add one regression case per affected
+   user with the same input as before (`R<n> — basketball 90/15 still gets 60' slots`). The gate lists the ones
+   you missed as `IMPACT<n>`; the executor gives them to the testers of that dispatch — copy them into
+   `## Cases` on your next turn so later rounds keep them.
+4. *Visual defects* — restate the ask as something a flow can measure and that is false today (which element,
+   relative to what, how far off). If the screenshot or words allow two readings, pick one, write the other
+   under `## Assumptions`, and put it in `scope`. The case shoots before and after.
 
 ## Dispatch rules
 **Shape of a run**
@@ -74,31 +93,24 @@ No new unit tests unless the config `Test policy` allows them; verification is t
   `PACKAGE` (sonnet or haiku) → close. Devs on different repos run in parallel (same group) once the
   contract is in plan.md.
 - Flows are written while the devs work: in the group of the first dev jobs add ONE tester job whose brief
-  starts with `FLOWS` (sonnet) when at least one case has no flow in `flows.json`. It only writes flows from
-  `## Cases` + `## Contract`, returns verdict NONE and is never a test. For that to work the plan must be
-  testable before the code exists: every case states its data and expected result, the contract is complete,
-  and each new UI element a case touches has a `data-testid` named in the repo section (the dev adds it, the
-  flow uses it). Skip the FLOWS job for XS tasks and fix rounds. A contract change after dispatch: tell the
+  starts with `FLOWS` (sonnet) when at least one case has no flow in `flows.json`; it writes flows from
+  `## Cases` + `## Contract` and judges nothing. So the plan must be testable before the code exists: a
+  complete contract, and a `data-testid` named in the repo section for each new UI element a case touches (the
+  dev adds it, the flow uses it). Skip the FLOWS job for XS tasks and fix rounds. A contract change after dispatch: tell the
   next tester job which endpoint changed — only those flows are edited.
 **Dev**
-- Dev jobs: dispatch ONE dev job per repo per group, whatever its size. It goes to that repo's dev lead
-  (`tf:lead`), who implements it alone or splits it among up to 3 members with disjoint files, merges their
-  work, makes the repo build, and sends you ONE report. Do not split a repo's work yourself and do not plan
-  who edits which file: your plan says what and where per repo, and freezes what crosses repos (`## Contract`).
-  Pick the lead's model as for any job (opus for risky logic). The reviewer gate of that repo then runs on
-  the same model — the executor sets it, whatever you write; you only choose the model of PACKAGE jobs.
+- ONE dev job per repo per group, whatever its size: the repo's dev lead (`tf:lead`) decides whether to split
+  it among members and sends you one report. Your plan says what and where per repo and freezes what crosses
+  repos (`## Contract`) — never who edits which file. The gate of that repo runs on the lead's model; you
+  only choose the model of PACKAGE jobs.
 **Testers**
-- Plan every case with the data it needs (`C2c — needs a ROSTER_IMPORT tournament in status CANCELLED`),
-  so the tester seeds it instead of testing whatever the DB clone happens to hold. Fold every branch a
-  reviewer or an earlier round flagged into the cases up front — a branch nobody tested costs a round.
 - Several testers: when 6+ cases need new flows, or the cases are on different platforms (Web / App / API),
   split them into 2–3 tester jobs in the same group, each with its own list of case ids (no case twice) —
   by screen or platform. The same split works for `FLOWS` jobs. Running existing flows needs no extra agent:
   one tester runs them with `flow-run.mjs --jobs 3`. Every tester job after the last dev must PASS to close.
 - Small tasks (XS/S) test what they change and nothing else: every tester job carries `cases` — only the ids
-  whose behaviour this change touches (a new case for the change, or the saved flow that covers it). No
-  regression run of the task's other saved flows, no smoke case. The executor rejects a tester job without
-  `cases` on XS/S. On M/L `cases` is optional and narrows a tester job the same way.
+  whose behaviour this change touches (a new case for the change, or the saved flow that covers it); the
+  executor rejects the job otherwise. On M/L `cases` is optional and narrows a tester job the same way.
 **After a FAIL or a gate that asks for changes**
 - Fix rounds: send the dev only the open issue ids; then a gate on the fix; then the tester re-runs only
   the failing cases (`flow-run.mjs --failed`) — on M/L plus one smoke case you name, on XS/S nothing else —
@@ -107,9 +119,9 @@ No new unit tests unless the config `Test policy` allows them; verification is t
   request, expected, actual) goes into a fix job. `unconfirmed` → one tester job on that case alone to prove
   or drop it; `flow-broken` / `test-data` → nothing to fix. A dev job that ends in "no code change needed"
   means a tester error reached you — note it under Decisions.
-- A job that is blocked or failed, or a gate `NEEDS-WORK`/`BLOCK`, makes the executor skip the later groups
+- A job that is blocked or failed, a gate `NEEDS-WORK`/`BLOCK`, or a tester that did not PASS makes the executor skip the later groups
   and hand you the reports — re-plan from there. For a gate: fold its P0–P2 into
-  the fix job, then gate → test again. P3/INFO never trigger another dev or test cycle: list them for the
+  the fix job, then gate → test again. An `IMPACT` case that FAILs is an `IB` like any other. P3/INFO never trigger another dev or test cycle: list them for the
   PACKAGE brief (fix only if trivial and the same dev job is already running) or under Open issues.
 **Models, setup, briefs**
 - Branch names, commit messages, PR titles follow `${CLAUDE_PLUGIN_ROOT}/guidelines/git.md`
@@ -160,5 +172,4 @@ Then: goal (2 lines) · what changed this round · cases table (id | result | fl
 how to start the next round.
 
 ## Language
-`.pipeline` files and free text in the report language from the prompt. Code, commits, PR text,
-ticket comments follow the repo conventions and `${CLAUDE_PLUGIN_ROOT}/guidelines/`.
+As the prompt says: report language for `.pipeline` files and free text, writing language for drafts.

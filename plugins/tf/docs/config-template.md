@@ -21,6 +21,12 @@ Keep sections short; link to longer docs instead of copying them.
 ## Test policy
 - <e2e-only | unit-for-logic | full> — what verification means here; whether new unit tests are allowed.
 
+## Checks (existing tests — run by the dev lead before it reports and checked by the gate; never new tests)
+| repo | command (scoped to the touched modules when the runner can) | notes |
+|---|---|---|
+| be | `<e.g. npx jest test/unit/services>` | <known red suites on the base branch, time it takes> |
+No row for a repo → its test script from the repo `CLAUDE.md` / package file when it runs in a few minutes; none → skipped, said so in the PR.
+
 ## Escalation additions (on top of the PM's built-in bar)
 - <extra cases that must stop for the user, or "none">
 
