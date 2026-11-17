@@ -4,6 +4,14 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.12.1] — 2026-11-17
+
+### Fixed
+- A job that cannot finish is no longer sent again and again. When the same kind of job on the same repo does
+  not finish twice in a row (blocked, failed, no answer), the run stops: the PM gets one turn to write the
+  board and the handoff, then the run escalates with both reasons, and says so when they look like a
+  tool-permission block. RVD-298 had lost four `PACKAGE` jobs and seven PM turns to one such block.
+
 ## [1.12.0] — 2026-11-17
 
 ### Added

@@ -181,7 +181,9 @@ none of 1–3):
 - a flow or logic totally different from what exists, or a spec change the ticket does not settle;
 - risk to money, permissions, data, or security;
 - any needed edit inside a config read-only zone (say exactly what and why; propose the interface);
-- a blocker no job can remove (environment, credentials, access) after one alternative was tried;
+- a blocker no job can remove (environment, credentials, access) after one alternative was tried — the
+  executor stops the run itself when the same kind of job on a repo fails to finish twice in a row, so a
+  blocked job is re-dispatched at most once, and only after something changed (a setup job, a different brief);
 - plus the config's own escalation additions.
 Everything else: decide, write it under `## Assumptions` in board.md, and list it at close.
 Escalate with one question and its options. Write HANDOFF.md (Status: escalated) first.
