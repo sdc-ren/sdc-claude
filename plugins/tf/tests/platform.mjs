@@ -232,3 +232,14 @@ test('resources.mjs: a worktree only a tool dirtied is freed; real work still ke
   assert.equal(readFileSync(join(work, 'main.dart'), 'utf8'), 'void main() { print(1); }\n')
   rmSync(root, { recursive: true, force: true })
 })
+
+test('resources.mjs: a worktree that is already gone counts as released', () => {
+  const root = tmp('gone')
+  const env = { ...process.env, HOME: root, USERPROFILE: root }
+  mkdirSync(join(root, '.pipeline', 'T-1'), { recursive: true })
+  const wt = join(root, '.worktrees', 'T-1', 'mobile') // never created: as after a manual `rm -rf`
+  node('resources.mjs', ['add', root, 'T-1', '--kind', 'worktree', '--id', wt, '--release', 'exit 1'], { env })
+  node('resources.mjs', ['release', root, 'T-1'], { env }) // throws if the release is reported as failed
+  assert.ok(!existsSync(join(root, '.pipeline', 'T-1', 'resources.json')), 'nothing is held any more')
+  rmSync(root, { recursive: true, force: true })
+})
