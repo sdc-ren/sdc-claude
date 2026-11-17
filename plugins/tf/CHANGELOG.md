@@ -4,6 +4,22 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.12.0] — 2026-11-17
+
+### Added
+- **Small-task lane.** An XS or S task runs dev → tester (named cases) → one reviewer job in a single dispatch:
+  that `PACKAGE` job is told no gate ran, runs the gate checklist first on the dev lead's model, and commits
+  only when it is clean. Five agents and two PM turns instead of eight and three. A lane dev job that changed
+  more than 3 files stops the dispatch so a gate runs before the tester.
+- The PM sizes by the change, from a table of criteria, and a later round by what that round changes. Money,
+  auth, permissions, migrations and read-only zones never go below M.
+
+### Changed
+- On M/L a `PACKAGE` job is rejected unless a gate SHIPped after that repo's last dev job. Nothing enforced a
+  gate before; the PM could leave it out at any size.
+- An XS task has dev jobs on one repo, no `FLOWS` job, and its lead never splits. No `FLOWS` job in a fix
+  round. These were advice in `pm.md`; the executor now rejects them.
+
 ## [1.11.0] — 2026-11-17
 
 ### Added

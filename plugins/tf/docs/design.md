@@ -93,6 +93,13 @@ them in its prompt on turn 1 and after a rejection, generated from the same cons
 10. Size XS/S: every tester job names `cases` and the tester runs only those — no other saved flow, no smoke
     case.
 
+10a. Small-task lane (XS/S): a `PACKAGE` job may run with no gate after the repo's last dev job; the executor
+    tells it so and it runs the gate checklist first, on the dev lead's model, packaging only when clean. On
+    M/L such a `PACKAGE` is rejected. A lane dev job that changed more than 3 files stops the dispatch so a
+    gate runs before the tester. An XS task has dev jobs on one repo only and its lead never splits.
+10b. No `FLOWS` job on XS tasks, nor in a fix round (a dispatch whose dev jobs are all on repos that already
+    had one this run).
+
 **Closing**
 11. Code modes close only when, for every repo a dev touched, judged on that repo's own history: a tester
     covering it PASSed after its last dev job (a later dev job on another repo does not undo that; a FAIL is
@@ -119,8 +126,8 @@ and every agent reads them.
 
 | Size | Typical task | Typical staffing |
 |---|---|---|
-| XS | text, colour, spacing, show/hide | dev → gate → tester (named cases) → PACKAGE |
-| S | add a field/column, one screen, one repo | dev ∥ tester FLOWS → gate → tester (named cases) → PACKAGE |
+| XS | text, colour, spacing, show/hide; one repo, ≤ 3 files | small-task lane: dev → tester (named cases) → PACKAGE that gates first |
+| S | add a field/column, one screen, one repo | small-task lane when ≤ 3 files per repo; else dev (∥ FLOWS) → gate → tester (named cases) → PACKAGE |
 | M | 2 repos or API change | plan check; one lead per repo in parallel ∥ tester FLOWS → gates → tester(s) → PACKAGE |
 | L | new feature, migration, money, permissions | M + opus where risky |
 
@@ -206,7 +213,7 @@ waiting on tools vs model time, turns, tokens, the slowest commands. Per run: wa
 (the plan check is its own column), PM turns, dev/tester jobs, re-tests, plugin version. The orchestrator
 runs it after every run and keeps the history in `<task>/metrics.json`; `/tf:status --metrics` lists all runs
 so two plugin versions can be compared. A change made for speed names the number it should move and is
-checked against the next runs.
+checked against the next runs. (Small-task lane, 1.12.0: agents per S run 8 → 5, PM turns 3 → 2.)
 
 ## Operating systems
 
