@@ -8,21 +8,24 @@
 //
 // Use the serial everywhere: `adb -s <serial> …`, `maestro --device <serial> test …`.
 
-import { spawn, execSync } from 'node:child_process'
+import { spawn, execFileSync } from 'node:child_process'
 import { join, resolve } from 'node:path'
 import { existsSync, openSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 import { add, drop, load, taken } from './resources.mjs'
-import { SH, androidSdk, pidsOnPort, posix, sdkTool } from './platform.mjs'
+import { androidSdk, pidsOnPort, posix, sdkTool } from './platform.mjs'
 
 const sdkPath = androidSdk
-const sh = (cmd) => { try { return execSync(cmd, { stdio: 'pipe', shell: SH, windowsHide: true }).toString() } catch { return '' } }
+// adb and the emulator are run without a shell: a serial or an AVD name is one argument, whatever it holds.
+const tool = (file, args) => { try { return execFileSync(file, args, { stdio: 'pipe', windowsHide: true }).toString() } catch { return '' } }
+// The serials this script hands out. A ledger entry that is anything else was not written by it.
+const SERIAL = /^emulator-\d{4,5}$/
 const qp = (p) => `"${posix(p)}"`
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 function freePort(root, adb) {
   const mine = new Set(taken(root, 'emulator'))
-  const running = sh(`${qp(adb)} devices`)
+  const running = tool(adb, ['devices'])
   for (let p = 5560; p <= 5680; p += 2) {
     const serial = `emulator-${p}`
     if (mine.has(serial) || running.includes(serial)) continue
@@ -36,7 +39,7 @@ async function start(root, slug, avd, sdk, windowed) {
   const adb = sdkTool(sdk, 'platform-tools', 'adb')
   const emulator = sdkTool(sdk, 'emulator', 'emulator')
   if (!existsSync(emulator)) throw new Error(`emulator not found under ${sdk}`)
-  if (!sh(`${qp(emulator)} -list-avds`).split(/\r?\n/).includes(avd)) throw new Error(`AVD "${avd}" not found`)
+  if (!tool(emulator, ['-list-avds']).split(/\r?\n/).map((s) => s.trim()).includes(avd)) throw new Error(`AVD "${avd}" not found`)
   const port = freePort(root, adb)
   const serial = `emulator-${port}`
   add(root, slug, { kind: 'emulator', id: serial, release: `${qp(adb)} -s ${serial} emu kill 2>/dev/null || true`, when: 'run-end' })
@@ -46,9 +49,9 @@ async function start(root, slug, avd, sdk, windowed) {
   spawn(emulator, args, { detached: true, windowsHide: true, stdio: ['ignore', log, log] }).unref()
   for (let i = 0; i < 150; i++) {
     await sleep(2000)
-    if (sh(`${qp(adb)} -s ${serial} shell getprop sys.boot_completed`).trim() === '1') return serial
+    if (tool(adb, ['-s', serial, 'shell', 'getprop', 'sys.boot_completed']).trim() === '1') return serial
   }
-  sh(`${qp(adb)} -s ${serial} emu kill`)
+  tool(adb, ['-s', serial, 'emu', 'kill'])
   drop(root, slug, 'emulator', serial)
   throw new Error(`${serial} did not boot within 5 minutes (see .pipeline/${slug}/${serial}.log)`)
 }
@@ -56,7 +59,8 @@ async function start(root, slug, avd, sdk, windowed) {
 function stop(root, slug, sdk) {
   const adb = sdkTool(sdk, 'platform-tools', 'adb')
   for (const e of load(root, slug).entries.filter((x) => x.kind === 'emulator')) {
-    sh(`${qp(adb)} -s ${e.id} emu kill`)
+    if (!SERIAL.test(e.id)) { console.error(`skipped ${JSON.stringify(e.id)}: not an emulator serial`); continue }
+    tool(adb, ['-s', e.id, 'emu', 'kill'])
     drop(root, slug, 'emulator', e.id)
     console.log(`stopped ${e.id}`)
   }

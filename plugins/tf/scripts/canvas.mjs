@@ -166,7 +166,7 @@ export const deviceOf = (b) => (b.expand === 'fill' ? 'web' : b.w <= 500 ? 'phon
 // Screens grouped the way the canvas reads: the biggest title notes are groups (usually one per role or flow),
 // smaller title notes are sections inside them; a frame belongs to the nearest title above it that spans it.
 export function layout(canvas) {
-  const boards = Object.entries(canvas.boards || {}).map(([file, b]) => ({ file, ...b }))
+  const boards = Object.entries(canvas.boards || {}).map(([file, b]) => ({ ...b, file })) // the key is the file: a `file` field inside the board never replaces it
   const titles = Object.entries(canvas.notes || {}).map(([id, n]) => ({ id, ...n })).filter((n) => n.kind === 'title1' && n.text)
   const max = titles.length ? Math.max(...titles.map(noteSize)) : 0
   const big = titles.filter((n) => noteSize(n) === max)
@@ -215,6 +215,15 @@ const linksOf = (sc) => {
   for (const el of find(sc.tpl, (n) => n[0].toLowerCase() === 'a')) { const h = attr(el, 'href'); if (h && /\.dc\.html(#.*)?$/.test(h)) out.add(h.replace(/#.*$/, '')) }
   for (const m of sc.logic.matchAll(/['"`]([\w./-]+\.dc\.html)/g)) out.add(m[1])
   return [...out]
+}
+// A screen named by canvas.json (a board key, a <dc-import>): a .dc.html file inside the canvas folder, or
+// nothing. The canvas is someone else's data — a name with `..` or an absolute path must not make the export
+// read a file of this machine or write outside the demo folder.
+export function screenPath(proj, file) {
+  if (typeof file !== 'string' || !file.endsWith('.dc.html') || file.includes('\0')) return ''
+  const base = resolve(proj)
+  const p = resolve(base, file)
+  return p.startsWith(base + sep) ? p : ''
 }
 const resolveLink = (from, h) => (h.startsWith('/') ? h.slice(1) : join(dirname(from), h).split(sep).join('/'))
 
@@ -418,7 +427,7 @@ export function exportDemo(src, out, { lang = 'en', title, url, feedback } = {})
     return JSON.parse(fix(JSON.stringify(x)))
   }
   const cache = {}
-  const screen = (file) => (cache[file] ||= (() => { const p = join(proj, file); return existsSync(p) ? parseScreen(readFileSync(p, 'utf8')) : null })())
+  const screen = (file) => (cache[file] ||= (() => { const p = screenPath(proj, file); return p && existsSync(p) ? parseScreen(readFileSync(p, 'utf8')) : null })())
   const screens = []
   for (const g of groups) {
     for (const b of g.screens) {
@@ -490,7 +499,7 @@ export function summary(src, { url } = {}) {
     for (const b of g.screens) {
       if (b.section !== sec) { sec = b.section; if (sec) lines.push('', `### ${sec}`); lines.push('', '| Screen | File | Device | Size | Links to |', '|---|---|---|---|---|') }
       let links = []
-      try { const sc = parseScreen(readFileSync(join(proj, b.file), 'utf8')); links = linksOf(sc).map((h) => resolveLink(b.file, h)) } catch {}
+      try { const sc = parseScreen(readFileSync(screenPath(proj, b.file), 'utf8')); links = linksOf(sc).map((h) => resolveLink(b.file, h)) } catch {}
       lines.push(`| ${(b.title || b.file).replace(/\|/g, '/')} | ${b.file} | ${deviceOf(b)}${b.is_interactive ? ' · interactive' : ''} | ${b.w}×${b.h} | ${links.join(', ') || '–'} |`)
     }
     lines.push('')

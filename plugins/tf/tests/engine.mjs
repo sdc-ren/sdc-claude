@@ -321,3 +321,12 @@ test('every plugin file a document points at exists', () => {
   }
   expect(missing).toEqual([])
 })
+
+test('build and qc never run a PACKAGE job on code no tester passed, whatever the size', async () => {
+  const r = await sim([D([J('J1', 'dev', 'be', 1), J('J2', 'reviewer', 'be', 2, 'PACKAGE')], 'S'), escalate])
+  expect(r.ran.some(x => x.startsWith('J2'))).toBe(false)
+  expect(r.pmPrompts[1]).toContain('would push code no tester has passed')
+  // The same PACKAGE job is accepted once a tester for that repo sits between the dev job and it.
+  const fine = await sim([D([J('J1', 'dev', 'be', 1), J('J2', 'tester', 'be', 2, 'x', 'sonnet', 'C1'), J('J3', 'reviewer', 'be', 3, 'PACKAGE')], 'S'), close])
+  expect(fine.ran.some(x => x.startsWith('J3'))).toBe(true)
+})

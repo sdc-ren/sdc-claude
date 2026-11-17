@@ -16,6 +16,7 @@
 
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs'
 import { spawn, execFileSync } from 'node:child_process'
+import { randomBytes } from 'node:crypto'
 import { rootOfTask } from './platform.mjs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -55,7 +56,8 @@ if (opts.failed) pick = pick.filter((f) => (manifest.cases[caseOf(f)] || {}).las
 const evd = join(dir, 'evd')
 mkdirSync(evd, { recursive: true })
 const target = opts.target || 'local'
-const runId = `${Math.floor(Date.now() / 1000).toString(36)}`
+// Unique per invocation: a verdict left by an earlier run (even one in the same second) never counts.
+const runId = `${Math.floor(Date.now() / 1000).toString(36)}-${randomBytes(4).toString('hex')}`
 const childEnv = {
   ...process.env,
   ...(manifest.targets[target] || {}),
@@ -80,10 +82,13 @@ function runCase(f) {
     p.stderr.on('data', keep)
     const timer = setTimeout(() => { failure = `timed out after ${opts.timeout || 600}s`; p.kill('SIGKILL') }, Number(opts.timeout || 600) * 1000)
     p.on('error', (e) => { failure = String(e.message) })
-    p.on('close', () => {
+    p.on('close', (code, signal) => {
       clearTimeout(timer)
       let v = null
       try { v = JSON.parse(readFileSync(join(evd, `${c}.verdict.json`), 'utf8')) } catch {}
+      // A flow that wrote PASS and then crashed, was killed or timed out did not pass.
+      if (v && v.runId === runId && v.status === 'PASS' && (failure || signal || code !== 0))
+        v = { ...v, status: failure ? 'BLOCKED' : 'FAIL', error: failure || `flow exited with ${signal || `code ${code}`} after writing PASS: ${outText.slice(-800)}` }
       if (!v || v.runId !== runId) v = { case: c, status: failure ? 'BLOCKED' : 'FAIL', error: failure || outText.slice(-1500) || 'flow wrote no verdict', shots: [], durationMs: 0 }
       const shots = (v.shots || []).map((x) => x.replace(/\.png$/, '.webp'))
       ran[c] = { file: `flows/${f}`, platform: /androidFlow/.test(readFileSync(join(flowsDir, f), 'utf8')) ? 'android' : 'web', lastResult: v.status, lastRunAt: new Date().toISOString(), lastTarget: target, durationMs: v.durationMs, shots, error: v.error || '' }

@@ -219,6 +219,22 @@ function gated(j, jobs) {
   return ledger.some((x) => isGate(x.job) && sameRepo(x.job.repo, j.repo) && x.seq > devSeq && x.report && x.report.status === 'done' && x.report.verdict === 'SHIP')
 }
 
+// Has the code PACKAGE job j would push passed a test? PACKAGE commits, pushes and opens the PR, and that
+// cannot be taken back, so it is decided before the job runs, not when the task closes. True when no dev job
+// touched the repo this run, when this dispatch runs a tester for it between its last dev job and j (a tester
+// that does not PASS skips the later groups), or when the ledger's last test of that code is a PASS.
+function tested(j, jobs) {
+  const covers = (repo) => sameRepo(repo, j.repo)
+  const devNow = jobs.filter((x) => x.role === 'dev' && covers(x.repo))
+  const devRun = ledger.filter((x) => x.job.role === 'dev' && covers(x.job.repo))
+  if (!devNow.length && !devRun.length) return true
+  if (jobs.some((x) => x.role === 'tester' && !isFlows(x) && covers(x.repo) && x.group < j.group && devNow.every((dv) => dv.group < x.group))) return true
+  if (devNow.length) return false
+  const devSeq = Math.max(...devRun.map((x) => x.seq))
+  const tests = ledger.filter((x) => x.job.role === 'tester' && !isFlows(x.job) && covers(x.job.repo) && x.seq > devSeq && x.report && x.report.status === 'done')
+  return tests.length > 0 && tests.reduce((a, b) => (b.seq > a.seq ? b : a)).report.verdict === 'PASS'
+}
+
 function checkDispatch(d) {
   if (mode === 'feedback' && flags.check) return '--check is triage only: write feedback-triage.md and return close, no jobs'
   const jobs = d.jobs || []
@@ -248,6 +264,10 @@ function checkDispatch(d) {
       if (!['XS', 'S'].includes(sz)) return `${j.id} (PACKAGE ${j.repo}) has no reviewer gate SHIP after that repo's last dev job — on M/L tasks the gate runs first (dev → gate → tester → PACKAGE)`
       j._noGate = true
     }
+    // PACKAGE after a tester PASS. A review-fix round may skip the test (close.noTest says why), so feedback
+    // is judged at close; build and qc never push untested code.
+    if (mode !== 'feedback') for (const j of jobs.filter((x) => x.role === 'reviewer' && isPackage(x)))
+      if (!tested(j, jobs)) return `${j.id} (PACKAGE ${j.repo}) would push code no tester has passed — put a tester job for ${j.repo} after its last dev job and before ${j.id} (dev → tester → PACKAGE)`
   }
   for (const j of jobs.filter((x) => x.role === 'dev')) {
     const n = ledger.filter((x) => x.job.role === 'dev' && x.job.repo === j.repo).length + jobs.filter((x) => x.role === 'dev' && x.repo === j.repo).length

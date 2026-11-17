@@ -21,7 +21,7 @@ import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { existsSync, mkdirSync, mkdtempSync, copyFileSync, readFileSync, readdirSync, renameSync, rmSync, chmodSync, writeFileSync } from 'node:fs'
-import { execSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { add, drop } from './resources.mjs'
 import { chromeProfiles, killCmd, stateDir } from './platform.mjs'
@@ -46,7 +46,7 @@ function playwright(from) {
 // Own browser process, registered so cleanup can kill it even if the script crashes.
 export async function openBrowser({ root, slug, playwrightFrom, auth, headless = true, contextOptions = {} }) {
   const { chromium } = playwright(playwrightFrom)
-  const server = await chromium.launchServer({ headless })
+  const server = await chromium.launchServer({ headless, host: '127.0.0.1' }) // never reachable from the network
   const pid = server.process().pid
   if (root && slug) add(root, slug, { kind: 'browser', id: String(pid), release: killCmd(pid), when: 'run-end' })
   const browser = await chromium.connect(server.wsEndpoint())
@@ -72,8 +72,14 @@ async function saveSession(b) {
   const file = authFile(b.auth)
   const next = refreshedSession(JSON.parse(readFileSync(file, 'utf8')), await b.context.storageState(), b.context.pages().map((p) => p.url()))
   if (!next) return
-  const tmp = `${file}.${process.pid}.tmp` // written whole, then swapped in: another task may be reading it
-  writeFileSync(tmp, JSON.stringify(next), { mode: 0o600 })
+  writePrivate(file, next)
+}
+// A session file holds login cookies: created readable by the user only (never world-readable for a moment),
+// written whole and swapped in, since another task may be reading it.
+function writePrivate(file, state) {
+  const tmp = `${file}.${process.pid}.tmp`
+  rmSync(tmp, { force: true })
+  writeFileSync(tmp, JSON.stringify(state), { mode: 0o600, flag: 'wx' })
   renameSync(tmp, file)
 }
 export async function closeBrowser(b) {
@@ -101,20 +107,27 @@ export async function checkAuth(name, url, playwrightFrom) {
   }
 }
 
+// Would a browser send a cookie stored under `key` (a host, or ".parent.domain") to `host`?
+export const cookieSentTo = (key, host) => key === host || (key.startsWith('.') && `.${host}`.endsWith(key))
+
 function chromeProfileFor(host, wanted) {
   if (!CHROME_DIR || !existsSync(CHROME_DIR)) return null
+  // The host comes from a URL someone gave us. It never reaches a shell or the SQL text: sqlite3 is run
+  // without a shell, with a fixed query, and the host names are compared here.
+  if (!/^[a-z0-9.-]+$/.test(host)) return null
   const profiles = wanted ? [wanted] : readdirSync(CHROME_DIR).filter((d) => d === 'Default' || d.startsWith('Profile '))
-  const domain = host.split('.').slice(-2).join('.')
   for (const p of profiles) {
+    if (p !== 'Default' && !/^Profile \d+$/.test(p)) continue
     for (const rel of ['Network/Cookies', 'Cookies']) {
       const src = join(CHROME_DIR, p, rel)
       if (!existsSync(src)) continue
-      const tmp = join(mkdtempSync(join(tmpdir(), 'tf-ck-')), 'c.db')
-      copyFileSync(src, tmp) // Chrome locks the live db; read a copy (host names only, no values)
+      const dir = mkdtempSync(join(tmpdir(), 'tf-ck-'))
       try {
-        const n = execSync(`sqlite3 ${JSON.stringify(tmp)} "select count(*) from cookies where host_key like '%${domain}'"`).toString().trim()
-        if (Number(n) > 0) return { profile: p, rel }
-      } catch {} finally { rmSync(tmp, { force: true }) }
+        const tmp = join(dir, 'c.db')
+        copyFileSync(src, tmp) // Chrome locks the live db; read a copy (values stay encrypted, only host names are read)
+        const keys = execFileSync('sqlite3', [tmp, 'select distinct host_key from cookies'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().split(/\r?\n/)
+        if (keys.some((k) => cookieSentTo(k.trim(), host))) return { profile: p, rel }
+      } catch {} finally { rmSync(dir, { recursive: true, force: true }) }
     }
   }
   return null
@@ -123,15 +136,14 @@ function chromeProfileFor(host, wanted) {
 function siteOnly(state, url) {
   // Only cookies the browser would send to this host (exact host, or a parent ".domain").
   const host = new URL(url).host
-  const sent = (d) => d === host || (d.startsWith('.') && `.${host}`.endsWith(d))
   return {
-    cookies: state.cookies.filter((c) => sent(c.domain)),
+    cookies: state.cookies.filter((c) => cookieSentTo(c.domain, host)),
     origins: state.origins.filter((o) => new URL(o.origin).host === host),
   }
 }
 
 async function fromChrome(name, url, playwrightFrom, wanted) {
-  const found = chromeProfileFor(new URL(url).host, wanted)
+  const found = chromeProfileFor(new URL(url).hostname, wanted)
   if (!found) return false
   console.log(`Using cookies from Chrome profile "${found.profile}" (macOS may ask to allow "Chrome Safe Storage").`)
   const dir = mkdtempSync(join(tmpdir(), 'tf-chrome-'))
@@ -145,7 +157,7 @@ async function fromChrome(name, url, playwrightFrom, wanted) {
     try {
       const ok = await loggedIn(ctx.pages()[0] || (await ctx.newPage()), url)
       // Keep only the site's cookies: the copied profile holds every site's, and some fail setCookies.
-      if (ok) writeFileSync(authFile(name), JSON.stringify(siteOnly(await ctx.storageState(), url)))
+      if (ok) writePrivate(authFile(name), siteOnly(await ctx.storageState(), url))
       return ok
     } finally {
       await ctx.close()
@@ -167,7 +179,7 @@ async function manualLogin(name, url, playwrightFrom) {
       await page.waitForTimeout(2000)
       if (new URL(page.url()).host === new URL(url).host && !LOGIN_RE.test(page.url())) {
         await page.waitForTimeout(3000)
-        await ctx.storageState({ path: authFile(name) })
+        writePrivate(authFile(name), await ctx.storageState())
         return true
       }
     }

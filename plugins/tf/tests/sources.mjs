@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { refreshedSession } from '../scripts/browser.mjs'
+import { cookieSentTo, refreshedSession } from '../scripts/browser.mjs'
 import { classify, configSources, strictKey } from '../scripts/sources.mjs'
 import { slugFor, slugFromText } from '../scripts/task.mjs'
 
@@ -93,4 +93,13 @@ test('a saved login is refreshed from the browser that used it, unless the sessi
   assert.equal(refreshedSession(saved, used, ['https://id.atlassian.com/login?continue=x']), null, 'on a login page: keep the old file')
   assert.equal(refreshedSession(saved, { cookies: [ck('.atlassian.net', 'new')], origins: [] }, []), null, 'a cookie domain went missing: keep the old file')
   assert.equal(refreshedSession(saved, { cookies: [], origins: [] }, []), null)
+})
+
+test('a cookie belongs to a site only at a domain boundary', () => {
+  assert.ok(cookieSentTo('acme.atlassian.net', 'acme.atlassian.net'))
+  assert.ok(cookieSentTo('.atlassian.net', 'acme.atlassian.net'))
+  assert.ok(cookieSentTo('.example.co.uk', 'app.example.co.uk'))
+  assert.ok(!cookieSentTo('.example.com', 'notexample.com'), 'a longer name that merely ends the same is another site')
+  assert.ok(!cookieSentTo('.co.uk', 'example.com'))
+  assert.ok(!cookieSentTo('other.atlassian.net', 'acme.atlassian.net'))
 })

@@ -9,7 +9,7 @@ import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
 
-import { exportDemo, layout, parseHtml, parseScreen, summary } from '../scripts/canvas.mjs'
+import { exportDemo, layout, parseHtml, parseScreen, screenPath, summary } from '../scripts/canvas.mjs'
 
 const S = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts')
 const tmp = () => realpathSync(mkdtempSync(join(tmpdir(), 'tf-canvas-')))
@@ -236,4 +236,16 @@ test('each screen has a Feedback button: claude.ai comments first, the --feedbac
   exportDemo(root, d2)
   assert.equal(JSON.parse(readFileSync(join(d2, 'demo.json'), 'utf8')).feedback, 'mailto:qc@example.com')
   assert.ok(exportDemo(root, join(tmp(), 'd3'), { feedback: 'ftp://x' }).warnings.some((w) => /--feedback ftp:\/\/x: not a mailto/.test(w)))
+})
+
+test('a screen named by the canvas is a .dc.html file inside the canvas folder, or nothing', () => {
+  const proj = realpathSync(mkdtempSync(join(tmpdir(), 'tf-cv-')))
+  assert.equal(screenPath(proj, 'admin/Home.dc.html'), join(proj, 'admin', 'Home.dc.html'))
+  assert.equal(screenPath(proj, '../secret.dc.html'), '', 'no climbing out with ..')
+  assert.equal(screenPath(proj, 'a/../../secret.dc.html'), '')
+  assert.equal(screenPath(proj, join(tmpdir(), 'x.dc.html')), '', 'no absolute path')
+  assert.equal(screenPath(proj, '../canary.txt'), '', 'only screen files')
+  // A `file` field inside a board does not replace the board's key.
+  const l = layout({ boards: { 'Home.dc.html': { file: '../canary.txt', x: 0, y: 0, w: 10, h: 10 } }, notes: {} })
+  assert.deepEqual(l.flatMap((g) => g.screens.map((s) => s.file)), ['Home.dc.html'])
 })

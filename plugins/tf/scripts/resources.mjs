@@ -26,7 +26,7 @@
 // A worktree with uncommitted or unpushed work is never removed; it stays flagged for the user.
 // PRs: full URL or `owner/repo#n`. A task with no registered PR gets them from its worktrees' branches.
 
-import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, rmSync, appendFileSync, renameSync, statSync, copyFileSync } from 'node:fs'
+import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, rmSync, appendFileSync, renameSync, statSync, copyFileSync, chmodSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -36,12 +36,22 @@ const HOME_DIR = stateDir()
 const ROOTS = join(HOME_DIR, 'roots.txt')
 const LOG = join(HOME_DIR, 'reap.log')
 
-const fileOf = (root, slug) => join(root, '.pipeline', slug, 'resources.json')
+// A task folder name: a ticket key or a slug made by task.mjs. Never a path — `..` or a separator in a slug
+// would point load, release and archive at a folder outside .pipeline/.
+export const okSlug = (slug) => typeof slug === 'string' && /^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(slug) && !slug.includes('..')
+const fileOf = (root, slug) => {
+  if (!okSlug(slug)) throw new Error(`not a task name: ${JSON.stringify(slug)}`)
+  return join(root, '.pipeline', slug, 'resources.json')
+}
+// Folders of .pipeline/ that are not tasks and must never be freed, slimmed or deleted by cleanup.
+const NOT_TASKS = new Set(['digest']) // /tf:digest keeps its checkpoint and every digest there
 const stamp = () => new Date().toISOString()
+let logReady = false
 const say = (msg) => {
   console.log(msg)
-  mkdirSync(HOME_DIR, { recursive: true })
-  appendFileSync(LOG, `${stamp()} ${msg}\n`)
+  // The log quotes failed release commands, which may hold a DB URL: readable by the user only.
+  if (!logReady) { mkdirSync(HOME_DIR, { recursive: true }); try { if (existsSync(LOG)) chmodSync(LOG, 0o600) } catch {} logReady = true }
+  appendFileSync(LOG, `${stamp()} ${msg}\n`, { mode: 0o600 })
 }
 
 export function load(root, slug) {
@@ -55,7 +65,7 @@ function save(root, slug, data) {
 function tasks(root) {
   const dir = join(root, '.pipeline')
   if (!existsSync(dir)) return []
-  return readdirSync(dir).filter((s) => !s.startsWith('_') && existsSync(fileOf(root, s)))
+  return readdirSync(dir).filter((s) => okSlug(s) && !s.startsWith('_') && !NOT_TASKS.has(s) && existsSync(fileOf(root, s)))
 }
 function run(cmd, root) {
   try {
@@ -111,10 +121,15 @@ export function restoreTouched(root, path) {
   return done
 }
 // Uncommitted changes, or commits not on the remote branch → the worktree holds work nobody else has.
-function unsavedWork(path, root) {
+// `restore: false` (a dry run) only looks: it changes no file, and counts a tool-touched file as no work.
+function unsavedWork(path, root, restore = true) {
   if (!existsSync(path)) return ''
-  if (root) restoreTouched(root, path)
-  if (sh('git status --porcelain', path)) return 'uncommitted changes'
+  if (root && restore) restoreTouched(root, path)
+  const touched = root && !restore ? toolTouched(root) : []
+  // ` M file` is a tracked file with unstaged edits (sh() trims the first line's leading space).
+  const edits = sh('git status --porcelain', path).split(/\r?\n/).filter(Boolean)
+    .filter((l) => { const m = l.match(/^ ?M (?! )(.+)$/); return !(m && touched.includes(m[1])) })
+  if (edits.length) return 'uncommitted changes'
   if (sh('git log --oneline -1 HEAD --not --remotes', path)) return 'unpushed commits'
   return ''
 }
@@ -163,6 +178,7 @@ function prsFromWorktrees(d) {
   return [...new Set(urls)]
 }
 export function archive(root, slug) {
+  if (!okSlug(slug)) throw new Error(`not a task name: ${JSON.stringify(slug)}`)
   const from = join(root, '.pipeline', slug)
   if (!existsSync(from) || existsSync(fileOf(root, slug))) return false // still holds resources
   const to = join(root, '.pipeline', '_archive', slug)
@@ -255,14 +271,17 @@ export function prune(rootList, maxDays = 7, dryRun = false) {
     if (!existsSync(pipe)) continue
     for (const slug of readdirSync(pipe)) {
       const dir = join(pipe, slug)
-      if (slug.startsWith('_') || !statSync(dir).isDirectory() || running(dir)) continue
+      if (slug.startsWith('_') || NOT_TASKS.has(slug) || !okSlug(slug) || !statSync(dir).isDirectory() || running(dir)) continue
       const idle = days(lastActivity(dir))
       if (idle <= maxDays) continue
       const d = load(root, slug)
       if (d.entries.length) act(`free ${slug} (idle ${idle}d)`, () => releaseAll(root, slug))
       if (!dryRun && existsSync(fileOf(root, slug)) && load(root, slug).entries.length) continue // something was kept (unsaved work)
       const prs = d.prs.length ? d.prs : prsFromWorktrees(d)
-      const open = prs.filter((u) => prState(u) === 'OPEN')
+      const states = prs.map(prState)
+      // gh offline, logged out or rate-limited: an open PR must not be mistaken for a closed one.
+      if (states.includes('UNKNOWN')) { console.log(`keep ${slug}: could not read the state of its PR(s) — nothing deleted`); continue }
+      const open = prs.filter((u, i) => states[i] === 'OPEN')
       if (open.length) {
         // A later QC round still needs the plan, ticket and state; everything heavy goes.
         act(`slim ${slug} (idle ${idle}d, PR open: ${open.join(' ')})`, () => {
@@ -300,7 +319,7 @@ export function prune(rootList, maxDays = 7, dryRun = false) {
         if (owned.has(wt)) continue
         const idle = days(statSync(wt).mtimeMs)
         if (idle <= maxDays) continue
-        const why = unsavedWork(wt, root)
+        const why = unsavedWork(wt, root, !dryRun)
         if (why) { console.log(`stray worktree ${name} kept: ${why}`); continue }
         const common = sh('git rev-parse --path-format=absolute --git-common-dir', wt).replace(/[\\/]\.git$/, '')
         act(`remove stray worktree ${name} (idle ${idle}d)`, () => run(`git -C ${JSON.stringify(common)} worktree remove --force ${JSON.stringify(wt)}`, root))
