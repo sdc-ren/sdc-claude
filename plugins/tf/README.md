@@ -20,11 +20,16 @@ Running a ticket through one long agent session is slow and hard to trust: the s
 the code, tests are re-driven by hand every round, and a QC report three days later means re-reading
 everything. **tf** organises the work like a small team:
 
-- **A PM agent decides.** It reads the ticket, writes a micro-task plan, sizes the task, and chooses which
-  agents run, in what order, on which model. Small tasks get one dev and one tester; big ones get parallel
-  devs per repo and a stricter review.
+- **A PM agent decides.** It reads the brief, the config and the code, writes the requirements and a micro-task
+  plan, sizes the task, and chooses which agents run, in what order, on which model. Small tasks run three
+  jobs; big ones get a written design, parallel devs per repo and a stricter review.
+- **It asks before it builds — and only when it has to.** A task with two plausible readings stops with the
+  questions before anything runs; a clear one runs straight through. A large task shows you its design first.
 - **Hard rules live in code, not prompts.** No PR before the tester passes the latest code. No PR before a
-  review gate. Writer ≠ judge. PRs are always ready. Caps stop loops that do not converge.
+  review gate. Writer ≠ judge. PRs are always ready. Caps stop loops that do not converge, and a job that
+  cannot finish twice stops the run instead of being sent again.
+- **It checks what human reviewers check.** The repo's existing tests are run, other users of changed shared
+  code get a regression case, limits and modes get their own cases, and a visual fix must show a visible change.
 - **E2E flows are kept.** Every case becomes a re-runnable script. A QC round re-runs the flows in minutes
   instead of clicking through the UI again.
 - **One card per ticket.** `HANDOFF.md` (≤ 80 lines) is all a later round needs to start, even days later.
@@ -60,7 +65,7 @@ Then, in your workspace (the folder that holds your repos):
 
 ## Commands
 
-Eight commands. Everything after the input is optional.
+Nine commands. Everything after the input is optional.
 
 **What you can give a task command** — any of these, alone or together:
 
@@ -97,8 +102,8 @@ post one.
 |---|---|---|
 | `--attach` | build · qc · review · e2e · demo | Before the PM starts, show a checkbox list of this workspace's artifacts and design systems; ticked items are read into `specs/` and used by the PM, devs and testers |
 | `--lang <code>` | build · qc · feedback · review · e2e | Report language for this run (`vi`, `en`, …); overrides the workspace config |
-| `--approve` | build · qc | Stop after the PM writes the plan and wait for your approval |
-| `--assume` | all | Never stop to ask about an unclear task: the PM assumes and lists what it assumed |
+| `--approve` | build · qc | Stop after the PM writes the plan and wait for your approval (a size L task stops there anyway) |
+| `--assume` | build · qc · review · e2e | Run unattended: no questions about an unclear task and no design approval on a size L task — the PM assumes and lists what it assumed |
 | `--check` | feedback | Only fetch and triage the review points — no code, nothing posted |
 | `--draft` | build · qc | Allow a draft PR. Without it every PR is opened ready, and agents never choose draft |
 | pasted `https://claude.ai/artifact/…` | build · qc · review · e2e · demo | Attach that artifact directly (same as ticking it) |
@@ -109,12 +114,13 @@ You can also pick artifacts with the **Artifacts (n)** band above the chat input
 ### `/tf:build`
 
 ```
-/tf:build <key | link(s) | words> [--attach] [--approve] [--draft] [--lang <code>]
+/tf:build <key | link(s) | words> [--attach] [--approve] [--assume] [--draft] [--lang <code>]
 ```
 
-New task end to end: the PM reads the brief (your words plus every source you pointed at), plans micro-tasks,
-staffs devs / tester / reviewer, and closes with a **ready PR per changed repo**, e2e evidence, and a
-ticket-comment draft when a tracker issue was the source.
+New task end to end: the PM reads the brief (your words plus every source you pointed at), asks you what it
+cannot settle from the brief and the code, writes requirements and micro-tasks, staffs devs / tester / reviewer,
+and closes with a **ready PR per changed repo**, e2e evidence, and a ticket-comment draft when a tracker issue
+was the source.
 
 ```
 /tf:build PROJ-123
@@ -130,12 +136,13 @@ repo's own stack, and testers compare every screen against the canvas's clickabl
 ### `/tf:qc`
 
 ```
-/tf:qc <ticket> [--attach] [--approve] [--draft] [--lang <code>]
+/tf:qc <ticket> [--attach] [--approve] [--assume] [--draft] [--lang <code>]
 ```
 
 Next round of a ticket tf already did: re-reads the ticket (new or edited QC comments), reproduces the
 reported cases with the saved flows, fixes only those, re-tests, and pushes to the same PR (or opens a new
-one if the old PR was merged). Ends with a QC-reply draft. Attachments from earlier rounds are reused.
+one if the old PR was merged). Ends with a QC-reply draft. Attachments from earlier rounds are reused. The
+round is sized by what it changes: a one-class fix on a large ticket is a small task.
 Review comments from teammates on the PRs go through `/tf:address-review`.
 
 ```
@@ -154,7 +161,7 @@ triages each point (a long review comment is split into points):
 
 | Verdict | Meaning |
 |---|---|
-| `fix` | Fixed on the same PR branch: dev → reviewer gate → tester (only the flows the fix touches; none for naming/comments/types) → push |
+| `fix` | Fixed on the same PR branch: dev → tester (only the flows the fix touches; none for naming/comments/types) → reviewer gate and push |
 | `discuss` | We disagree — with a concrete reason (ticket, decision, workspace rule, code) |
 | `answered` | A question; reply only |
 | `out-of-scope` | Belongs to another ticket |
@@ -238,6 +245,10 @@ canvas's Play mode. No repo, no worktree, no PR, no agents — it takes a minute
 /tf:demo https://claude.ai/artifact/J1vh43YkirYZdRj5r1sZFu --comments
 ```
 
+It is the canvas's screens with their sample data — no backend, nothing saved. Only words and a design system,
+no canvas yet? tf offers to draw the screens on a new canvas first. To build the real app from the same canvas:
+`/tf:build <description> <canvas link>`.
+
 ### `/tf:digest`
 
 ```
@@ -268,10 +279,6 @@ you can find it in Zalo.
 /tf:digest NhatLinh hôm qua --focus "thanh toán"
 /tf:digest all
 ```
-
-It is the canvas's screens with their sample data — no backend, nothing saved. Only words and a design system,
-no canvas yet? tf offers to draw the screens on a new canvas first. To build the real app from the same canvas:
-`/tf:build <description> <canvas link>`.
 
 ### `/tf:status`
 
@@ -331,39 +338,89 @@ The band appears once the session has started (after your first message in a new
 
 ## How it works
 
+**Who talks to whom**
+
 ```mermaid
 flowchart LR
-    U([You]) -->|/tf:build PROJ-123| O[Session<br/>orchestrator]
-    O -->|resolve ticket, lock,<br/>read HANDOFF + new comments| W[Workflow<br/>executor]
-    W <-->|dispatch / reports| PM{{tf:pm}}
-    W --> D1[tf:lead · be]
-    W --> D2[tf:lead · fe]
-    D1 --> M1[tf:dev · member a]
-    D1 --> M2[tf:dev · member b]
-    W --> T[tf:tester]
-    W --> R[tf:reviewer]
-    R -->|ready PR| GH[(GitHub)]
-    T -->|flows + evidence| F[(.pipeline/TICKET)]
-    PM -->|HANDOFF, plan, board| F
-    O -->|drafts for your approval| U
+    U([You]) -->|"/tf:build PROJ-123"| O["Session<br/>orchestrator"]
+    O -->|"one folder, lock,<br/>the brief"| W["Workflow<br/>executor"]
+    W <-->|"decisions / reports"| PM{{"tf:pm"}}
+    W --> D1["tf:lead · be"]
+    W --> D2["tf:lead · fe"]
+    D1 --> M1["tf:dev · member a"]
+    D1 --> M2["tf:dev · member b"]
+    W --> T["tf:tester"]
+    W --> R["tf:reviewer"]
+    R -->|"ready PR"| GH[("GitHub")]
+    T -->|"flows + evidence"| F[(".pipeline/TICKET")]
+    PM -->|"plan, design, board, HANDOFF"| F
+    O -->|"questions, approvals, drafts"| U
+```
+
+**What one run goes through**
+
+```mermaid
+flowchart TD
+    A(["/tf:build …"]) --> B["Pre-flight<br/>folder, lock, brief"]
+    B --> C{{"PM reads the brief,<br/>the config and the code"}}
+    C -->|"something open that<br/>changes what is built"| Q[/"Questions to you"/]
+    Q -->|"answers kept in ticket.md"| C
+    C -->|"clear"| P["Requirements → design → micro-tasks + cases"]
+    P -->|"XS / S"| S["Small-task lane<br/>dev → tester → reviewer (gate + PACKAGE)"]
+    P -->|"M / L"| K["Plan check<br/>a second reader of the ticket"]
+    K -->|"L, or the two readers disagree"| Y[/"You approve design and plan"/]
+    K -->|"M, no open point"| L["Full lane<br/>devs ∥ FLOWS → gate → tester → PACKAGE"]
+    Y --> L
+    S --> V{"tester PASS<br/>and clean gate?"}
+    L --> V
+    V -->|"no"| X["PM: one fix job per repo,<br/>re-test only what failed"]
+    X --> V
+    V -->|"yes"| PR[("ready PR")]
+    PR --> Z["Close-out<br/>HANDOFF, evidence, drafts for you"]
 ```
 
 1. **Pre-flight (your session).** `task.mjs resolve` maps the input (ticket key, PR URL, or text) to exactly one
-   folder, finds existing worktrees and PRs, and takes a lock. The ticket is saved verbatim; on later rounds
-   only new or edited comments and human PR review comments are marked.
-2. **PM turn.** `tf:pm` reads `HANDOFF.md` / the ticket, inspects every repo the workspace lists, writes
-   `plan.md` (micro-tasks: what + exact file, *how* only at contracts), and returns a dispatch: jobs, roles,
-   models, parallel groups.
-3. **Jobs.** The executor runs the dispatch — e.g. group 1: one `tf:lead` per repo in parallel (each does its
-   repo's work alone, or splits it among up to 3 `tf:dev` members with separate files and merges the result), plus a
-   `tf:tester` `FLOWS` job writing the e2e flows from the plan; group 2:
-   `tf:reviewer` (gate); group 3: `tf:tester`. If a job fails or the gate asks for changes, later groups are
-   skipped and the PM re-plans. App servers start once per run (`serve.mjs`) and stay up across jobs.
-4. **Repeat** until the PM closes: fix rounds send only the open issue ids to the dev, and the tester re-runs
-   only the failing flows. After a PASS and a clean gate, a `PACKAGE` reviewer job commits, pushes and opens
-   the ready PR.
-5. **Close-out (your session).** Evidence is uploaded per the workspace config, drafts are shown to you,
-   `HANDOFF.md` is rewritten for the next round.
+   folder, finds existing worktrees and PRs, and takes a lock. The brief — your words and every source, verbatim
+   — is saved as `ticket.md`; on later rounds new or edited comments are marked. The workflow is listed under
+   the task's id in `/workflows`.
+2. **Understand first.** `tf:pm` reads `HANDOFF.md` / the brief, the config and every repo it lists. Whatever
+   is still open is sorted: a point with two plausible readings that would build different things, and that
+   nothing it read settles, is a **question for you** — the run stops before any plan, you answer in a picker
+   (product decisions can go to the PO as a drafted tracker comment), the answers are kept in `ticket.md` and
+   the run starts again. Everything else is an assumption it lists. A clear task is not asked about.
+3. **Requirements → design → tasks.** The plan starts with numbered requirements a flow can check, each with
+   the words of the brief it comes from. An M task adds a short design (data and what happens when it changes
+   later, neighbouring features, interfaces, decisions); an L task writes `design.md` before the plan. Then
+   micro-tasks (what + exact file, *how* only at contracts), cases with their data and expected result, and
+   coverage `R<n> → micro-tasks → cases`.
+4. **Check the plan (M/L).** A second agent reads the ticket and the plan with none of the PM's reasoning. Its
+   points go back to the PM once; if the two still disagree, you decide. An L task always shows you its design
+   and plan before the first job.
+5. **Jobs.** The executor runs the dispatch, groups in order, jobs of one group in parallel:
+   - *small-task lane (XS/S)* — the dev job → the tester with only the cases the change touches → one reviewer
+     job that runs the gate checklist and, when it is clean, commits, pushes and opens the PR;
+   - *full lane (M/L)* — one `tf:lead` per repo in parallel (alone, or with up to 3 `tf:dev` members on
+     separate files) plus a `tf:tester` `FLOWS` job writing the flows from the plan → a `tf:reviewer` gate per
+     repo → `tf:tester` → a `PACKAGE` reviewer job.
+
+   App servers start once per run (`serve.mjs`) and stay up across jobs.
+6. **Repeat** until the PM closes. A job that did not finish, a gate that asks for changes or a tester that did
+   not pass skips the later groups and the PM re-plans: one fix job per repo with the open issue ids, then only
+   the failing flows are re-run.
+7. **Close-out (your session).** Evidence is uploaded per the workspace config, drafts are shown to you,
+   `HANDOFF.md` is rewritten for the next round, and the run's cost is measured (`/tf:status --metrics`).
+
+### What the gate and the tester look for
+
+Beyond scope, contract, conventions and tamper, the checks that human reviewers kept catching are built in:
+
+| Check | Who | What happens |
+|---|---|---|
+| Existing tests | dev lead, gate | The repo's own suite (config `## Checks`) is run; each failure is either caused by the change — fixed, or the gate rates it P2 — or shown to fail on the base as well. "No new unit tests" never means "do not run the old ones" |
+| Impact | gate → tester | Other users of every shared function, helper, component or query the diff changes are listed; one that no case covers becomes an `IMPACT` case the tester of that dispatch runs |
+| Limits and modes | PM, plan check | A rule with a limit gets a case at the limit and just past it; a flag one side accepts and the other rejects in some mode gets a case per mode |
+| Visual fixes | tester | Before and after shots of the region the ticket names must differ, and the after state is asserted by measurement; identical shots are never a PASS |
+| Design | gate | On M/L the diff must do what the design decided; a departure nobody explained is P2 |
 
 ### Hard rules
 
@@ -372,26 +429,42 @@ for each, is in [docs/design.md](docs/design.md#hard-rules).
 
 | Rule | Why |
 |---|---|
-| No PR until a tester passed the latest code of that repo, and the PR comes from a job started after that pass | Nothing ships untested |
-| Writer ≠ judge: dev, tester and reviewer are separate agents; the gate runs on the dev's model, before the tester | No one marks their own work; no test run thrown away by a gate |
+| No PR until a tester passed the latest code of that repo, and the PR comes from a job started after that pass. A tester that did not pass skips everything after it in the dispatch | Nothing ships untested |
+| Writer ≠ judge: dev, tester and reviewer are separate agents; the gate runs on the dev lead's model | No one marks their own work |
+| M/L: no `PACKAGE` without a gate that passed after the repo's last dev job, and the gate runs before the tester. XS/S may fold the gate into the `PACKAGE` job; a small-lane change that grew past 3 files gets a separate gate first | No test run thrown away by a gate on large changes; small ones do not pay for the full pipeline |
 | Dev jobs never commit, push or merge; a team member never edits another member's file | The reviewer packages; parallel coding without collisions |
-| M/L tasks: a second agent reads the ticket and the plan before any job runs; if it and the PM still disagree, you are asked | A wrong plan is caught before it costs a run |
-| XS/S tasks: the tester runs only the cases the change touches | A one-line fix does not pay for the whole saved suite |
+| Questions only before the first job, at most 3 rounds, never with `--assume` | An unclear task waits for you; a run in progress is not interrupted for a detail |
+| M/L: a second agent reads the ticket and the plan before any job runs; if it and the PM still disagree, you are asked. L: you see the design and the plan first | A wrong plan is caught before it costs a run |
+| XS/S: the tester runs only the cases the change touches. XS: one repo, no `FLOWS` job, no dev team. No `FLOWS` job in a fix round | A one-line fix does not pay for the whole saved suite |
+| The same kind of job on a repo unfinished twice in a row → the run stops with both reasons | A permission or environment block is yours to fix; a third try changes nothing |
 | PRs are ready (draft only with `--draft`); limits on turns, jobs and fix attempts | A PR means "done and verified"; loops that do not converge escalate to you |
 
-### When the PM stops to ask you
+### When tf stops for you
 
-Only for: broken layout or UI clearly unlike the design; a flow totally different from before or a spec
-change the ticket does not settle; risk to money, permissions, data or security; an edit inside a
-read-only zone; a blocker no job can remove — plus whatever your workspace config adds. Everything else
-is decided and listed as *assumptions* in the round report so you can correct it.
+| When | What you get | Skip it with |
+|---|---|---|
+| Before anything runs, the brief leaves open something that changes what gets built | The questions, each with the unclear words quoted, the options and the PM's own pick | `--assume` |
+| A size L task has its design and plan | A summary of `design.md` and the plan; a change you ask for sends the PM back to the design | `--assume` |
+| You passed `--approve` | The plan, before any job | — |
+| The plan check and the PM read the ticket differently | Both readings, side by side | — |
+| Mid-run: broken layout or UI clearly unlike the design; a flow or spec change the ticket does not settle; risk to money, permissions, data or security; an edit needed inside a read-only zone; a blocker no job can remove — plus whatever your config adds | One question with its options | — |
+| The same job could not finish twice | Both reasons, and whether it looks like a tool-permission block | — |
+
+Everything else is decided and listed as *assumptions* in the round report so you can correct it.
 
 ### Sizing
 
-The PM sizes every task XS, S, M or L and staffs it accordingly: a small change (one repo, up to three
-files) runs dev → tester → one reviewer job that gates and packages, and a later round is sized by what that
-round changes; a migration or a money change gets a written design you approve before any code, a plan check, a lead per repo and opus where it is
-risky. The table is in [docs/design.md](docs/design.md#sizing-and-models-pm-decides).
+The PM sizes by the change, not by the ticket's wording, and a later round by what that round changes.
+
+| Size | Typical task | Documents | Lane | Agents |
+|---|---|---|---|---|
+| XS | text, colour, spacing, show/hide; one repo, 1–3 files | requirements (1–5 lines) | small-task | PM · dev · tester · reviewer |
+| S | a field or column, one screen, one endpoint | requirements | small-task when ≤ 3 files per repo, else full | + `FLOWS` when 3+ new flows |
+| M | 2+ repos meet, or an API/contract change | requirements + `## Design` in the plan | full, plan check | one lead per repo, gates, testers |
+| L | new feature, migration, money, permissions | requirements + `design.md`, approved by you | full, plan check | as M, opus where risky |
+
+Money, auth, permissions, data migrations and read-only zones never go below M. Details:
+[docs/design.md](docs/design.md#sizing-and-models-pm-decides).
 
 ## Workspace configuration
 
@@ -417,6 +490,12 @@ tf reads `<workspace>/.claude/task-flow.md`. Start from [docs/config-template.md
 ## Test policy
 - e2e-only — no new unit/DB tests; cover reviewer-expected tests with e2e/API flows and say so in the PR.
 
+## Checks (existing tests — run by the dev lead, checked by the gate; never new tests)
+| repo | command | notes |
+|---|---|---|
+| be | `npx jest test/unit/services` | 2 suites already red on develop |
+| fe | `npm test` | |
+
 ## Flows (e2e)
 - Playwright package: `<root>/autotest/package.json`
 - Targets: `local` = the task's ports; `dev` = https://dev.example.com
@@ -436,18 +515,23 @@ approved comments are posted).
 ```
 <workspace>/
   .pipeline/PROJ-123/
-    ticket.md          verbatim ticket (+ PR review comments on later rounds)
+    ticket.md          the brief: your words and every source verbatim, plus your answers (## Clarifications)
     HANDOFF.md         ≤ 80-line card — the first thing every later round reads
-    plan.md            current round's micro-tasks and API contract
+    plan.md            current round: requirements, design (M), micro-tasks, contract, cases, coverage
+    design.md          size L only: data, neighbours, interfaces, decisions, flow, risks — kept across rounds
     board.md           the PM's ledger: jobs, results, assumptions, open issues
     journal.md         append-only log, 1–3 lines per job
     jobs/J<n>-<role>-<repo>.md   each job's brief and report
     flows/*.mjs, flows.json      re-runnable e2e cases
     evd/               WebP screenshots, verdicts
+    specs/             attached artifacts, canvases, design systems
     history/r<N>/      earlier rounds
     resources.json     everything the task holds, with the command that frees it
+    metrics.json       measured cost of every run
+    PROJ-123.js        this run's copy of the engine, named after the task (rewritten every run)
   .worktrees/PROJ-123/
     backend/  frontend/  mobile/     one git worktree per repo the task touches
+  .pipeline/_lib/                    flow helpers shared by every task (login, seeding)
   .pipeline/_regression/             passing flows of merged tickets
 ```
 
@@ -482,7 +566,12 @@ node <plugin>/scripts/flow-peek.mjs .pipeline/PROJ-123 /some/screen           # 
 
 - Waits for the app, not the clock: `waitApi`, `ready`, `gotoReady`; a 15 s ceiling per step, never a delay.
 - Evidence: `<case>-after.webp` (+ `before` for visual changes), failure screenshot automatically,
-  Playwright trace only with `TRACE=1`.
+  Playwright trace only with `TRACE=1`. A visual case passes only when before and after differ where the
+  ticket says and the after state is measured.
+- Cheapest level that proves a case: API before Web before App. Login and seeding live once in
+  `.pipeline/_lib/`, not in every flow.
+- A bug is reported only with proof: the data the flow used was checked, and the failing step was repeated
+  once outside the flow.
 - Console errors and HTTP 5xx are reported with the verdict even when the case passes.
 - Android: `androidFlow` drives the task's own emulator with adb (Flutter `Semantics(identifier:)` →
   `resource-id`).
@@ -524,6 +613,9 @@ Run `/tf:status --doctor` to see what is missing.
 |---|---|
 | `lock-conflict` / "another run holds it" | A run is active, or one crashed less than 90 min ago. Check `/workflows`; remove `.pipeline/<slug>/.lock` only when nothing runs. |
 | PM escalates "rejected twice by the hard rules" | Read the rule in the message; usually a judge was put in the same group as a dev, or a PR was a draft. |
+| The run ends asking you questions | The brief had two plausible readings. Answer them (or pick "PM decides"); the run starts again with the answers in `ticket.md`. `--assume` skips this. |
+| The run ends asking you to approve a design | A size L task. Read the summary, approve or say what to change. `--assume` skips this. |
+| "… could not finish twice in a row" | The same job was blocked twice and was not sent a third time. The message carries both reasons; when it says tool-permission block, check the session's permission mode and any hook that rewrites commands, then run the command again. |
 | Tester says `blocked-env` | The environment is missing something (DB, port, emulator, login). `/tf:status --doctor`, then fix the config's provisioning. |
 | Flow fails after an intended UI change | The tester marks it `flow-broken`, fixes the selector and re-runs — not an app bug. |
 | Old `-e2e` / `-qc` folders or flat worktrees | `/tf:clean --legacy`, `/tf:clean --migrate`. |
@@ -532,7 +624,11 @@ Run `/tf:status --doctor` to see what is missing.
 ## FAQ
 
 **Does tf write unit tests?** Only if your workspace `Test policy` allows them. Verification is e2e flows
-with evidence; typecheck, lint and build run as cheap checks.
+with evidence; typecheck, lint, build and the repo's existing tests (config `## Checks`) run as checks.
+
+**Will it keep asking me things?** No. It asks before the first job, only about what would change the thing
+being built and cannot be read from the brief or the code, at most three times; a clear task runs without a
+word. Pass `--assume` to run unattended.
 
 **Can I use it in any repository layout?** Yes — a workspace is any folder whose config lists one or more
 git repos. A single-repo project lists just one.
@@ -540,8 +636,9 @@ git repos. A single-repo project lists just one.
 **Where do the rules come from?** `guidelines/` in this plugin (git, PR description, PR review, ticket
 comment, e2e). A repo's own conventions (its CLAUDE.md, CONTRIBUTING, commitlint) win.
 
-**What does it cost?** Fewer agents than a fixed pipeline: XS tasks typically run 3–5 agents. The PM uses
-opus for planning and drops to sonnet for small tasks after the first turn.
+**What does it cost?** Fewer agents than a fixed pipeline: a small task runs five (the PM twice, a dev, a
+tester, a reviewer), a large one a lead per repo with gates and testers. The PM uses opus for planning and
+drops to sonnet for small tasks after the first turn. `/tf:status --metrics` shows what each run really cost.
 
 ## More
 
