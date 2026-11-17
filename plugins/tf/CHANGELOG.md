@@ -4,6 +4,23 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.16.4] — 2026-11-17
+
+### Security
+- **A canvas's scripts no longer run inside the export.** `canvas.mjs export` test-rendered each screen with
+  `node:vm`, which a script can leave (it reaches the host's `Function` through any object it is handed) — a
+  canvas you were sent could run code as you. The test render now happens in one separate process per export
+  (`canvas-smoke.mjs`) under Node's permission model: no file writes, no child processes or workers, reads
+  limited to its own two files, an empty environment. It refuses to start any other way.
+- **A screen that never returns is stopped.** Each screen has 2 seconds, enforced around the whole render and
+  every handler, with a deadline on the process behind it; a process that dies on one screen is reported and
+  the rest are still rendered.
+- A screen script that does not parse is now reported with its syntax error instead of
+  "inst.render is not a function".
+
+Needs Node 22.13 or later; on an older Node the screens are not run at all and the export says so.
+Cost: about 30–40 ms per export, whatever the number of screens.
+
 ## [1.16.3] — 2026-11-17
 
 ### Security

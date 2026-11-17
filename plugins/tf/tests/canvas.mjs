@@ -2,9 +2,10 @@
 // rendering of holes, loops, branches, handlers and links (with a stub React, no browser).
 // Run: node --test tests/canvas.mjs
 import assert from 'node:assert/strict'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
+import { spawnSync } from 'node:child_process'
 import { test } from 'node:test'
 import { fileURLToPath } from 'node:url'
 import vm from 'node:vm'
@@ -248,4 +249,51 @@ test('a screen named by the canvas is a .dc.html file inside the canvas folder, 
   // A `file` field inside a board does not replace the board's key.
   const l = layout({ boards: { 'Home.dc.html': { file: '../canary.txt', x: 0, y: 0, w: 10, h: 10 } }, notes: {} })
   assert.deepEqual(l.flatMap((g) => g.screens.map((s) => s.file)), ['Home.dc.html'])
+})
+
+test('a hostile canvas: its scripts run in a sandboxed process and cannot touch this machine', (t) => {
+  const root = tmp()
+  const p = join(root, 'project')
+  mkdirSync(p)
+  const mark = join(root, 'canary.txt')
+  const host = 'const P = React.createElement.constructor("return process")();' // out of node:vm, into the process
+  const cls = (body) => `class Component extends DCLogic { renderVals() { ${body}; return {}; } }`
+  const cases = {
+    ok: cls(''),
+    loop: cls('while (true) {}'),
+    env: cls(`${host} throw new Error("SEES " + P.env.TF_TEST_SECRET)`),
+    write: cls(`${host} P.getBuiltinModule("node:fs").writeFileSync(${JSON.stringify(mark)}, "x")`),
+    read: cls(`${host} throw new Error("READ " + P.getBuiltinModule("node:fs").readFileSync(${JSON.stringify(join(p, 'canvas.json'))}, "utf8").length)`),
+    spawn: cls(`${host} throw new Error("RAN " + P.getBuiltinModule("node:child_process").execFileSync(P.execPath, ["-v"]))`),
+    exit: cls(`${host} P.exit(0)`),
+    after: cls(''),
+  }
+  const boards = {}
+  let x = 0
+  for (const [n, logic] of Object.entries(cases)) {
+    writeFileSync(join(p, `${n}.dc.html`), screen(n, '<div style="width: 100px; height: 100px">x</div>', logic, '{"width":100,"height":100}'))
+    boards[`${n}.dc.html`] = { x: (x += 200), y: 0, w: 100, h: 100, title: n }
+  }
+  writeFileSync(join(p, 'canvas.json'), JSON.stringify({ v: 3, title: 'hostile', boards, order: Object.keys(boards), notes: {} }))
+  process.env.TF_TEST_SECRET = 'top-secret'
+  const w = exportDemo(root, join(root, 'out')).warnings.filter((m) => /test render|test-rendered/.test(m))
+  delete process.env.TF_TEST_SECRET
+  if (w.some((m) => /cannot sandbox/.test(m))) return t.skip('this Node has no permission model: the screens were not run at all')
+  const of = (n) => w.find((m) => m.startsWith(`${n}.dc.html:`)) || ''
+  assert.equal(of('ok'), '', 'a harmless screen has no warning')
+  assert.equal(of('after'), '', 'screens after a killed one are still rendered')
+  assert.match(of('loop'), /did not finish within 2 s/)
+  assert.match(of('env'), /SEES undefined/, 'the environment is not passed on')
+  assert.match(of('write'), /restricted/i)
+  assert.match(of('read'), /restricted/i)
+  assert.match(of('spawn'), /restricted/i)
+  assert.match(of('exit'), /was stopped/)
+  assert.ok(!existsSync(mark), 'nothing was written')
+  rmSync(root, { recursive: true, force: true })
+})
+
+test('canvas-smoke.mjs refuses to run a canvas outside the sandbox', () => {
+  const r = spawnSync(process.execPath, [join(S, 'canvas-smoke.mjs')], { input: '[]', encoding: 'utf8' })
+  assert.equal(r.status, 3)
+  assert.match(r.stderr, /sandbox/)
 })

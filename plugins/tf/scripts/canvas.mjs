@@ -22,7 +22,7 @@ import { copyFileSync, existsSync, mkdirSync, readdirSync, readFileSync, statSyn
 import { createServer } from 'node:http'
 import { dirname, extname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import vm from 'node:vm'
+import { spawnSync } from 'node:child_process'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const REACT = 'https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js'
@@ -227,38 +227,36 @@ export function screenPath(proj, file) {
 }
 const resolveLink = (from, h) => (h.startsWith('/') ? h.slice(1) : join(dirname(from), h).split(sep).join('/'))
 
-// Render each screen once in Node with a stub React: catches screens whose script throws before a browser does.
-function smoke(name, sources) {
-  const R = {
-    Fragment: 'F',
-    Component: class { constructor(p) { this.props = p || {}; this.state = {} } setState(u) { this.state = { ...this.state, ...(typeof u === 'function' ? u(this.state, this.props) : u) } } forceUpdate() {} },
-    createElement: (t, p, ...c) => ({ t, p, c }),
+// The screens' own scripts are test-rendered in a separate, sandboxed process (canvas-smoke.mjs): a canvas is
+// someone else's code and must not run with this process's files, environment or shell. One process per
+// export, not per screen. Returns { file: error } for the screens that failed, and `skipped` when this Node
+// cannot sandbox (then nothing of the canvas is run here at all).
+const SMOKE = join(HERE, 'canvas-smoke.mjs')
+export function smokeAll(screens) {
+  const failed = {}
+  if (!screens.length) return { failed, skipped: '' }
+  const run = (flag, list) => spawnSync(process.execPath, [flag, `--allow-fs-read=${SMOKE}`, `--allow-fs-read=${join(HERE, 'canvas-runtime.js')}`, '--max-old-space-size=256', SMOKE], {
+    input: JSON.stringify(list), encoding: 'utf8', windowsHide: true, killSignal: 'SIGKILL', maxBuffer: 16 * 1024 * 1024,
+    timeout: 10_000 + 2_500 * list.length, // each screen stops itself after 2 s; this is the backstop
+    env: process.platform === 'win32' ? { SystemRoot: process.env.SystemRoot || '' } : {}, // no tokens, no paths
+  })
+  let flag = '--permission'
+  let pending = screens
+  for (let round = 0; pending.length && round < 5; round++) {
+    let r = run(flag, pending)
+    // Node 22 before 22.13 spells the flag differently; a Node with neither cannot sandbox.
+    if (r.status === 9 && flag === '--permission') { flag = '--experimental-permission'; r = run(flag, pending) }
+    if (r.status === 9 || r.status === 3 || (r.error && r.error.code === 'ENOENT')) return { failed, skipped: `screen scripts were not test-rendered: Node ${process.version} cannot sandbox them (needs 22.13 or later)` }
+    const done = new Map()
+    for (const line of String(r.stdout || '').split('\n')) { try { const v = JSON.parse(line); done.set(v.file, v.error) } catch {} }
+    const next = pending.findIndex((s) => !done.has(s.file))
+    for (const [file, error] of done) if (error) failed[file] = error
+    if (next < 0) break
+    // The process died on this screen (out of memory, or killed at the deadline): report it, go on with the rest.
+    failed[pending[next].file] = 'the test render was stopped (out of memory or time)'
+    pending = pending.slice(next + 1)
   }
-  const sandbox = { console: { log() {}, warn() {}, error() {} } }
-  vm.createContext(sandbox)
-  vm.runInContext(readFileSync(join(HERE, 'canvas-runtime.js'), 'utf8'), sandbox, { timeout: 2000 })
-  const ctx = sandbox.DCRuntime.makeComponents(R, sources, '')
-  const C = ctx.components[name]
-  const inst = new C(sources[name].props || {})
-  // Render, then press every handler once (click, change…) and render again: a button whose handler throws
-  // shows up here instead of in front of a client.
-  const handlers = []
-  const walkEl = (e) => {
-    if (!e || typeof e !== 'object') return
-    if (typeof e.t === 'function') { const c = new e.t(e.p || {}); walkEl(c.render ? c.render() : null) }
-    for (const [k, v] of Object.entries(e.p || {})) if (/^on[A-Z]/.test(k) && typeof v === 'function') handlers.push([k, v])
-    ;(e.c || []).forEach(walkEl)
-  }
-  const check = (tree) => { if (tree && tree.c && tree.c[0] && tree.c[0].t === 'pre') throw new Error(tree.c[0].c.join('')) }
-  let tree = inst.render()
-  check(tree)
-  walkEl(tree)
-  const ev = { preventDefault() {}, stopPropagation() {}, target: { value: '', checked: true }, currentTarget: { value: '', checked: true }, key: 'Enter' }
-  for (const [k, fn] of handlers.slice(0, 200)) {
-    try { fn(ev) } catch (e) { throw new Error(`${k} handler: ${e.message}`) }
-    tree = inst.render()
-    check(tree)
-  }
+  return { failed, skipped: '' }
 }
 
 const json = (x) => JSON.stringify(x).replace(/</g, '\\u003c').replace(/[\u2028\u2029]/g, (c) => `\\u${c.charCodeAt(0).toString(16)}`)
@@ -429,6 +427,7 @@ export function exportDemo(src, out, { lang = 'en', title, url, feedback } = {})
   const cache = {}
   const screen = (file) => (cache[file] ||= (() => { const p = screenPath(proj, file); return p && existsSync(p) ? parseScreen(readFileSync(p, 'utf8')) : null })())
   const screens = []
+  const toSmoke = []
   for (const g of groups) {
     for (const b of g.screens) {
       const sc = screen(b.file)
@@ -452,7 +451,7 @@ export function exportDemo(src, out, { lang = 'en', title, url, feedback } = {})
       const links = linksOf(sc).map((h) => resolveLink(b.file, h))
       for (const l of links) if (!exists.has(l)) warnings.push(`${b.file}: links to ${l}, which is not on the canvas`)
       const sources = Object.fromEntries([['main', { tpl: sc.tpl, logic: sc.logic, props: sc.props }], ...imports.map((x) => [x.name, { tpl: x.sc.tpl, logic: x.sc.logic, props: x.sc.props }])])
-      try { smoke('main', sources) } catch (e) { warnings.push(`${b.file}: screen script fails in a test render — ${String(e.message || e).split('\n')[0]}`) }
+      toSmoke.push({ file: b.file, sources })
       const outFile = b.file.replace(/\.dc\.html$/, '.html')
       const depth = outFile.split('/').length - 1
       mkdirSync(dirname(join(out, outFile)), { recursive: true })
@@ -461,6 +460,9 @@ export function exportDemo(src, out, { lang = 'en', title, url, feedback } = {})
       screens.push({ file: b.file, page: outFile, title: b.title || sc.title || b.file, group: g.slug, section: b.section, device: deviceOf(b), w: b.w, h: b.h, interactive: !!b.is_interactive, links, anchor })
     }
   }
+  const smoke = smokeAll(toSmoke)
+  for (const [file, error] of Object.entries(smoke.failed)) warnings.push(`${file}: screen script fails in a test render — ${error}`)
+  if (smoke.skipped) warnings.push(smoke.skipped)
   // Design-system files and any other support file the screens reference (css, fonts, images, json).
   for (const rel of walk(proj)) {
     const p = rel.split(sep).join('/')
