@@ -128,6 +128,9 @@ function releaseWhere(root, slug, pick) {
     if (!pick(e)) { keep.push(e); continue }
     const why = e.kind === 'worktree' ? unsavedWork(e.id, root) : ''
     if (why) { say(`  keep ${slug} worktree ${e.id}: ${why}`); keep.push({ ...e, error: why }); failed++; continue }
+    // Removed by hand or by an earlier attempt: there is nothing left to free, and `git worktree remove`
+    // would fail with "not a working tree" on every later cleanup.
+    if (e.kind === 'worktree' && !existsSync(e.id)) { say(`  release ${slug} worktree ${e.id}: already gone`); continue }
     say(`  release ${slug} ${e.kind} ${e.id}`)
     if (!run(e.release, root)) { keep.push({ ...e, error: true }); failed++ }
   }

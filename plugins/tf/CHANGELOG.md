@@ -4,6 +4,13 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.16.1] — 2026-11-17
+
+### Fixed
+- **A worktree that is already gone no longer blocks cleanup.** Releasing a worktree whose folder no longer
+  exists ran `git worktree remove`, failed with "not a working tree", and kept the task un-archived, so every
+  cleanup retried and reported it. It now counts as released.
+
 ## [1.16.0] — 2026-11-17
 
 ### Changed
