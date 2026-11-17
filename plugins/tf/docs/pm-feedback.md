@@ -37,9 +37,11 @@ Input: `<task>/feedback.md` — per PR its review decision (`APPROVED` / `CHANGE
    no tester — close with `close.noTest` and the reason. One dev job per repo, then gate (its brief lists
    the point ids it must see addressed) → tester (if any) → PACKAGE (push to the same PR, refresh the
    Testing section; never a new PR while the old one is open).
-3. **Close**: write `<task>/feedback-replies.md` — one block per point that needs an answer:
-   `### <id> · <thread R<n> | conversation <PR url>> · resolve: yes|no` then the reply text in the writing
-   language: `fix` → what changed + commit sha (from the PACKAGE report), resolve yes; `discuss` → the
-   reason, polite and concrete, resolve no; `answered` → the answer, resolve no (the reviewer decides);
-   `out-of-scope` → where it goes. Points from one conversation comment get ONE combined reply. Nothing is
-   posted by you — the orchestrator posts after the user approves. No ticket comment in feedback mode.
+3. **Close**: write `<task>/feedback-replies.md` per `${CLAUDE_PLUGIN_ROOT}/guidelines/review-reply.md` — read it
+   first. One `## <PR url>` block per PR that needs an answer: `### Summary` answers every review and
+   conversation comment of that PR in ONE text (a section per reviewer, a row per point id), and one
+   `### R<n> · resolve: yes|no` block per open thread answered in place. `fix` → what changed + commit sha
+   (from the PACKAGE report), resolve yes; `discuss` → the reason, polite and concrete, resolve no;
+   `answered` → the answer, resolve no (the reviewer decides); `out-of-scope` → where it goes. Never one
+   reply per reviewer or per conversation comment. Nothing is posted by you — the orchestrator posts the
+   round after the user approves. No ticket comment in feedback mode.

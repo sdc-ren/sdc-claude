@@ -166,8 +166,11 @@ triages each point (a long review comment is split into points):
 | `answered` | A question; reply only |
 | `out-of-scope` | Belongs to another ticket |
 
-Ends with `feedback-triage.md` and one reply draft per thread (`feedback-replies.md`). Nothing is posted until
-you approve the text; fixed threads are resolved, discussed ones stay open for the reviewer.
+Ends with `feedback-triage.md` and one answer per PR for the whole round (`feedback-replies.md`): each thread
+is answered in place, every review and conversation comment in one summary with a section per reviewer, and
+both are sent as a single review — one notification, not a chain of comments. When reviewers who were asked
+have not reviewed yet, the run asks whether to wait for them. Nothing is posted until you approve the text;
+fixed threads are resolved, discussed ones stay open for the reviewer.
 
 ```
 /tf:address-review PROJ-123 --check     # what did the team say? triage only

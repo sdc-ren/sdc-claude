@@ -15,7 +15,7 @@ You never write, test, or review repo code yourself. Design and rationale: `docs
 |---|---|---|
 | `/tf:build <anything>` | build | PM plans → devs → reviewer gate → tester → ready PR(s), EVD, ticket-comment draft (when a tracker issue is the source) |
 | `/tf:qc <task>` | qc | Next round on the same folder/branches: reproduce QC cases with saved flows, fix, re-test, update the PR |
-| `/tf:address-review <task or PR url> [--check]` | feedback | Team review on our own PRs: fetch unresolved threads/reviews/comments, triage each point, fix only the `fix` points on the same PR, draft one reply per thread (posted after approval). `--check`: triage only |
+| `/tf:address-review <task or PR url> [--check]` | feedback | Team review on our own PRs: fetch unresolved threads/reviews/comments, triage each point, fix only the `fix` points on the same PR, draft one answer per PR for the whole round (posted after approval). `--check`: triage only |
 | `/tf:review <PR url or task>` | review | e2e of the brief's acceptance criteria + risk report (risk, impact, UI change, AC coverage, build). No code changes |
 | `/tf:e2e <PR url or task> [--cases a,b]` | e2e | Tester only: run/save flows, EVD, ticket-comment draft (tracker source only). `--regression`: run `.pipeline/_regression` flows instead (no workflow) |
 | `/tf:demo <canvas link> [words]` | — | No workflow: `<PLUGIN>/docs/demo.md` — a Design canvas → a clickable demo (every screen, grouped by role), local, `--publish` as one artifact |
@@ -56,7 +56,9 @@ language; `writingLang` = `Writing language` → a `Writing language:` line in t
 6f. **Feedback mode instead of step 6** — no tracker read. PRs = every PR of the task from `resolve` (`prs`, open AND merged — the
    PM needs to know which may not be pushed to — plus the input PR URL). `node $S/pr-feedback.mjs fetch <dir> <pr urls…>` → `<dir>/feedback.md` + JSON summary.
    Nothing open (`total` 0, no new reviews or comments) → tell the user in one line and stop (unlock), no
-   workflow. Otherwise show the summary line (PR · decision · open threads · new) and launch. A task without
+   workflow. Otherwise show the summary line (PR · decision · open threads · new · waiting). A PR with `waiting`
+   reviewers (asked, not reviewed yet): unless `--check`, ask with `AskUserQuestion` whether to wait for them
+   (recommended — one round, one answer; then unlock and stop) or answer now. Then launch. A task without
    a tf folder (PR made by hand): `resolve` still gives the folder; the PM reads the PR diff instead of HANDOFF.
 6. **Sources → brief** (not in feedback mode) — `node $S/sources.mjs <cwd> "<input>"`, then read each source by
    its kind. Hosts listed in `C` `## Sources` follow their line there (reader, sign-in) before these defaults:
@@ -134,7 +136,7 @@ in the Report as well.
 
 | status | Action |
 |---|---|
-| `done` (feedback) | Report the triage table, what was fixed (commits, PR links), then show `<dir>/feedback-replies.md`. Post only after the user approves the text (they may edit or drop replies): per thread `node $S/pr-feedback.mjs reply <dir> <R<n>> --body-file <tmp> [--resolve]` (resolve only where the draft says `resolve: yes`), per conversation reply `node $S/pr-feedback.mjs comment <dir> <pr url> --body-file <tmp>`. Then Review lessons (below). |
+| `done` (feedback) | Report the triage table, what was fixed (commits, PR links), then show `<dir>/feedback-replies.md`. Post only after the user approves the text (they may edit or drop blocks in the file): `node $S/pr-feedback.mjs post <dir> --dry-run` to show what goes where, then `node $S/pr-feedback.mjs post <dir>` — per PR one submitted review holding every thread reply with the Summary as its body (one notification, one conversation entry); `resolve: yes` threads are resolved after. Never post the round thread by thread; `reply` / `comment` are only for a single late answer. Then Review lessons (below). |
 | `done` / `verified` / `reviewed` | Report (below). Close-out per `C`: upload `<dir>/evd/`, fill `<evd:FILE>` links in the drafts, show drafts; post only after the user approves the text. |
 | `triaged` (feedback `--check`) | Show `<dir>/feedback-triage.md` as a short table (id · reviewer · point · P · verdict · reason) and ask whether to run `/tf:address-review` without `--check`. |
 | `clarify` | The brief is not clear enough to plan; nothing has run. Ask the user every question with `AskUserQuestion` (≤ 4 per call, several calls when there are more): the question with its quote, the PM's options, the PM's own pick first and marked recommended. `who: po` questions get one more option, "Hỏi PO": for those, draft one tracker comment with the questions (posted only after the user approves the text), then unlock and stop — the next `/tf:build <task>` reads the PO's reply as a new comment. Append the answers verbatim to `<dir>/ticket.md` under `## Clarifications` (`Q<n> — question — answer`, dated; "PM decides" when the user says so), then relaunch with the same args and `clarifyRound` from the result. Repeat until the run returns another status: no job starts while a question is open. |

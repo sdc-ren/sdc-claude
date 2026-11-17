@@ -7,9 +7,15 @@
 //                                    Threads get stable ids R<n> across runs. "new" = written after the PR's last
 //                                    commit. Bots are skipped; a thread whose last comment is ours is "replied".
 //                                    Prints a JSON summary {prs:[{url,state,decision,open,new,replied}], total, newTotal}.
-//   reply <dir> <Rn> --body-file <f> [--resolve]   reply in thread Rn (and resolve it)
+//                                    `waiting` = reviewers who were asked and have not reviewed yet.
+//   post <dir> [--file <f>] [--dry-run]   the whole round at once, from <dir>/feedback-replies.md (guidelines/review-reply.md):
+//                                    per PR ONE submitted review — every thread reply inside it, the Summary as
+//                                    its body — so the team gets one notification and the conversation one entry.
+//                                    Threads marked `resolve: yes` are resolved after. A PR with a Summary and no
+//                                    thread reply gets one conversation comment. --dry-run prints what would go out.
+//   reply <dir> <Rn> --body-file <f> [--resolve]   one late reply in thread Rn (and resolve it)
 //   resolve <dir> <Rn>
-//   comment <dir> <pr-url> --body-file <f>         a conversation comment on the PR
+//   comment <dir> <pr-url> --body-file <f>         one late conversation comment on the PR
 //
 // Posting commands are for the orchestrator only, after the user approved the exact text.
 
@@ -32,6 +38,7 @@ const PR_QUERY = `query($owner:String!,$repo:String!,$n:Int!){repository(owner:$
   commits(last:1){nodes{commit{oid committedDate}}}
   reviews(last:50){nodes{author{login __typename} state body submittedAt url}}
   comments(last:100){nodes{author{login __typename} body createdAt url}}
+  reviewRequests(first:20){nodes{requestedReviewer{__typename ... on User{login}}}}
   reviewThreads(first:100){nodes{id isResolved isOutdated path line originalLine
     comments(first:50){nodes{author{login __typename} body createdAt url}}}}
 }}}`
@@ -75,6 +82,8 @@ export function summarize(pr, me, ids, next) {
   return {
     url: pr.url, number: pr.number, state: pr.state, draft: pr.isDraft, decision: pr.reviewDecision || 'NONE',
     branch: pr.headRefName, head: (lastCommit.oid || '').slice(0, 7), headAt: since, threads, reviews, comments,
+    // Asked to review and not done yet: answering now means answering twice.
+    waiting: ((pr.reviewRequests || {}).nodes || []).map((n) => n.requestedReviewer).filter(Boolean).map((r) => r.login || '(team)'),
   }
 }
 
@@ -95,6 +104,7 @@ export function render(prs, at) {
     out.push(`## ${p.url} — ${p.state}${p.draft ? ' (draft)' : ''} · review decision **${p.decision}** · branch ${p.branch} · head ${p.head} (${p.headAt})`, '')
     if (p.state === 'MERGED') { out.push('Merged — never pushed to. A change this repo now needs (e.g. a contract change from another PR) goes to a new branch from its base and a new PR.', ''); continue }
     if (p.state !== 'OPEN') { out.push('Closed — skipped.', ''); continue }
+    if ((p.waiting || []).length) out.push(`Still waiting for a review from: ${p.waiting.join(', ')}.`, '')
     if (p.reviews.length) {
       out.push('### Reviews')
       for (const r of p.reviews) out.push(`- **${r.author}** ${r.state} ${r.at}${r.new ? ' [new]' : ''}${r.body.trim() ? `\n${quote(r.body)}` : ''}`)
@@ -137,7 +147,7 @@ function fetchAll(dir, urls) {
   writeFileSync(join(dir, 'feedback.md'), render(prs, at))
   const open = prs.filter((p) => p.state === 'OPEN')
   const summary = {
-    prs: prs.map((p) => ({ url: p.url, state: p.state, decision: p.decision, open: p.threads.length, new: p.threads.filter((t) => t.new).length, replied: p.threads.filter((t) => t.replied).length, reviews: p.reviews.length, comments: p.comments.length })),
+    prs: prs.map((p) => ({ url: p.url, state: p.state, decision: p.decision, open: p.threads.length, new: p.threads.filter((t) => t.new).length, replied: p.threads.filter((t) => t.replied).length, reviews: p.reviews.length, comments: p.comments.length, waiting: p.state === 'OPEN' ? p.waiting : [] })),
     total: open.reduce((s, p) => s + p.threads.length, 0),
     newTotal: open.reduce((s, p) => s + p.threads.filter((t) => t.new).length + p.reviews.filter((r) => r.new).length + p.comments.filter((c) => c.new).length, 0),
     file: join(dir, 'feedback.md'),
@@ -150,19 +160,110 @@ function threadOf(dir, rid) {
   throw new Error(`${rid} not found in ${join(dir, 'feedback.json')} — fetch first`)
 }
 
+// Pure: <dir>/feedback-replies.md → [{pr, summary, threads:[{rid, resolve, body}]}]. Only three kinds of line are
+// structure — `## <PR url>`, `### Summary`, `### R<n> · resolve: yes|no`; any other heading belongs to the text.
+export function parseReplies(text) {
+  const prs = []
+  let pr = null
+  let cur = null
+  const close = () => { if (cur) cur.body = cur.lines.join('\n').trim() }
+  for (const line of String(text).split(/\r?\n/)) {
+    const h = line.match(/^##\s+(https:\/\/github\.com\/[^/\s]+\/[^/\s]+\/pull\/\d+)\s*$/)
+    const t = line.match(/^###\s+(R\d+)\s*·\s*resolve:\s*(yes|no)\s*$/i)
+    if (h) { close(); cur = null; pr = { pr: h[1], summary: '', threads: [], blocks: [] }; prs.push(pr); continue }
+    if (pr && /^###\s+Summary\s*$/i.test(line)) { close(); cur = { kind: 'summary', lines: [] }; pr.blocks.push(cur); continue }
+    if (pr && t) { close(); cur = { kind: 'thread', rid: t[1].toUpperCase(), resolve: t[2].toLowerCase() === 'yes', lines: [] }; pr.blocks.push(cur); continue }
+    if (cur) cur.lines.push(line)
+  }
+  close()
+  return prs.map(({ pr: url, blocks }) => ({
+    pr: url,
+    summary: blocks.filter((b) => b.kind === 'summary').map((b) => b.body).filter(Boolean).join('\n\n'),
+    threads: blocks.filter((b) => b.kind === 'thread').map(({ rid, resolve: r, body }) => ({ rid, resolve: r, body })),
+  }))
+}
+
+// Everything is checked before anything is posted: a round that goes out half is worse than one that does not go out.
+export function planRound(entries, state) {
+  const out = []
+  const seen = new Set()
+  for (const e of entries) {
+    const { owner, repo, n } = parsePr(e.pr)
+    const p = (state.prs || []).find((x) => { const y = parsePr(x.url); return y.owner === owner && y.repo === repo && y.n === n })
+    if (!p) throw new Error(`${e.pr} is not in feedback.json — fetch first`)
+    if (p.state !== 'OPEN') throw new Error(`${e.pr} is ${p.state} — nothing is posted to it`)
+    const threads = e.threads.map((t) => {
+      const th = p.threads.find((x) => x.rid === t.rid)
+      if (!th) throw new Error(`${t.rid} is not an open thread of ${e.pr}`)
+      if (!t.body) throw new Error(`${t.rid}: empty reply`)
+      if (seen.has(t.rid)) throw new Error(`${t.rid} is answered twice`)
+      seen.add(t.rid)
+      return { ...t, threadId: th.threadId }
+    })
+    if (!threads.length && !e.summary) continue
+    out.push({ pr: e.pr, owner, repo, n, summary: e.summary, threads })
+  }
+  if (!out.length) throw new Error('nothing to post — no Summary and no thread reply found')
+  return out
+}
+
+// One PR, one submitted review. `api` = {graphql, gh} so the call order can be tested without GitHub.
+export function postRound(plan, api) {
+  const done = []
+  for (const p of plan) {
+    if (!p.threads.length) {
+      api.gh(['pr', 'comment', String(p.n), '--repo', `${p.owner}/${p.repo}`, '--body-file', '-'], p.summary)
+      done.push({ pr: p.pr, comment: true, replies: 0, resolved: 0 })
+      continue
+    }
+    const prId = api.graphql('query($owner:String!,$repo:String!,$n:Int!){repository(owner:$owner,name:$repo){pullRequest(number:$n){id}}}', { owner: p.owner, repo: p.repo, n: p.n }).repository.pullRequest.id
+    // No event = a pending review: nobody is notified until it is submitted.
+    const review = api.graphql('mutation($pr:ID!){addPullRequestReview(input:{pullRequestId:$pr}){pullRequestReview{id}}}', { pr: prId }).addPullRequestReview.pullRequestReview.id
+    let url
+    try {
+      for (const t of p.threads) {
+        api.graphql('mutation($review:ID!,$id:ID!,$body:String!){addPullRequestReviewThreadReply(input:{pullRequestReviewId:$review,pullRequestReviewThreadId:$id,body:$body}){comment{id}}}', { review, id: t.threadId, body: t.body })
+      }
+      url = (p.summary
+        ? api.graphql('mutation($review:ID!,$body:String!){submitPullRequestReview(input:{pullRequestReviewId:$review,event:COMMENT,body:$body}){pullRequestReview{url}}}', { review, body: p.summary })
+        : api.graphql('mutation($review:ID!){submitPullRequestReview(input:{pullRequestReviewId:$review,event:COMMENT}){pullRequestReview{url}}}', { review })
+      ).submitPullRequestReview.pullRequestReview.url
+    } catch (e) {
+      // Leave no half-written pending review behind: it would block the next attempt.
+      try { api.graphql('mutation($review:ID!){deletePullRequestReview(input:{pullRequestReviewId:$review}){pullRequestReview{id}}}', { review }) } catch {}
+      throw new Error(`${p.pr}: nothing was posted — ${String(e.stderr || e.message || e).trim()}`)
+    }
+    const failed = []
+    let resolved = 0
+    for (const t of p.threads.filter((x) => x.resolve)) {
+      try { api.graphql('mutation($id:ID!){resolveReviewThread(input:{threadId:$id}){thread{isResolved}}}', { id: t.threadId }); resolved++ } catch { failed.push(t.rid) }
+    }
+    done.push({ pr: p.pr, review: url, replies: p.threads.length, resolved, ...(failed.length ? { resolveFailed: failed } : {}) })
+  }
+  return done
+}
+
 function main() {
   const [cmd, dirArg, ...rest] = process.argv.slice(2)
   const flags = {}
   const pos = []
   for (let i = 0; i < rest.length; i++) {
     if (rest[i] === '--resolve') flags.resolve = true
+    else if (rest[i] === '--dry-run') flags.dry = true
     else if (rest[i].startsWith('--')) flags[rest[i].slice(2)] = rest[++i]
     else pos.push(rest[i])
   }
-  if (!cmd || !dirArg) { console.error('usage: pr-feedback.mjs fetch|reply|resolve|comment <dir> …'); process.exit(2) }
+  if (!cmd || !dirArg) { console.error('usage: pr-feedback.mjs fetch|post|reply|resolve|comment <dir> …'); process.exit(2) }
   const dir = resolve(dirArg)
   const body = () => { if (!flags['body-file']) throw new Error('--body-file required'); return readFileSync(flags['body-file'], 'utf8').trim() }
   if (cmd === 'fetch') return fetchAll(dir, pos)
+  if (cmd === 'post') {
+    const file = flags.file ? resolve(flags.file) : join(dir, 'feedback-replies.md')
+    if (!existsSync(file)) throw new Error(`${file} not found`)
+    const plan = planRound(parseReplies(readFileSync(file, 'utf8')), stateOf(dir))
+    if (flags.dry) return console.log(JSON.stringify(plan.map((p) => ({ pr: p.pr, as: p.threads.length ? 'one review' : 'one comment', summary: !!p.summary, replies: p.threads.map((t) => t.rid), resolve: p.threads.filter((t) => t.resolve).map((t) => t.rid) })), null, 2))
+    return console.log(JSON.stringify(postRound(plan, { graphql, gh }), null, 2))
+  }
   if (cmd === 'reply' || cmd === 'resolve') {
     const t = threadOf(dir, pos[0])
     if (cmd === 'reply') {

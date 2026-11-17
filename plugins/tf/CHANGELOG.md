@@ -4,6 +4,17 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.14.0] — 2026-11-17
+
+### Added
+- **One review round, one answer per PR.** `/tf:address-review` no longer posts a reply per thread and a
+  comment per reviewer. Threads are still answered in place, every review and conversation comment is answered
+  in one summary (a section per reviewer, a row per point), and both go out as a single submitted review
+  (`pr-feedback.mjs post`): one notification, one entry in the conversation. The format is the new
+  `guidelines/review-reply.md`.
+- Reviewers who were asked and have not reviewed yet are shown before the run (`waiting`), with the choice to
+  wait for them instead of answering twice.
+
 ## [1.13.0] — 2026-11-17
 
 ### Added

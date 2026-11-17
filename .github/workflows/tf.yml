@@ -37,3 +37,5 @@ jobs:
         run: node --test plugins/tf/tests/canvas.mjs
       - name: Chat digest (Zalo reader, stub page)
         run: node --test plugins/tf/tests/digest.mjs
+      - name: Review round (one answer per PR)
+        run: node --test plugins/tf/tests/feedback.mjs
