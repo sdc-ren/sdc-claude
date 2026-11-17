@@ -263,7 +263,7 @@ function legacy(root, repos, apply) {
     if (existsSync(ledger) && under(f.from, pipe) && !under(f.from, join(pipe, '_archive'))) {
       sh(nodeCmd(join(S, 'resources.mjs'), 'release', JSON.stringify(root), JSON.stringify(base(f.from))))
     }
-    // Anything still registered (release failed, e.g. Docker down) stays tracked: keep the folder where the reaper sees it.
+    // Anything still registered (release failed, e.g. Docker down) stays tracked: keep the folder where `reap` sees it.
     let left = []
     try { left = JSON.parse(readFileSync(ledger, 'utf8')).entries || [] } catch {}
     if (left.length) {

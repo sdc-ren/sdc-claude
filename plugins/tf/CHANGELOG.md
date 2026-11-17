@@ -4,6 +4,19 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.16.0] — 2026-11-17
+
+### Changed
+- **A task run no longer cleans up other tasks.** The preflight step that ran `resources.mjs reap` (and offered
+  to install the reaper) is gone, so a run spends no time or tokens on freeing, archiving or reporting the
+  resources of earlier tasks. `/tf:clean` with no argument is now the workspace cleanup: a dry run of `reap`,
+  applied after the user's yes.
+
+### Removed
+- **The background reaper.** tf no longer installs a job that cleans up every 30 minutes; cleanup happens only
+  when the user runs `/tf:clean`. `reaper.mjs` keeps `status` and `uninstall` to remove a job installed by an
+  earlier version (`/tf:status --doctor` points it out), and `install-reaper.sh` is gone.
+
 ## [1.15.0] — 2026-11-17
 
 ### Added

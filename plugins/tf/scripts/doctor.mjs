@@ -46,7 +46,7 @@ check(`port lookup (${sys.portTool || 'none'})`, !!sys.portTool, 'install lsof: 
 if (!sys.cwdOfProcess) check('owner of a busy port', false, 'Windows cannot tell which folder a process runs from: serve.mjs trusts the server it started itself', false)
 if (!sys.chromeCookieImport) check('tracker login from Chrome cookies', false, 'macOS only — here `browser.mjs auth` opens a browser once for you to log in', false)
 check(`dependency copy for new worktrees: ${sys.clone}`, sys.os === 'macos', 'a plain copy works, it is only slower', false)
-check('reaper installed', reaperInstalled(), 'run: node <plugin>/scripts/reaper.mjs install', false)
+if (reaperInstalled()) check('no background cleanup job', false, 'a job of an older tf version still cleans up every 30 minutes — remove it: node <plugin>/scripts/reaper.mjs uninstall', false)
 
 // Claude setup
 const PLUGIN = resolve(dirname(fileURLToPath(import.meta.url)), '..')
