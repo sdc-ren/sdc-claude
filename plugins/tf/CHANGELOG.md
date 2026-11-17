@@ -4,6 +4,17 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.11.0] — 2026-11-17
+
+### Added
+- **An unclear task is asked about before anything runs.** After reading the brief, the config and the code,
+  the PM sorts what is still open: a point with two plausible readings that lead to different things being
+  built, and that nothing it read settles, is a question; the rest is an assumption. With questions the run
+  stops before the plan (`clarify`), you answer them in a picker (each with the unclear words quoted, the
+  options and the PM's own pick), product decisions can go to the PO as a drafted tracker comment, the answers
+  are kept in `ticket.md` under `## Clarifications`, and the run starts again. A clear task runs straight on
+  and says so in `scope`. At most 3 rounds, only before the first job; `--assume` never stops to ask.
+
 ## [1.10.0] — 2026-11-17
 
 From a review of two days of runs (28 runs, 35 human review points on five tasks).

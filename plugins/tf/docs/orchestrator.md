@@ -30,7 +30,7 @@ local file path, plain words — or several of these at once. Plain words alone 
 the brief. `node $S/sources.mjs <cwd> "<input>"` splits it into `request` (the user's words) and `sources`
 (kind + how to read each); step 6 reads them.
 
-Flags: `--check` (feedback: triage only, no code), `--attach` (open the checkbox picker for this task, step 6b), `--approve` (stop after the first plan for the user), `--draft` (the user allows a draft PR),
+Flags: `--check` (feedback: triage only, no code), `--attach` (open the checkbox picker for this task, step 6b), `--approve` (stop after the first plan for the user), `--assume` (never stop for questions: the PM assumes and lists what it assumed), `--draft` (the user allows a draft PR),
 `--lang <code>` (report language). There is no repo flag: the PM inspects every repo in the config.
 
 Languages (per workspace, from `C` → `## Language`): `lang` = `--lang` → `Report language` → the user's
@@ -78,7 +78,7 @@ language; `writingLang` = `Writing language` → a `Writing language:` line in t
    go on with the rest, and stop only when nothing of the task is left to work from.
    Plain words only: `## Request` is the whole brief — the PM plans from it, the config and the code, and
    records what it had to assume.
-   Later rounds: re-read every source, rewrite ticket.md, mark comments new or edited since the last round
+   Later rounds: re-read every source, rewrite ticket.md (keep `## Clarifications` as it is), mark comments new or edited since the last round
    (`updated` vs `created`) under `## New since round <n-1>`. Human reviews on our PRs are handled by
    `/tf:address-review`, not here — if `pr-feedback.mjs fetch` would find open threads, mention it in one line.
    `tracker` = `hasTracker` from `sources.mjs` (a tracker issue or a GitHub issue is a source).
@@ -107,7 +107,7 @@ then `Workflow` with `scriptPath: <that script>`. Args:
   "cases": "<--cases or QC case ids>", "notes": "<user constraints / escalation answers>",
   "prs": { "<repo>": "<url>" }, "worktrees": { "<repo>": "<path or null>" },
   "worktreePaths": { "<repo>": "<from resolve>" }, "format": "<from resolve>",
-  "flags": { "approve": false, "draft": false, "check": false }, "approved": false,
+  "flags": { "approve": false, "draft": false, "check": false, "assume": false }, "approved": false, "clarifyRound": 0,
   "lang": "<report language>", "writingLang": "<Writing language>",
   "scripts": "<abs S>", "config": "<abs C>", "agentPrefix": "tf:",
   "attachments": [ { "title": "…", "kind": "design-system|canvas|artifact|doc|url|file", "file": "<abs specs/… file>", "url": "…" } ] }
@@ -137,6 +137,7 @@ in the Report as well.
 | `done` (feedback) | Report the triage table, what was fixed (commits, PR links), then show `<dir>/feedback-replies.md`. Post only after the user approves the text (they may edit or drop replies): per thread `node $S/pr-feedback.mjs reply <dir> <R<n>> --body-file <tmp> [--resolve]` (resolve only where the draft says `resolve: yes`), per conversation reply `node $S/pr-feedback.mjs comment <dir> <pr url> --body-file <tmp>`. Then Review lessons (below). |
 | `done` / `verified` / `reviewed` | Report (below). Close-out per `C`: upload `<dir>/evd/`, fill `<evd:FILE>` links in the drafts, show drafts; post only after the user approves the text. |
 | `triaged` (feedback `--check`) | Show `<dir>/feedback-triage.md` as a short table (id · reviewer · point · P · verdict · reason) and ask whether to run `/tf:address-review` without `--check`. |
+| `clarify` | The brief is not clear enough to plan; nothing has run. Ask the user every question with `AskUserQuestion` (≤ 4 per call, several calls when there are more): the question with its quote, the PM's options, the PM's own pick first and marked recommended. `who: po` questions get one more option, "Hỏi PO": for those, draft one tracker comment with the questions (posted only after the user approves the text), then unlock and stop — the next `/tf:build <task>` reads the PO's reply as a new comment. Append the answers verbatim to `<dir>/ticket.md` under `## Clarifications` (`Q<n> — question — answer`, dated; "PM decides" when the user says so), then relaunch with the same args and `clarifyRound` from the result. Repeat until the run returns another status: no job starts while a question is open. |
 | `approve` | Show the plan summary (`<dir>/plan.md`) and ask for approval; on yes relaunch with `approved: true`. Without `--approve` this status means the plan check and the PM still disagree: show `scope`, then each `planOpen` line next to the reviewer's point (`planCheck` file) and ask the user which reading is right; relaunch with `approved: true` and the answer in `notes`. |
 | `escalate` | One `🛑` line with the PM's question and options. After the answer relaunch with the same args, the answer in `notes`. The PM resumes from board.md. |
 | `handoff` | Token budget low — relaunch in a new session with the same args. |
