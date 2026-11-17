@@ -98,10 +98,12 @@ diff (`gh pr diff`), the ticket, and the code around every change — not the di
    callers and readers (codegraph `codegraph_explore` with `projectPath`, else grep) in every repo of the
    workspace; name the screen, flow or client that can now behave differently and whether the PR handles it.
    A new name that shadows or duplicates an existing one is a finding.
-3. **Security** — authn/authz on every new or changed entry point, input validation, injection (SQL, command,
-   path, HTML), secrets and tokens in code or logs, data exposed in responses, unsafe deserialization, file
-   upload, new dependencies; money, migrations, transactions and concurrency where the PR touches them.
-4. **Standards** — the repo's own conventions (its CLAUDE.md, lint, naming, structure), the workspace review
+3. **Security** — go through the OWASP Top 10:2025 table of `${CLAUDE_PLUGIN_ROOT}/guidelines/pr-review.md`
+   ("Security"), row by row, for what the diff touches; a finding names its row (`A01`…). Plus money,
+   migrations, transactions and concurrency where the PR touches them. `review.md` lists the rows checked
+   and the rows the diff does not touch.
+4. **Standards** — the areas of the same guideline's "What to look at" table (design, complexity, naming,
+   comments, consistency, documentation), then the repo's own conventions (its CLAUDE.md, lint, naming, structure), the workspace review
    lessons, dead code, duplicated logic, missing error handling, tests for the changed behaviour where the
    workspace test policy asks for them.
 5. **Typecheck and build** — run them in the task worktree; paste the result. They are the only commands you

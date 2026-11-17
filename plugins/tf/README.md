@@ -189,7 +189,7 @@ Review someone else's PR by reading the code — nothing is run on the app, so i
 - **Logic** — does it do what the ticket asks, branch by branch; each acceptance criterion covered / missing / partial.
 - **Impact on other parts** — every function, variable, type, config key, API contract or schema the PR defines
   or changes, and who else uses it.
-- **Security** — authorization, validation, injection, secrets, exposed data, new dependencies.
+- **Security** — the OWASP Top 10:2025, row by row, for what the diff touches.
 - **Standards** — the repo's conventions and the workspace review lessons.
 - **Typecheck/build** — the only commands that run.
 
