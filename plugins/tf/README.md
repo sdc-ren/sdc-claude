@@ -89,7 +89,7 @@ post one.
 | [`/tf:build`](#tfbuild) | Do a new task end to end |
 | [`/tf:qc`](#tfqc) | Answer a QC report on a task tf already did |
 | [`/tf:address-review`](#tfaddress-review) | Check and answer the team's review on the PRs tf pushed |
-| [`/tf:review`](#tfreview) | Review a teammate's PR (e2e + risk report, no code changes) |
+| [`/tf:review`](#tfreview) | Review a teammate's PR by reading the code (static, no e2e, no code changes) |
 | [`/tf:e2e`](#tfe2e) | Run e2e only, or the regression suite |
 | [`/tf:demo`](#tfdemo) | Turn a design canvas into a clickable demo for a client — no repo, no PR |
 | [`/tf:digest`](#tfdigest) | Read your Zalo group chats for a day (or since last time) and get what was decided, what is open, what needs you |
@@ -184,10 +184,17 @@ fixed threads are resolved, discussed ones stay open for the reviewer.
 /tf:review <PR url | ticket> [--attach] [--lang <code>]
 ```
 
-Review someone else's PR without touching its code: e2e of the ticket's acceptance criteria with evidence,
-plus a report on **risk**, **impact on other features**, **UI changes**, **acceptance-criteria coverage**
-and **typecheck/build**. Ends with `review.md`, a PR-comment draft and a ticket-comment draft — nothing is
-posted until you approve the text.
+Review someone else's PR by reading the code — nothing is run on the app, so it is quick:
+
+- **Logic** — does it do what the ticket asks, branch by branch; each acceptance criterion covered / missing / partial.
+- **Impact on other parts** — every function, variable, type, config key, API contract or schema the PR defines
+  or changes, and who else uses it.
+- **Security** — authorization, validation, injection, secrets, exposed data, new dependencies.
+- **Standards** — the repo's conventions and the workspace review lessons.
+- **Typecheck/build** — the only commands that run.
+
+Ends with `review.md` and a PR-comment draft — nothing is posted until you approve the text. The report says
+`Not run on the app` and names what is worth an e2e; run [`/tf:e2e`](#tfe2e) on the PR when the author asks for it.
 
 ```
 /tf:review https://github.com/org/web/pull/720

@@ -4,6 +4,15 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.15.0] — 2026-11-17
+
+### Changed
+- **`/tf:review` is a static code review.** It no longer runs e2e: one reviewer reads the PR for logic,
+  impact on other parts (functions, variables, types, contracts and who uses them), security and standards,
+  and runs typecheck/build. No tester, no app server, no emulator — a review is quick again. The report says
+  `Not run on the app` and names what is worth an e2e; `/tf:e2e <PR>` runs it when the author asks. No ticket
+  comment draft in review mode.
+
 ## [1.14.0] — 2026-11-17
 
 ### Added

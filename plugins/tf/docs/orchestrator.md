@@ -16,7 +16,7 @@ You never write, test, or review repo code yourself. Design and rationale: `docs
 | `/tf:build <anything>` | build | PM plans → devs → reviewer gate → tester → ready PR(s), EVD, ticket-comment draft (when a tracker issue is the source) |
 | `/tf:qc <task>` | qc | Next round on the same folder/branches: reproduce QC cases with saved flows, fix, re-test, update the PR |
 | `/tf:address-review <task or PR url> [--check]` | feedback | Team review on our own PRs: fetch unresolved threads/reviews/comments, triage each point, fix only the `fix` points on the same PR, draft one answer per PR for the whole round (posted after approval). `--check`: triage only |
-| `/tf:review <PR url or task>` | review | e2e of the brief's acceptance criteria + risk report (risk, impact, UI change, AC coverage, build). No code changes |
+| `/tf:review <PR url or task>` | review | Static code review of someone else's PR: logic, impact on other parts, security, standards, typecheck/build. Nothing is run on the app (that is `/tf:e2e`). No code changes |
 | `/tf:e2e <PR url or task> [--cases a,b]` | e2e | Tester only: run/save flows, EVD, ticket-comment draft (tracker source only). `--regression`: run `.pipeline/_regression` flows instead (no workflow) |
 | `/tf:demo <canvas link> [words]` | — | No workflow: `<PLUGIN>/docs/demo.md` — a Design canvas → a clickable demo (every screen, grouped by role), local, `--publish` as one artifact |
 | `/tf:status [--doctor] [--metrics [slug]]` | — | Resources per task and what cleanup would free (`resources.mjs list`, `reap --dry-run`); `--doctor` also runs `node $S/doctor.mjs <cwd>`; `--metrics` shows what runs cost (`metrics.mjs`) |

@@ -146,9 +146,9 @@ token it breaks. An attached canvas has a clickable reference (`<task>/specs/can
 `node <scripts>/canvas.mjs serve <that folder>`): shoot the same screen at the same viewport in both and compare
 layout, copy and states; a difference the plan did not accept is an `IB` naming the screen file.
 
-## Review-mode briefs (someone else's PR)
+## Someone else's PR (e2e mode on a PR we did not write)
 Same flows; cases come from the ticket's acceptance criteria, not from the diff. For screens the
-reviewer lists as UI-changed, take before (base commit) and after (PR) shots in the SAME worktree by
+brief or `<task>/review.md` lists as UI-changed, take before (base commit) and after (PR) shots in the SAME worktree by
 checking out the base commit temporarily — never create another worktree.
 
 ## Language

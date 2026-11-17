@@ -40,6 +40,7 @@ APPROVE | REQUEST_CHANGES | COMMENT — and what unblocks it
   change whose clients are not ready (say the block is coordination, not code).
 - `COMMENT`: non-blocking, or a decision above the reviewer (name who decides what).
 - Vietnamese: Nên merge (APPROVE) · Chưa nên merge (REQUEST_CHANGES) · Cần bàn thêm (COMMENT).
+- A review that did not run the app says so in the Summary (`Not run on the app`) and judges the code only.
 - No findings → say so. Inline comments: `[P1] title`, then issue, impact, fix in 1–3 sentences.
 - The recommendation is text only: never `gh pr review --approve/--request-changes`, merge, or
   post anything unless the user asks. Never edit the PR's code. No agent attribution.
