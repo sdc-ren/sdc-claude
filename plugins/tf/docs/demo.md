@@ -65,7 +65,7 @@ section, device, links, comment `anchor`). A later run without `--feedback` reus
   (`#screen-<file>`): the viewer types and posts there, signed with their own account; the page posts nothing.
   Anywhere else (local, a viewer who cannot comment) it opens `--feedback` with the screen filled in; with no
   `--feedback` it is hidden there.
-- **Warnings** come from a test render of every screen in Node (each handler pressed once) and from link
+- **Warnings** come from a test render of every screen in a sandboxed Node process (each handler pressed once) and from link
   checks. Report each one; a screen that fails still exports and shows the error on its page.
 
 ## 5. Run and look
