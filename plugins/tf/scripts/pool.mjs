@@ -18,12 +18,21 @@ import { execSync, execFileSync } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-import { SH } from './platform.mjs'
+import { SH, okRef, okRel } from './platform.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const sh = (cmd, cwd) => execSync(cmd, { cwd, stdio: 'pipe', shell: SH, windowsHide: true, timeout: 900_000 }).toString().trim()
 const trySh = (cmd, cwd) => { try { return { ok: true, out: sh(cmd, cwd) } } catch (e) { return { ok: false, out: String(e.stderr || e.message).trim() } } }
-const q = JSON.stringify
+// git runs without a shell: a branch, a base or a path is one argument, whatever it holds.
+const git = (args, cwd) => { try { return { ok: true, out: execFileSync('git', args, { cwd, stdio: 'pipe', windowsHide: true, timeout: 900_000 }).toString().trim() } } catch (e) { return { ok: false, out: String(e.stderr || e.message).trim() } } }
+// What the command line names must stay inside the pool: a key is one folder name, a file or dir is relative.
+const okKey = (k) => typeof k === 'string' && /^[A-Za-z0-9][\w.-]*$/.test(k) && !k.includes('..')
+const list = (v) => String(v || '').split(',').filter(Boolean)
+function checked(key, o) {
+  if (!okKey(key)) out({ filled: false, taken: false, reason: `bad pool key ${JSON.stringify(key)}` })
+  for (const name of ['base', 'branch']) if (o[name] !== undefined && !okRef(o[name])) out({ filled: false, taken: false, reason: `bad --${name} ${JSON.stringify(o[name])}` })
+  for (const p of [...list(o.dirs), ...list(o.env), ...(o.lock ? [o.lock] : [])]) if (!okRel(p)) out({ filled: false, taken: false, reason: `${JSON.stringify(p)} is not a path inside the checkout` })
+}
 const out = (o) => { console.log(JSON.stringify(o)); process.exit(0) }
 const hash = (p) => (existsSync(p) ? createHash('sha256').update(readFileSync(p)).digest('hex') : '')
 const poolPath = (root, key) => join(resolve(root), '.worktrees', '_pool', key)
@@ -40,16 +49,17 @@ function parse(argv) {
 }
 
 function fill([root, key, repoPath], o) {
+  checked(key, o)
   const repo = resolve(repoPath)
   const pool = poolPath(root, key)
   const base = o.base || 'develop'
-  trySh('git fetch origin --quiet', repo)
+  git(['fetch', 'origin', '--quiet'], repo)
   if (existsSync(pool)) {
-    if (trySh('git status --porcelain --untracked-files=no', pool).out) out({ filled: false, reason: 'pool-dirty', pool })
-    const r = trySh(`git checkout --quiet --detach origin/${base}`, pool)
+    if (git(['status', '--porcelain', '--untracked-files=no'], pool).out) out({ filled: false, reason: 'pool-dirty', pool })
+    const r = git(['checkout', '--quiet', '--detach', `origin/${base}`], pool)
     if (!r.ok) out({ filled: false, reason: `checkout failed: ${r.out.split('\n').pop()}` })
   } else {
-    const r = trySh(`git worktree add --quiet --detach ${q(pool)} origin/${base}`, repo)
+    const r = git(['worktree', 'add', '--quiet', '--detach', pool, `origin/${base}`], repo)
     if (!r.ok) out({ filled: false, reason: `worktree add failed: ${r.out.split('\n').pop()}` })
   }
   for (const f of String(o.env || '.env').split(',').filter(Boolean)) {
@@ -73,27 +83,28 @@ function fill([root, key, repoPath], o) {
 }
 
 function take([root, key, repoPath, dest], o) {
+  checked(key, o)
   const repo = resolve(repoPath)
   const pool = poolPath(root, key)
   const target = resolve(dest)
   if (!o.branch) out({ taken: false, reason: 'missing --branch' })
   if (existsSync(target)) out({ taken: false, reason: 'dest-exists' })
   if (!existsSync(pool)) out({ taken: false, reason: 'no-pool' })
-  if (trySh('git status --porcelain --untracked-files=no', pool).out) out({ taken: false, reason: 'pool-dirty' })
-  const mv = trySh(`git worktree move ${q(pool)} ${q(target)}`, repo)
+  if (git(['status', '--porcelain', '--untracked-files=no'], pool).out) out({ taken: false, reason: 'pool-dirty' })
+  const mv = git(['worktree', 'move', pool, target], repo)
   if (!mv.ok) out({ taken: false, reason: `move failed: ${mv.out.split('\n').pop()}` })
-  trySh('git fetch origin --quiet', target)
-  const remote = trySh(`git rev-parse --verify --quiet origin/${o.branch}`, target).ok
+  git(['fetch', 'origin', '--quiet'], target)
+  const remote = git(['rev-parse', '--verify', '--quiet', `origin/${o.branch}`], target).ok
   const co = remote
-    ? trySh(`git checkout --quiet -B ${q(o.branch)} origin/${o.branch}`, target)
-    : trySh(`git checkout --quiet -b ${q(o.branch)} origin/${o.base || 'develop'} && git branch --unset-upstream`, target)
+    ? git(['checkout', '--quiet', '-B', o.branch, `origin/${o.branch}`], target)
+    : (() => { const c = git(['checkout', '--quiet', '-b', o.branch, `origin/${o.base || 'develop'}`], target); return c.ok ? git(['branch', '--unset-upstream'], target) : c })()
   if (!co.ok) out({ taken: true, path: target, needsInstall: true, warning: `checkout: ${co.out.split('\n').pop()}` })
   let needsInstall = false
   if (o.lock) {
     const stamp = existsSync(join(target, STAMP)) ? JSON.parse(readFileSync(join(target, STAMP), 'utf8')) : {}
     needsInstall = !stamp.lock || stamp.lock !== hash(join(target, o.lock))
   }
-  trySh(`rm -f ${q(join(target, STAMP))}`)
+  rmSync(join(target, STAMP), { force: true })
   out({ taken: true, path: target, branch: o.branch, fromRemote: remote, needsInstall })
 }
 

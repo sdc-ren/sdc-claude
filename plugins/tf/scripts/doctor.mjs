@@ -8,12 +8,12 @@
 // Prints a table; exit 1 when a required check fails. Optional checks only warn.
 
 import { existsSync, mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
-import { execSync } from 'node:child_process'
+import { execFileSync, execSync } from 'node:child_process'
 import { homedir, tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
-import { SH, info, which } from './platform.mjs'
+import { SH, info, okRef, which } from './platform.mjs'
 import { reaperInstalled } from './reaper.mjs'
 
 const root = resolve(process.argv[2] || '.')
@@ -60,8 +60,9 @@ check('workspace config .claude/task-flow.md', !!cfg, cfgPath)
 for (const m of cfg.matchAll(/^\|\s*([\w-]+)\s*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`/gm)) {
   const [, key, path, base] = m
   const p = join(root, path)
-  const isRepo = sh(`git -C ${JSON.stringify(p)} rev-parse --git-dir`).ok
-  const hasBase = isRepo && sh(`git -C ${JSON.stringify(p)} rev-parse --verify --quiet origin/${base}`).ok
+  const gitOk = (args) => { try { execFileSync('git', ['-C', p, ...args], { stdio: 'pipe', windowsHide: true, timeout: 20_000 }); return true } catch { return false } }
+  const isRepo = gitOk(['rev-parse', '--git-dir'])
+  const hasBase = isRepo && okRef(base) && gitOk(['rev-parse', '--verify', '--quiet', `origin/${base}`])
   check(`repo ${key} (${path}, origin/${base})`, isRepo && hasBase, !isRepo ? 'not a git repo' : !hasBase ? `origin/${base} missing — git fetch` : '')
 }
 

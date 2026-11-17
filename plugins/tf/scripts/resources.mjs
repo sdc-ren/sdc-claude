@@ -27,10 +27,10 @@
 // PRs: full URL or `owner/repo#n`. A task with no registered PR gets them from its worktrees' branches.
 
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, rmSync, appendFileSync, renameSync, statSync, copyFileSync, chmodSync } from 'node:fs'
-import { execSync } from 'node:child_process'
-import { join, resolve } from 'node:path'
+import { execFileSync, execSync } from 'node:child_process'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { SH, stateDir } from './platform.mjs'
+import { SH, androidSdk, cwdOf, killTree, pidsOnPort, sdkTool, stateDir, under } from './platform.mjs'
 
 const HOME_DIR = stateDir()
 const ROOTS = join(HOME_DIR, 'roots.txt')
@@ -67,14 +67,115 @@ function tasks(root) {
   if (!existsSync(dir)) return []
   return readdirSync(dir).filter((s) => okSlug(s) && !s.startsWith('_') && !NOT_TASKS.has(s) && existsSync(fileOf(root, s)))
 }
+// A password inside a URL never reaches the terminal or the log.
+const mask = (s) => String(s).replace(/(:\/\/[^:/\s@]+:)[^@\s]+@/g, '$1***@')
 function run(cmd, root) {
   try {
     execSync(cmd, { cwd: root, stdio: 'pipe', shell: SH, windowsHide: true, timeout: 120_000 })
     return true
   } catch (e) {
-    say(`  ! failed: ${cmd} — ${String(e.stderr || e.message).trim().split('\n')[0]}`)
+    say(`  ! failed: ${mask(cmd)} — ${mask(String(e.stderr || e.message).trim().split('\n')[0])}`)
     return false
   }
+}
+const tool = (file, args, cwd) => {
+  try { return execFileSync(file, args, { cwd, stdio: 'pipe', windowsHide: true, timeout: 120_000 }).toString().trim() } catch { return null }
+}
+
+// ── How a resource is freed ──────────────────────────────────────────────────
+// resources.json is a file any job of a task can write, and what it holds is run later, when nobody is
+// looking. So for the kinds tf itself knows, the ledger only says WHAT is held (kind + id): the action is
+// built here from the id, and a `release`/`stop` string stored with the entry is ignored. Each returns '' when
+// the resource is free, or why it is not.
+const HERE = dirname(fileURLToPath(import.meta.url))
+const SERIAL = /^emulator-\d{4,5}$/
+// A process is this task's when it runs from the task's worktrees or its task folder.
+const ownedBy = (pid, root, slug) => { const cwd = cwdOf(pid); return cwd ? (under(cwd, join(root, '.worktrees', slug)) || under(cwd, join(root, '.pipeline', slug))) : null }
+const BUILTIN = {
+  worktree: {
+    plan: (e) => `git worktree remove --force ${e.id}`,
+    release(e, root) {
+      const path = resolve(e.id)
+      if (!under(path, join(root, '.worktrees')) || path === resolve(root, '.worktrees')) return `not a folder of ${join(root, '.worktrees')}`
+      const common = (tool('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], path) || '').replace(/[\\/]\.git$/, '')
+      if (!common) return 'not a git worktree'
+      return tool('git', ['-C', common, 'worktree', 'remove', '--force', path]) === null ? 'git worktree remove failed' : ''
+    },
+  },
+  // A port is a reservation. Whatever listens on it is stopped only when it is this task's own process:
+  // weeks after a run, the listener is far more likely somebody else's. Where the system cannot tell
+  // (Windows), a listener is stopped right after the run (`stop`) and left alone later (`release`).
+  port: {
+    plan: (e) => `stop this task's own listener on port ${e.id}, if any`,
+    release: (e, root, slug) => freePort(e, root, slug, false),
+    stop: (e, root, slug) => freePort(e, root, slug, true),
+  },
+  browser: {
+    plan: (e) => `stop browser process ${e.id}`,
+    release(e) { if (!/^\d+$/.test(String(e.id))) return 'not a process id'; try { killTree(e.id) } catch {} return '' },
+  },
+  emulator: {
+    plan: (e) => `adb -s ${e.id} emu kill`,
+    release(e) { if (!SERIAL.test(String(e.id))) return 'not an emulator serial'; tool(sdkTool(androidSdk(), 'platform-tools', 'adb'), ['-s', e.id, 'emu', 'kill']); return '' },
+  },
+  server: {
+    plan: (e) => `serve.mjs stop ${e.id}`,
+    release(e, root, slug) { if (!/^[\w.-]+$/.test(String(e.id))) return 'not a server name'; tool(process.execPath, [join(HERE, 'serve.mjs'), 'stop', root, slug, e.id]); return '' },
+  },
+}
+BUILTIN.server.stop = BUILTIN.server.release
+function freePort(e, root, slug, justRan) {
+  const port = Number(e.id)
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return 'not a port number'
+  for (const pid of pidsOnPort(port)) {
+    if (!Number(pid)) continue
+    const mine = ownedBy(pid, root, slug)
+    if (mine || (mine === null && justRan)) { try { killTree(pid) } catch {} } else say(`  port ${port}: process ${pid} is not this task's — left running`)
+  }
+  return ''
+}
+
+// Every other kind (a database, a cache index…) is freed by a command only the workspace knows. The setup
+// job copies it from the config's "## Provisioning" table, so the table is the list of commands that may run:
+// a stored command is run when it is one of that kind's recipes with the <placeholders> filled in by plain
+// values — no spaces, no shell syntax. Anything else is kept and shown, and runs only when a person who has
+// seen it says so (`release --unlisted`).
+export function recipes(root) {
+  const cfg = join(root, '.claude', 'task-flow.md')
+  const out = {}
+  if (!existsSync(cfg)) return out
+  const txt = readFileSync(cfg, 'utf8')
+  const i = txt.search(/^## Provisioning\b/m)
+  if (i < 0) return out
+  const body = txt.slice(i).split(/\r?\n/).slice(1)
+  const end = body.findIndex((l) => /^## /.test(l))
+  for (const line of (end < 0 ? body : body.slice(0, end))) {
+    if (!/^\s*\|/.test(line)) continue
+    const cells = line.trim().replace(/^\||\|$/g, '').split(/(?<!\\)\|/).map((c) => c.replace(/\\\|/g, '|').trim())
+    const kind = (cells[0].match(/^[A-Za-z][\w-]*/) || [''])[0]
+    if (!kind || kind === 'kind') continue
+    for (const cell of cells.slice(2)) for (const m of cell.matchAll(/`([^`]+)`/g)) (out[kind] ||= []).push(m[1].trim())
+  }
+  return out
+}
+const squeeze = (s) => String(s).trim().replace(/\s+/g, ' ')
+export function listed(cmd, templates = []) {
+  const c = squeeze(cmd)
+  return templates.some((t) => new RegExp('^' + squeeze(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/<[^<>]+>/g, '[^\\s;&|`$()<>\'"]+') + '$').test(c))
+}
+// What freeing an entry will do, for a person to read before saying yes.
+export function plan(e, root, known = recipes(root)) {
+  if (BUILTIN[e.kind]) return BUILTIN[e.kind].plan(e)
+  return `${mask(e.release)}${listed(e.release, known[e.kind]) ? '' : '   ← NOT a recipe of this workspace\'s config: runs only with `release --unlisted`'}`
+}
+// Free one entry (`stop: true` = only stop it after a run). Returns '' when done, or why not.
+function free(e, root, slug, { stop = false, unlisted = false, known }) {
+  const b = BUILTIN[e.kind]
+  if (b) return stop ? (b.stop ? b.stop(e, root, slug) : '') : b.release(e, root, slug)
+  const cmd = stop ? e.stop : e.release
+  if (!cmd) return stop ? '' : 'no release command'
+  if (!unlisted && !listed(cmd, known[e.kind])) return `its ${stop ? 'stop' : 'release'} command is not a ${e.kind} recipe of this workspace's config`
+  return run(cmd, root) ? '' : 'release failed'
 }
 
 export function add(root, slug, entry) {
@@ -92,9 +193,8 @@ export function taken(root, kind) {
   return tasks(root).flatMap((s) => load(root, s).entries.filter((e) => e.kind === kind).map((e) => e.id))
 }
 
-const sh = (cmd, cwd) => {
-  try { return execSync(cmd, { cwd, stdio: 'pipe', shell: SH, windowsHide: true }).toString().trim() } catch { return '' }
-}
+const git = (args, cwd) => tool('git', args, cwd) || ''
+const gh = (args, cwd) => tool('gh', args, cwd) || ''
 // Files the workspace config lists under "## Tool-touched files": tools rewrite them on their own
 // (`flutter pub get` adds exclude lines to analysis_options.yaml, an IDE re-sorts a lockfile…). They are
 // never part of a change, so a worktree whose only edits are in them holds no work.
@@ -115,8 +215,8 @@ export function restoreTouched(root, path) {
   if (!list.length || !existsSync(path)) return []
   const done = []
   // `git diff --name-only`: tracked files with unstaged edits — exactly what a tool leaves behind.
-  for (const file of sh('git diff --name-only', path).split(/\r?\n/).filter(Boolean)) {
-    if (list.includes(file)) { sh(`git checkout -- ${JSON.stringify(file)}`, path); done.push(file) }
+  for (const file of git(['diff', '--name-only'], path).split(/\r?\n/).filter(Boolean)) {
+    if (list.includes(file)) { git(['checkout', '--', file], path); done.push(file) }
   }
   return done
 }
@@ -126,17 +226,18 @@ function unsavedWork(path, root, restore = true) {
   if (!existsSync(path)) return ''
   if (root && restore) restoreTouched(root, path)
   const touched = root && !restore ? toolTouched(root) : []
-  // ` M file` is a tracked file with unstaged edits (sh() trims the first line's leading space).
-  const edits = sh('git status --porcelain', path).split(/\r?\n/).filter(Boolean)
+  // ` M file` is a tracked file with unstaged edits (the output is trimmed, so the first line loses its leading space).
+  const edits = git(['status', '--porcelain'], path).split(/\r?\n/).filter(Boolean)
     .filter((l) => { const m = l.match(/^ ?M (?! )(.+)$/); return !(m && touched.includes(m[1])) })
   if (edits.length) return 'uncommitted changes'
-  if (sh('git log --oneline -1 HEAD --not --remotes', path)) return 'unpushed commits'
+  if (git(['log', '--oneline', '-1', 'HEAD', '--not', '--remotes'], path)) return 'unpushed commits'
   return ''
 }
 
 // Release entries matching `pick`; keep the ones whose command failed so nothing leaks silently.
-function releaseWhere(root, slug, pick) {
+function releaseWhere(root, slug, pick, unlisted = false) {
   const d = load(root, slug)
+  const known = recipes(root)
   const keep = []
   let failed = 0
   for (const e of d.entries) {
@@ -147,7 +248,8 @@ function releaseWhere(root, slug, pick) {
     // would fail with "not a working tree" on every later cleanup.
     if (e.kind === 'worktree' && !existsSync(e.id)) { say(`  release ${slug} worktree ${e.id}: already gone`); continue }
     say(`  release ${slug} ${e.kind} ${e.id}`)
-    if (!run(e.release, root)) { keep.push({ ...e, error: true }); failed++ }
+    const not = free(e, root, slug, { unlisted, known })
+    if (not) { say(`  keep ${slug} ${e.kind} ${e.id}: ${not}`); keep.push({ ...e, error: not }); failed++ }
   }
   d.entries = keep
   if (!keep.length && pick({ when: 'pr-merged' })) rmSync(fileOf(root, slug))
@@ -155,25 +257,26 @@ function releaseWhere(root, slug, pick) {
   return failed === 0 // true when everything asked for was released (entries not picked stay, and are not a failure)
 }
 export function endRun(root, slug) {
-  for (const e of load(root, slug).entries) if (e.stop) run(e.stop, root)
+  const known = recipes(root)
+  for (const e of load(root, slug).entries) if (e.stop) { const not = free(e, root, slug, { stop: true, known }); if (not) say(`  ${slug} ${e.kind} ${e.id} not stopped: ${not}`) }
   return releaseWhere(root, slug, (e) => e.when === 'run-end')
 }
-export function releaseAll(root, slug) {
+export function releaseAll(root, slug, unlisted = false) {
   say(`release ${slug} @ ${root}`)
-  return releaseWhere(root, slug, () => true)
+  return releaseWhere(root, slug, () => true, unlisted)
 }
 
 function prState(ref) {
   const m = String(ref).match(/^([\w.-]+\/[\w.-]+)#(\d+)$/) // owner/repo#n — gh pr view needs --repo for this form
-  const cmd = m ? `gh pr view ${m[2]} --repo ${m[1]}` : `gh pr view ${JSON.stringify(ref)}`
-  return sh(`${cmd} --json state -q .state`) || 'UNKNOWN'
+  if (!m && !/^https:\/\/[\w.-]+\/[\w.-]+\/[\w.-]+\/pull\/\d+/.test(String(ref))) return 'UNKNOWN' // not a PR reference: never an option for gh
+  return gh(['pr', 'view', ...(m ? [m[2], '--repo', m[1]] : [String(ref)]), '--json', 'state', '-q', '.state']) || 'UNKNOWN'
 }
 // PRs opened from the task's worktree branches (any state) — for tasks that never registered theirs.
 function prsFromWorktrees(d) {
   const urls = []
   for (const e of d.entries.filter((x) => x.kind === 'worktree' && existsSync(x.id))) {
-    const b = sh('git branch --show-current', e.id)
-    if (b) urls.push(...sh(`gh pr list --head ${JSON.stringify(b)} --state all --json url -q '.[].url'`, e.id).split('\n').filter(Boolean))
+    const b = git(['branch', '--show-current'], e.id)
+    if (b) urls.push(...gh(['pr', 'list', '--head', b, '--state', 'all', '--json', 'url', '-q', '.[].url'], e.id).split('\n').filter(Boolean))
   }
   return [...new Set(urls)]
 }
@@ -232,7 +335,7 @@ export function reap(rootList, dryRun = false) {
       }
       const states = d.prs.map(prState)
       if (!states.every((s) => s === 'MERGED' || s === 'CLOSED')) continue
-      if (dryRun) { console.log(`would reap ${slug}: ${d.entries.map((e) => `${e.kind} ${e.id}`).join(', ') || 'nothing held'}`); continue }
+      if (dryRun) { console.log(`would reap ${slug}:${d.entries.length ? '' : ' nothing held'}`); const known = recipes(root); for (const e of d.entries) console.log(`   ${e.kind} ${e.id} → ${plan(e, root, known)}`); continue }
       say(`reap ${slug}: PRs ${states.join(',')}`)
       try { promoteFlows(root, slug) } catch (e) { say(`promote ${slug} failed: ${e.message}`) }
       if (releaseAll(root, slug)) archive(root, slug)
@@ -321,8 +424,8 @@ export function prune(rootList, maxDays = 7, dryRun = false) {
         if (idle <= maxDays) continue
         const why = unsavedWork(wt, root, !dryRun)
         if (why) { console.log(`stray worktree ${name} kept: ${why}`); continue }
-        const common = sh('git rev-parse --path-format=absolute --git-common-dir', wt).replace(/[\\/]\.git$/, '')
-        act(`remove stray worktree ${name} (idle ${idle}d)`, () => run(`git -C ${JSON.stringify(common)} worktree remove --force ${JSON.stringify(wt)}`, root))
+        const common = git(['rev-parse', '--path-format=absolute', '--git-common-dir'], wt).replace(/[\\/]\.git$/, '')
+        act(`remove stray worktree ${name} (idle ${idle}d)`, () => { if (tool('git', ['-C', common, 'worktree', 'remove', '--force', wt]) === null) say(`  ! could not remove ${wt}`) })
       }
       // Empty task parent folders left after their worktrees were freed.
       if (!dryRun) for (const name of readdirSync(wtRoot)) {
@@ -349,15 +452,16 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   switch (cmd) {
     case 'restore-touched': console.log(JSON.stringify({ restored: restoreTouched(root, resolve(pos[1] || '.')) })); break
     case 'add':
-      if (!flags.kind || !flags.id || !flags.release) throw new Error('add needs --kind --id --release')
-      add(root, slug, { kind: flags.kind, id: flags.id, release: flags.release, ...(flags.stop && { stop: flags.stop }), when: flags.when || 'pr-merged' })
+      if (!flags.kind || !flags.id) throw new Error('add needs --kind --id')
+      if (!BUILTIN[flags.kind] && !flags.release) throw new Error(`add --kind ${flags.kind} needs --release: the command of the config's Provisioning table for that kind`)
+      add(root, slug, { kind: flags.kind, id: flags.id, ...(flags.release && { release: flags.release }), ...(flags.stop && { stop: flags.stop }), when: flags.when || 'pr-merged' })
       break
     case 'drop': drop(root, slug, flags.kind, flags.id); break
     case 'prs': { const d = load(root, slug); d.prs = [...new Set([...d.prs, ...pos.slice(2)])]; save(root, slug, d); break }
     case 'taken': console.log(taken(root, slug).join('\n')); break
     case 'end-run': process.exitCode = endRun(root, slug) ? 0 : 1; break
     case 'promote': console.log(promoteFlows(root, slug)); break
-    case 'release': process.exitCode = releaseAll(root, slug) ? 0 : 1; break
+    case 'release': process.exitCode = releaseAll(root, slug, process.argv.includes('--unlisted')) ? 0 : 1; break
     case 'reap': {
       const dry = process.argv.includes('--dry-run')
       const list = roots(process.argv.slice(3).filter((a) => a !== '--dry-run'))
@@ -378,7 +482,8 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       for (const r of roots(pos)) for (const s of tasks(r)) {
         const d = load(r, s)
         console.log(`${r} · ${s} · PRs: ${d.prs.join(' ') || '-'}`)
-        for (const e of d.entries) console.log(`   ${e.kind} ${e.id} (${e.when})${e.error ? ` KEPT: ${e.error === true ? 'release failed' : e.error}` : ''}`)
+        const known = recipes(r)
+        for (const e of d.entries) console.log(`   ${e.kind} ${e.id} (${e.when}) → ${plan(e, r, known)}${e.error ? `   KEPT: ${e.error === true ? 'release failed' : e.error}` : ''}`)
       }
       break
     case 'register-root': {
