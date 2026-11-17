@@ -193,7 +193,8 @@ Review someone else's PR by reading the code — nothing is run on the app, so i
 - **Standards** — the repo's conventions and the workspace review lessons.
 - **Typecheck/build** — the only commands that run.
 
-Ends with `review.md` and a PR-comment draft — nothing is posted until you approve the text. The report says
+Ends with `review.md` and a PR-comment draft — nothing is posted until you approve the text; then it goes out
+as one review, each finding as an inline comment on its line (never an approve or a request for changes). The report says
 `Not run on the app` and names what is worth an e2e; run [`/tf:e2e`](#tfe2e) on the PR when the author asks for it.
 
 ```

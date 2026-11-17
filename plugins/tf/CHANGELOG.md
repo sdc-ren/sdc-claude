@@ -6,6 +6,12 @@ All notable changes to the `tf` plugin are documented here. The format follows
 
 ## [1.15.0] — 2026-11-17
 
+### Added
+- **A review of someone else's PR is posted as one review with inline comments.** `pr-feedback.mjs review`
+  reads the draft, puts every finding whose `path:line` is in the PR diff on that line, and sends them with the
+  Summary and Recommendation in a single comment review — one notification. Findings outside the diff stay in
+  the body; it never approves or requests changes.
+
 ### Changed
 - **`/tf:review` is a static code review.** It no longer runs e2e: one reviewer reads the PR for logic,
   impact on other parts (functions, variables, types, contracts and who uses them), security and standards,

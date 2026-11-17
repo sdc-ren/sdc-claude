@@ -109,7 +109,8 @@ diff (`gh pr diff`), the ticket, and the code around every change — not the di
 Also flag any change inside a read-only zone, and list the UI files changed with the screens they render.
 Then findings as P0–P3 with file:line. `review.md` ends with `Not run on the app` and the acceptance criteria
 or screens worth an e2e, so the author can ask for `/tf:e2e` when they want it. Draft (do not post)
-`<task>/pr-comment.md` per `${CLAUDE_PLUGIN_ROOT}/guidelines/pr-review.md`. Return `verdict` `SHIP` (approve-worthy
+`<task>/pr-comment.md` per `${CLAUDE_PLUGIN_ROOT}/guidelines/pr-review.md` (several PRs: `pr-comment-<repo>.md` each;
+every finding in the bullet form it gives, so it can be posted on its line). Return `verdict` `SHIP` (approve-worthy
 as code), `NEEDS-WORK`, or `BLOCK`, plus `issues`.
 
 ## Report

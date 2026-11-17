@@ -119,3 +119,71 @@ test('reviewers who were asked and have not reviewed are reported', () => {
   delete pr.reviewRequests
   assert.deepEqual(summarize(pr, 'me', {}, { n: 1 }).waiting, [])
 })
+
+// ── Our review of someone else's PR: one review, findings on their lines ──
+import { diffLines, parseReview, planReview } from '../scripts/pr-feedback.mjs'
+
+const DIFF = `diff --git a/src/cart.ts b/src/cart.ts
+index 111..222 100644
+--- a/src/cart.ts
++++ b/src/cart.ts
+@@ -10,4 +10,5 @@ export function add() {
+ keep
+-old
++new one
++new two
+ keep
+@@ -40,2 +41,2 @@
+-x
++y
+ z
+diff --git a/gone.ts b/gone.ts
+deleted file mode 100644
+--- a/gone.ts
++++ /dev/null
+@@ -1,2 +0,0 @@
+-a
+-b
+diff --git a/new.ts b/new.ts
+new file mode 100644
+--- /dev/null
++++ b/new.ts
+@@ -0,0 +1,2 @@
++++ looks like a header
++second
+`
+const REVIEW = `## Summary
+Not run on the app. Read the diff and its callers; typecheck passes.
+
+## Findings
+- [P1] \`src/cart.ts:12\` — quantity is not validated; a negative value lowers the total. Check it before the insert.
+- [P2] \`src/price.ts:88\` — the cache is read by the admin screen
+  and is not invalidated here.
+- [INFO] Is the limit per user or per cart?
+
+## Recommendation
+REQUEST_CHANGES — the P1 unblocks it.
+`
+
+test('only lines the diff shows on the new side take an inline comment', () => {
+  const m = diffLines(DIFF)
+  assert.deepEqual([...m.get('src/cart.ts')], [10, 11, 12, 13, 41, 42])
+  assert.deepEqual([...m.get('new.ts')], [1, 2]) // a "+++ …" content line is not a file header
+  assert.ok(!m.has('gone.ts') && !m.has('/dev/null'))
+})
+
+test('findings on a diff line go inline, the rest stay in the body, as one review', () => {
+  const parsed = parseReview(REVIEW)
+  assert.equal(parsed.findings.length, 3)
+  assert.deepEqual([parsed.findings[1].path, parsed.findings[1].line, parsed.findings[1].level], ['src/price.ts', 88, 'P2'])
+  const plan = planReview(parsed, diffLines(DIFF))
+  assert.deepEqual(plan.inline, [{ path: 'src/cart.ts', line: 12, side: 'RIGHT', body: '[P1] quantity is not validated; a negative value lowers the total. Check it before the insert.' }])
+  assert.match(plan.body, /^## Summary\nNot run on the app/)
+  assert.match(plan.body, /## Findings\n- \[P2\] `src\/price\.ts:88` — the cache is read by the admin screen\nand is not invalidated here\.\n- \[INFO\] Is the limit/)
+  assert.match(plan.body, /## Recommendation\nREQUEST_CHANGES — the P1 unblocks it\.$/)
+  assert.ok(!plan.body.includes('quantity is not validated')) // not said twice
+  // Everything inline: no Findings section left in the body.
+  const all = planReview(parseReview(REVIEW.replace(/- \[P2\][\s\S]*?per cart\?\n/, '')), diffLines(DIFF))
+  assert.ok(!all.body.includes('## Findings'))
+  assert.throws(() => planReview(parseReview('hello'), new Map()), /nothing to post/)
+})

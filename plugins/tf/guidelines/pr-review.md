@@ -41,6 +41,12 @@ APPROVE | REQUEST_CHANGES | COMMENT — and what unblocks it
 - `COMMENT`: non-blocking, or a decision above the reviewer (name who decides what).
 - Vietnamese: Nên merge (APPROVE) · Chưa nên merge (REQUEST_CHANGES) · Cần bàn thêm (COMMENT).
 - A review that did not run the app says so in the Summary (`Not run on the app`) and judges the code only.
-- No findings → say so. Inline comments: `[P1] title`, then issue, impact, fix in 1–3 sentences.
-- The recommendation is text only: never `gh pr review --approve/--request-changes`, merge, or
+- No findings → say so.
+- Every finding is one `- [P1] \`path/file.ts:42\` — …` bullet: level, then the location in backticks (path
+  from the repo root, the line in the PR's new code), then issue, impact and fix in 1–3 sentences. Posting
+  (`pr-feedback.mjs review`) turns each one into an inline comment on that line and sends them with the
+  Summary and Recommendation as ONE review, so the author gets one notification. A finding on a line the diff
+  does not show stays in the review body.
+- Several PRs in one task: one file per PR, `pr-comment-<repo>.md`.
+- The recommendation is text only (the review is posted as a plain comment review): never `gh pr review --approve/--request-changes`, merge, or
   post anything unless the user asks. Never edit the PR's code. No agent attribution.
