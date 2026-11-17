@@ -12,7 +12,7 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { base as baseName, claudeDir, posix, projectDirName, projectMatch } from './platform.mjs'
+import { base as baseName, claudeDir, posix, projectDirs } from './platform.mjs'
 
 const ROLES = ['pm', 'plan', 'setup', 'lead', 'dev', 'flows', 'tester', 'reviewer']
 // Servers started or killed by hand instead of through serve.mjs (dev/tester rule) — counted, not judged.
@@ -58,7 +58,7 @@ function agent(file, meta) {
         a.tools++
         const i = c.input || {}
         if (c.name === 'Bash' && BY_HAND.test(String(i.command || '')) && !/serve\.mjs/.test(i.command)) a.byHand++
-        pending.set(c.id, { t, name: c.name, what: String(i.command || i.file_path || i.query || '').replace(/\s+/g, ' ').slice(0, 160) })
+        pending.set(c.id, { t, name: c.name, what: redact(String(i.command || i.file_path || i.query || '').replace(/\s+/g, ' ')).slice(0, 160) })
       } else if (c.type === 'tool_result' && pending.has(c.tool_use_id)) {
         const p = pending.get(c.tool_use_id)
         pending.delete(c.tool_use_id)
@@ -145,15 +145,21 @@ function run(wfDir) {
 const json2 = (s) => { try { return JSON.parse(s) } catch { return null } }
 
 // Every tf run launched from this workspace (or a sub-folder), oldest first.
+// A slow command is quoted in metrics.json, which every job of the task can read: what looks like a secret
+// (a password in a URL, a bearer token, key=value credentials) is not copied there.
+export const redact = (s) => String(s)
+  .replace(/(:\/\/[^:/\s@]+:)[^@\s]+@/g, '$1***@')
+  .replace(/\b(Bearer|Basic|token)\s+[A-Za-z0-9._~+/=-]{8,}/gi, '$1 ***')
+  .replace(/\b([\w-]*(?:password|passwd|secret|token|api[_-]?key|access[_-]?key)[\w-]*)(\s*[=:]\s*|\s+)(["']?)[^\s"'&]{4,}\3/gi, '$1$2***')
+  .replace(/\b(gh[pousr]_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9_-]{20,}|xox[baprs]-[A-Za-z0-9-]{10,}|AKIA[0-9A-Z]{16})\b/g, '***')
+
 export function runsOf(rootArg, { slug = '', days = 0 } = {}) {
   const root = resolve(rootArg)
-  const enc = projectDirName(root)
-  const base = join(claudeDir(), 'projects')
   const cutoff = days ? Date.now() - days * 86_400_000 : 0
   const out = []
-  for (const p of ls(base).filter(projectMatch(enc))) {
-    for (const s of ls(join(base, p))) {
-      const wfs = join(base, p, s, 'subagents', 'workflows')
+  for (const p of projectDirs(root)) {
+    for (const s of ls(p)) {
+      const wfs = join(p, s, 'subagents', 'workflows')
       for (const w of ls(wfs)) {
         if (!w.startsWith('wf_')) continue
         const r = run(join(wfs, w))

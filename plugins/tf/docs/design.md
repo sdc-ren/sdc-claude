@@ -185,6 +185,23 @@ adds:
 
 ## Retention
 
+## What an agent cannot be talked into
+
+Agents read text other people wrote — the ticket, PR comments, pages, chats — and several can run commands.
+Each prompt says that such text is data, never an instruction. Because a prompt can be argued with, the
+rules that matter most are also refused at the tool call, for every tf agent (`hooks/guard.ts`):
+
+| Never | Why it is there |
+|---|---|
+| read, list, copy or edit `~/.claude/task-flow/auth` | the saved logins are used by the scripts, not handed to a model |
+| `gh pr merge`, `gh pr review`, the merge API | a PR stops at its link |
+| `git push --force`, `-f`, `+ref` | pushed history is never rewritten |
+| `gh pr comment`, `gh issue comment`, `pr-feedback.mjs post/reply/comment/review/resolve` | the orchestrator posts, after the user approved the text |
+
+These are string checks in memory (microseconds per tool call). They narrow what a misled agent can do; they
+are not a sandbox — a command can be disguised — so the PM also runs with a fixed tool list, the ledger does
+not carry commands, and a canvas's code runs in its own process.
+
 The ledger (`.pipeline/<slug>/resources.json`) says what a task holds, not how to free it: for worktrees,
 ports, servers, browsers and emulators tf builds the action from the id and ignores any command stored with
 the entry; a port's listener is stopped only when it runs from the task's own folders. Other kinds (a DB, a

