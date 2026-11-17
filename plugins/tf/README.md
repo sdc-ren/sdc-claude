@@ -390,7 +390,7 @@ is decided and listed as *assumptions* in the round report so you can correct it
 
 The PM sizes every task XS, S, M or L and staffs it accordingly: a small change (one repo, up to three
 files) runs dev → tester → one reviewer job that gates and packages, and a later round is sized by what that
-round changes; a migration or a money change gets a plan check, a lead per repo and opus where it is
+round changes; a migration or a money change gets a written design you approve before any code, a plan check, a lead per repo and opus where it is
 risky. The table is in [docs/design.md](docs/design.md#sizing-and-models-pm-decides).
 
 ## Workspace configuration

@@ -12,16 +12,20 @@ The PM has just written `plan.md`; no code exists. You are the second reader of 
 the PM's reasoning in your head — that is the point. Read `ticket.md` first and list for yourself what it
 asks, then read `plan.md` and the workspace config (repo list, read-only zones, test policy). Look for:
 1. **Missing requirement** — a sentence of the ticket (description, acceptance criteria, QC comment) that no
-   micro-task and no case covers.
+   `R<n>` of the plan states, or an `R<n>` that says more or less than the words it quotes; then an `R<n>` that
+   no micro-task and no case covers.
 2. **Repo left out** — the ticket names a screen, client or behaviour that lives in a repo the plan does
    not change (web admin, app, backend). Check that repo quickly (codegraph or grep) before claiming it.
 3. **Assumption against the ticket** — an assumption in `board.md` or a decision in the plan that the
    ticket contradicts, or that silently drops part of the ask.
 4. **Untestable case** — a case with no data or no expected result, or an acceptance criterion with no case.
-5. **Thin cases** — one of the four kinds of `${CLAUDE_PLUGIN_ROOT}/agents/pm.md` "Cases that human reviewers
+5. **Design** (M: plan.md `## Design`; L: `design.md`, which you read before the plan) — missing on M/L; a
+   *Data* line with no answer to "what happens when this changes later"; a neighbour the ticket or the code
+   names that the design does not list; a micro-task that contradicts a decision of the design.
+6. **Thin cases** — one of the four kinds of `${CLAUDE_PLUGIN_ROOT}/agents/pm.md` "Cases that human reviewers
    ask for" applies to the plan and has no case: a limit, a mode, another user of shared code the plan
    modifies, a visual defect not restated as something measurable.
-Every point quotes the ticket (kind 5: or the plan line): `PP<n>: "<quoted words>" — what the plan lacks — what
+Every point quotes the ticket (kinds 5 and 6: or the plan or design line): `PP<n>: "<quoted words>" — what the plan lacks — what
 to add`. A point you cannot back with a quote is not a point; style, wording and implementation choices are not your business
 here. No git, no edits, do not rewrite the plan. Verdict `SHIP` when you have no point, `NEEDS-WORK`
 otherwise (it does not block: the PM fixes the plan or records why it stands, once). Report in a few lines.
@@ -35,6 +39,9 @@ otherwise (it does not block: the PM fixes the plan or records why it stands, on
 3. **Contract** (2+ repos) — method, path, status codes, payload shape, casing, enums, optional
    fields, pagination: server vs plan contract vs client calls.
 4. **Conventions** — the repo `CLAUDE.md`; formatter clean.
+   **Design** (M/L) — the diff does what plan.md `## Design` / `design.md` decided, and on L what the lead's
+   `## Approach` (top of the dev report) said; a different interface, data rule or decision that the dev
+   report does not explain is P2.
 5. **Quality** — dead code, duplication, debug logs, magic numbers, unused imports, ineffective
    validation (validator not attached, guard after the side effect).
 6. **Tamper** — hardcoded expected output, mocks hiding the chain, new unit tests the policy forbids.

@@ -4,6 +4,19 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.13.0] — 2026-11-17
+
+### Added
+- **Requirements, design, tasks — as much paper as the task is big.** Every plan starts with `## Requirements`:
+  the brief rewritten as numbered sentences a flow can check (`R1 When …, … .`) with the words they come from,
+  and what the task will not do. Coverage maps `R<n> → micro-tasks → cases`. An M task adds a short `## Design`
+  (data and what happens when it changes later, neighbours, interfaces, decisions with the alternative
+  rejected); an L task writes `design.md` before the plan, with flow, states and risks as well.
+- **An L task shows you its design before any code.** After the plan check the run stops with the design and the
+  plan; a change you ask for sends the PM back to the design. `--assume` skips the stop. The plan check reads
+  `design.md`, each dev lead writes its `## Approach` before the first edit, and the gate rates a diff that
+  departs from the design without saying so as P2.
+
 ## [1.12.1] — 2026-11-17
 
 ### Fixed

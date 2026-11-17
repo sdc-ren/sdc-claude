@@ -100,6 +100,11 @@ them in its prompt on turn 1 and after a rejection, generated from the same cons
 10b. No `FLOWS` job on XS tasks, nor in a fix round (a dispatch whose dev jobs are all on repos that already
     had one this run).
 
+10c. Size L (build/qc): after the plan check, the first dispatch is not run — the run ends with status `approve`
+    and `design` (the path of `design.md`), so the user reads design and plan before any job. Not with
+    `--assume`, not once approved. The plan check is pointed at `design.md` too, and each dev lead writes its
+    `## Approach` before the first edit.
+
 **Closing**
 11. Code modes close only when, for every repo a dev touched, judged on that repo's own history: a tester
     covering it PASSed after its last dev job (a later dev job on another repo does not undo that; a FAIL is
@@ -131,7 +136,7 @@ and every agent reads them.
 | XS | text, colour, spacing, show/hide; one repo, ≤ 3 files | small-task lane: dev → tester (named cases) → PACKAGE that gates first |
 | S | add a field/column, one screen, one repo | small-task lane when ≤ 3 files per repo; else dev (∥ FLOWS) → gate → tester (named cases) → PACKAGE |
 | M | 2 repos or API change | plan check; one lead per repo in parallel ∥ tester FLOWS → gates → tester(s) → PACKAGE |
-| L | new feature, migration, money, permissions | M + opus where risky |
+| L | new feature, migration, money, permissions | M + `design.md` approved by the user first + opus where risky |
 
 Model per job: haiku < sonnet < opus. Default sonnet; opus only for risky logic or judgement. The PM runs on
 opus for turn 1; after that XS/S tasks run it on sonnet, M/L stay on opus, and any guard violation puts the
@@ -143,7 +148,8 @@ next PM turn back on opus.
 .pipeline/<SLUG>/
   ticket.md        the brief: request + every source verbatim       read by PM
   HANDOFF.md       ≤ 80 lines, rewritten by PM at close             read FIRST every round
-  plan.md          current round micro-tasks, contract, cases (PM)  jobs read their section
+  plan.md          current round: requirements, (M) design, micro-tasks, contract, cases (PM)   jobs read their section
+  design.md        size L only: data, neighbours, interfaces, decisions, flow, risks (PM); kept across rounds
   board.md         PM ledger: dispatches, results, assumptions, open issues
   journal.md       append-only, 1–3 lines per job (each agent)      grep only
   jobs/J<n>-<role>-<repo>.md   brief + report (the job's agent)     PM
@@ -192,7 +198,7 @@ Scheduler) that runs `resources.mjs reap` every 30 minutes; days via `TF_PRUNE_D
 | Leftover/empty `.worktrees/<SLUG>/` folders | prune | delete |
 | APK cache | every `apk.mjs get` | trimmed to 300 MB, least recently used first |
 
-The handoff set is HANDOFF, journal, flows, ticket, plan, board: a late QC round still has its flows.
+The handoff set is HANDOFF, journal, flows, ticket, plan, design, board: a late QC round still has its flows.
 
 ## Speed helpers
 

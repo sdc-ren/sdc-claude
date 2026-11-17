@@ -7,7 +7,7 @@
 //
 // args: { root, slug, dir, mode: 'build'|'qc'|'feedback'|'review'|'e2e', round, input, description?, sources?, tracker?, cases?, notes?,
 //         prs?: {repo: url}, worktrees?: {repo: path|null}, worktreePaths?: {repo: path}, format?: 'new'|'old'|'current',
-//         flags?: { approve?: bool, draft?: bool, check?: bool (feedback: triage only), assume?: bool (never ask, assume) }, approved?: bool, clarifyRound?: n (times the user already answered questions), lang?, writingLang?, scripts, config }
+//         flags?: { approve?: bool, draft?: bool, check?: bool (feedback: triage only), assume?: bool (never ask, assume; no design approval on L) }, approved?: bool, clarifyRound?: n (times the user already answered questions), lang?, writingLang?, scripts, config }
 // returns { status: 'done'|'triaged'|'verified'|'reviewed'|'escalate'|'approve'|'clarify'|'handoff'|'error', … }
 
 export const meta = {
@@ -400,6 +400,7 @@ async function runDev(j) {
       `· Yourself (split=false): implement the job now as a developer. ${reportLine(j.id, 'dev', j.repo)}\n` +
       `· Team (split=true): write NO code. Write the team plan to ${teamFile} (members, their micro-tasks and files, the interfaces between them) and return members + interfaces.\n` +
       (size === 'XS' ? 'This is an XS task: do it yourself (split=false).\n' : '') +
+      (size === 'L' ? `This is an L task: before the first edit write "## Approach" (5–10 lines, lead.md) at the top of your report file — also when you work alone; the gate reads it against ${dir}/design.md.\n` : '') +
       (why ? `REJECTED team: ${why}. Return a valid team, or split=false and do the job yourself.\n` : ''),
     { label: `${j.id} lead:${j.repo}`, phase: 'Jobs', model, schema: LEAD, agentType: AGENT.lead, ...(j.effort ? { effort: j.effort } : {}) })
   let plan = await ask('')
@@ -493,6 +494,7 @@ let size = ''
 // the PM fixes plan.md or records why not, once, and the run goes on.
 let planChecked = !['build', 'qc'].includes(mode) || !!A.approved
 let planNotes = ''
+let designGate = ['build', 'qc'].includes(mode) && !A.approved && !flags.assume
 let planAsked = false // the PM answers plan-check points this turn
 const planFile = `${dir}/jobs/J0-reviewer-plan.md`
 const RULES = CODE_MODES.includes(mode)
@@ -523,6 +525,7 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
     (stuck ? `STUCK — the run stops after this turn: ${stuck}\nDo not dispatch anything. Update board.md (the two jobs, what they needed), write HANDOFF.md (Status: escalated) and return escalate with the one thing the user must do.\n` : '') +
     (violation ? `REJECTED last decision: ${violation}\nFix it this turn.\n` : '') +
     (turn === 1 || violation ? RULES : '') +
+    (turn === 1 && designGate ? 'Size L: write design.md before plan.md (pm.md "Documents by size"); the run stops after your first decision so the user reads both before any job starts.\n' : '') +
     (turn >= MAX_TURNS - 1 ? 'Last turns left: close or escalate now.\n' : '') +
     'Update board.md, then return your decision.'
   const model = pmModel(turn)
@@ -559,7 +562,7 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
     if (['M', 'L'].includes(d.size)) {
       const pc = await run(
         `Job J0 · role reviewer · PLAN check\n${context}\n\n` +
-          `Brief: PLAN (reviewer.md "Plan check"). The PM wrote ${dir}/plan.md from ${dir}/ticket.md; no code exists yet. Check the plan against the ticket and the workspace config. No git, no code edits, do not rewrite the plan.\n` +
+          `Brief: PLAN (reviewer.md "Plan check"). The PM wrote ${dir}/plan.md${d.size === 'L' ? ` and ${dir}/design.md (size L: the design comes first — a missing or empty design.md is a point)` : ''} from ${dir}/ticket.md; no code exists yet. Check ${d.size === 'L' ? 'both' : 'the plan'} against the ticket and the workspace config. No git, no code edits, do not rewrite the plan.\n` +
           `Write your report to ${planFile} (heredoc) and append one line: node ${S}/task.mjs journal ${dir} "J0 reviewer plan: <one-line result>". Return the structured report; reportFile = that path; verdict SHIP when you found nothing, NEEDS-WORK otherwise, issues = the points (PP<n>).`,
         { label: 'J0 reviewer:plan', phase: 'PM', model, schema: REPORT, agentType: AGENT.reviewer })
       const points = (pc && pc.issues) || []
@@ -570,6 +573,16 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
         continue
       }
       log(pc ? 'plan check: nothing found' : 'plan check: no report — going on with the plan as it is')
+    }
+  }
+
+  // Size L (build/qc): the design and the plan are shown to the user before the first job — a wrong design on
+  // a large task costs rounds, not minutes. Once per task round; --assume and an earlier approval skip it.
+  if (designGate && (d.decision === 'dispatch' || d.decision === 'approve')) {
+    designGate = false
+    if (d.size === 'L') {
+      log('size L: design.md and plan.md go to the user before any job')
+      return { status: 'approve', slug, round, mode, size: 'L', note: d.note, scope: d.scope || '', design: `${dir}/design.md` }
     }
   }
 
