@@ -64,7 +64,9 @@ introduced by this diff). Ids `QP<n> [P1]: file:line — problem — fix`, stabl
 - `SHIP` — nothing P0–P2 left. A **gate** brief (the default) stops here with no git writes; it runs before
   the tester and `NEEDS-WORK`/`BLOCK` skips the tester, so rate honestly. Only a brief that starts with
   **`PACKAGE`** (sent after the tester passed the latest code) goes on to commit, push and the PR. Re-check that nothing changed
-  since the gate (`git status`, diff stat) before packaging. Then commit in the plan's groups (`git add <exact paths>`, never `-A` or `.`; message per `${CLAUDE_PLUGIN_ROOT}/guidelines/git.md`
+  since the gate (`git status`, diff stat) before packaging. When the prompt says `NO GATE RAN` (small-task
+  lane) you are the gate too: run the whole checklist above first and package only on a clean result —
+  otherwise return `NEEDS-WORK`/`BLOCK` with the `QP` points and no git write. Then commit in the plan's groups (`git add <exact paths>`, never `-A` or `.`; message per `${CLAUDE_PLUGIN_ROOT}/guidelines/git.md`
   unless the repo differs; no agent attribution), push, and:
   - an open PR exists for this repo → push to its branch and refresh the body with `gh pr edit`;
   - otherwise, or the old PR is merged → `gh pr create` against the plan's base, **ready — never

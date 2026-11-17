@@ -127,6 +127,44 @@ test('an unclear brief goes back to the user before anything runs', async () => 
   expect((await sim([ask, ask], std, { clarifyRound: 3 })).out.question).toContain('already answered questions 3 times')
 })
 
+test('small-task lane: dev → tester → PACKAGE in one dispatch, the PACKAGE job gates first', async () => {
+  const lane = (size, extra = []) => D([J('J1', 'dev', 'be', 1, 'x', 'opus'), ...extra, J('J2', 'tester', 'be', 2, 'x', 'sonnet', 'C1'), J('J3', 'reviewer', 'be', 3, 'PACKAGE', 'haiku')], size)
+  const files = (n) => (l) => (l.includes('lead') ? { ...solo, filesChanged: Array.from({ length: n }, (_, i) => `f${i}.ts`) } : std(l))
+  const r = await sim([lane('S'), close], files(2))
+  expect(r.out.status).toBe('done')
+  expect(r.ran).toEqual(['J1 lead:be(opus)', 'J2 tester:be(sonnet)', 'J3 reviewer:be(opus)']) // 3 jobs, gate on the lead's model
+  expect(r.prompts['J3 reviewer:be']).toContain('NO GATE RAN on this code')
+  expect(r.prompts['J1 lead:be']).not.toContain('XS task')
+  // with a gate in the dispatch the PACKAGE job is an ordinary one
+  const gatedRun = await sim([D(withCases, 'S'), D([J('J4', 'reviewer', 'be', 1, 'PACKAGE')], 'S'), close])
+  expect(gatedRun.prompts['J4 reviewer:be']).not.toContain('NO GATE RAN')
+  // M/L: the gate comes first
+  expect((await sim([lane('M'), lane('M')])).out.question).toContain('has no reviewer gate SHIP')
+  // a dev job that grew past 3 files stops the dispatch for a gate
+  const big = await sim([lane('S'), escalate], files(4))
+  expect(big.ran).toEqual(['J1 lead:be(opus)'])
+  expect(big.pmPrompts[1]).toContain('be changed 4')
+  // a PACKAGE that found a problem at its gate is not a PR: close is refused
+  const bad = await sim([lane('S'), close, close], (l) => (l.includes('reviewer') ? ok('NEEDS-WORK', { issues: ['QP1 [P2]: x'] }) : files(1)(l)))
+  expect(bad.out.question).toContain('no reviewer PACKAGE job (SHIP + PR URL)')
+})
+
+test('XS is one repo with no FLOWS job; no FLOWS job in a fix round', async () => {
+  const xs = (jobs) => D(jobs, 'XS')
+  const twoRepos = xs([J('J1', 'dev', 'be', 1), J('J2', 'dev', 'fe', 1)])
+  expect((await sim([twoRepos, twoRepos])).out.question).toContain('an XS task changes one repo')
+  const withFlows = xs([J('J1', 'dev', 'be', 1), J('J2', 'tester', 'be', 1, 'FLOWS')])
+  expect((await sim([withFlows, withFlows])).out.question).toContain('no FLOWS job on an XS task')
+  const one = await sim([xs([J('J1', 'dev', 'be', 1), J('J2', 'tester', 'be', 2, 'x', 'sonnet', 'C1'), J('J3', 'reviewer', 'be', 3, 'PACKAGE')]), close])
+  expect(one.out.status).toBe('done')
+  expect(one.prompts['J1 lead:be']).toContain('XS task: do it yourself')
+  const fix = D([J('J4', 'dev', 'be', 1), J('J5', 'tester', 'be', 1, 'FLOWS')])
+  expect((await sim([oneRepo, fix, fix])).out.question).toContain('no FLOWS job in a fix round')
+  // a new repo joining in a later dispatch may still get its flows written
+  const newRepo = D([J('J4', 'dev', 'fe', 1), J('J5', 'tester', 'fe', 1, 'FLOWS'), J('J6', 'reviewer', 'fe', 2), J('J7', 'tester', 'fe', 3)])
+  expect((await sim([oneRepo, newRepo, pack(8, ['be', 'fe']), close])).out.status).toBe('done')
+})
+
 test('plan check: points go back to the PM once and the first dispatch is not run', async () => {
   const r = await sim([oneRepo, D([J('J1', 'dev', 'be', 1)]), escalate], l => (l === 'J0 reviewer:plan' ? ok('NEEDS-WORK', { issues: ['PP1: "also on the web admin" — no fe section'] }) : std(l)))
   expect(r.ran).toEqual(['J0 reviewer:plan(opus)', 'J1 lead:be(sonnet)'])

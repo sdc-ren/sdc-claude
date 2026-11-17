@@ -26,6 +26,7 @@ const MAX_JOBS = 12 // jobs in one dispatch, all groups together
 const MAX_GROUP = 6 // jobs in one group, i.e. running at the same time
 const MAX_MEMBERS = 3 // dev members a repo's lead may run at once (one worktree, disjoint files)
 const MAX_DEV_PER_REPO = 6 // dev jobs per repo per run: the build plus the fix loop
+const FAST_FILES = 3 // small-task lane: a dev job that changed more files than this gets a gate before the tester
 const MAX_CLARIFY = 3 // times a task may go back to the user with questions before any job runs
 const RESERVE = 80_000
 
@@ -202,6 +203,22 @@ const stopsLaterGroups = (r) =>
   (r.job.role === 'reviewer' && !isPackage(r.job) && mode !== 'review' && ['NEEDS-WORK', 'BLOCK'].includes(r.report.verdict)) ||
   (r.job.role === 'tester' && CODE_MODES.includes(mode) && r.report.verdict !== 'PASS'))
 
+// Small-task lane (XS/S): dev → tester → PACKAGE, and the PACKAGE job runs the gate checklist itself.
+const hadDev = (repo) => ledger.some((x) => x.job.role === 'dev' && x.job.repo === repo)
+const sameRepo = (a, b) => a === 'all' || b === 'all' || a === b
+const isGate = (j) => j.role === 'reviewer' && !isPackage(j)
+// Has the code PACKAGE job j would push been through a gate? True when no dev job touched it this run, when a
+// gate SHIPped after the repo's last dev job, or when this dispatch runs a gate for it in an earlier group.
+function gated(j, jobs) {
+  const devNow = jobs.filter((x) => x.role === 'dev' && sameRepo(x.repo, j.repo))
+  const devRun = ledger.filter((x) => x.job.role === 'dev' && sameRepo(x.job.repo, j.repo))
+  if (!devNow.length && !devRun.length) return true
+  if (jobs.some((x) => isGate(x) && sameRepo(x.repo, j.repo) && x.group < j.group && devNow.every((dv) => dv.group < x.group))) return true
+  if (devNow.length) return false
+  const devSeq = Math.max(...devRun.map((x) => x.seq))
+  return ledger.some((x) => isGate(x.job) && sameRepo(x.job.repo, j.repo) && x.seq > devSeq && x.report && x.report.status === 'done' && x.report.verdict === 'SHIP')
+}
+
 function checkDispatch(d) {
   if (mode === 'feedback' && flags.check) return '--check is triage only: write feedback-triage.md and return close, no jobs'
   const jobs = d.jobs || []
@@ -217,6 +234,21 @@ function checkDispatch(d) {
   }
   const ids = jobs.map((j) => j.id)
   if (new Set(ids).size !== ids.length) return 'duplicate job ids in one dispatch'
+  if (CODE_MODES.includes(mode)) {
+    const sz = d.size || size
+    const devRepos = [...new Set(jobs.filter((j) => j.role === 'dev').map((j) => j.repo))]
+    const flows = jobs.find(isFlows)
+    if (sz === 'XS' && devRepos.length > 1) return `an XS task changes one repo (got dev jobs on ${devRepos.join(', ')}) — size it S or larger`
+    if (flows && sz === 'XS') return `${flows.id}: no FLOWS job on an XS task — its tester writes the one or two flows it needs`
+    if (flows && devRepos.length && devRepos.every(hadDev)) return `${flows.id}: no FLOWS job in a fix round (every dev job here is on a repo that already had one this run) — the tester edits the flows it re-runs`
+    // PACKAGE after a gate. Small tasks may skip the separate gate: the PACKAGE job then gates first itself.
+    for (const j of jobs.filter((x) => x.role === 'reviewer' && isPackage(x))) {
+      j._noGate = false
+      if (gated(j, jobs)) continue
+      if (!['XS', 'S'].includes(sz)) return `${j.id} (PACKAGE ${j.repo}) has no reviewer gate SHIP after that repo's last dev job — on M/L tasks the gate runs first (dev → gate → tester → PACKAGE)`
+      j._noGate = true
+    }
+  }
   for (const j of jobs.filter((x) => x.role === 'dev')) {
     const n = ledger.filter((x) => x.job.role === 'dev' && x.job.repo === j.repo).length + jobs.filter((x) => x.role === 'dev' && x.repo === j.repo).length
     if (n > MAX_DEV_PER_REPO) return `repo ${j.repo} would get its ${n}th dev job this run (cap ${MAX_DEV_PER_REPO}) — the fix loop is not converging; escalate with what keeps failing`
@@ -305,6 +337,9 @@ function jobPrompt(j) {
     (j.role === 'tester' && !isFlows(j) && j._impact && j._impact.length
       ? `Impact cases (from the reviewer gate of this dispatch — other users of code this change touched; write and run one flow each on top of your cases, tester.md): ${j._impact.join(' · ')}\n`
       : '') +
+    (j._noGate
+      ? `NO GATE RAN on this code (small-task lane): run the whole gate checklist first (reviewer.md "Gate checklist"). Any P0–P2, tamper or read-only-zone edit → return NEEDS-WORK or BLOCK and make NO git write. An IMPACT you find has no tester after you: rate it P2 when that user's result can really change, else note it. Only a clean gate goes on to commit, push and the PR.\n`
+      : '') +
     (isFlows(j)
       ? `FLOWS job: the code is being changed right now by the dev job(s) of this group. Write the flows only (tester.md "FLOWS briefs"); do not judge the app, return verdict NONE.\n`
       : '') +
@@ -364,6 +399,7 @@ async function runDev(j) {
     head + `You lead this repo's dev work for this job (lead.md). Decide first: do it yourself, or split it among 2–${MAX_MEMBERS} members who work in this worktree at the same time.\n` +
       `· Yourself (split=false): implement the job now as a developer. ${reportLine(j.id, 'dev', j.repo)}\n` +
       `· Team (split=true): write NO code. Write the team plan to ${teamFile} (members, their micro-tasks and files, the interfaces between them) and return members + interfaces.\n` +
+      (size === 'XS' ? 'This is an XS task: do it yourself (split=false).\n' : '') +
       (why ? `REJECTED team: ${why}. Return a valid team, or split=false and do the job yourself.\n` : ''),
     { label: `${j.id} lead:${j.repo}`, phase: 'Jobs', model, schema: LEAD, agentType: AGENT.lead, ...(j.effort ? { effort: j.effort } : {}) })
   let plan = await ask('')
@@ -413,7 +449,7 @@ async function runJob(j, turn) {
   if (j.role === 'dev') report = await runDev(j)
   else {
     let model = modelOf(j)
-    if (j.role === 'reviewer' && !isPackage(j) && CODE_MODES.includes(mode)) {
+    if (j.role === 'reviewer' && (!isPackage(j) || j._noGate) && CODE_MODES.includes(mode)) {
       const lm = leadModel(j.repo)
       if (lm && lm !== model) { log(`${j.id} gate ${j.repo}: model ${model} → ${lm} (the dev lead's)`); model = lm }
     }
@@ -444,7 +480,7 @@ const planFile = `${dir}/jobs/J0-reviewer-plan.md`
 const RULES = CODE_MODES.includes(mode)
   ? `Hard rules the executor enforces (a decision that breaks one is rejected and costs a turn): at most ${MAX_JOBS} jobs per dispatch and ${MAX_GROUP} per group; ONE dev job per repo per group, ${MAX_DEV_PER_REPO} per repo per run; ` +
     `a tester or reviewer never shares a group with a dev job on its repo (a FLOWS tester may); a reviewer gate never shares a group with a tester of its repo; ` +
-    `a gate runs on the model of that repo's last dev job, whatever model you give it; close needs, for EACH changed repo on its own, a tester PASS after that repo's last dev job and then a PACKAGE reviewer SHIP with a ready PR started after that PASS.\n`
+    `a gate runs on the model of that repo's last dev job, whatever model you give it; on M/L a PACKAGE job needs a gate SHIP after that repo's last dev job; on XS/S the gate may be left out (dev → tester → PACKAGE in one dispatch: the PACKAGE job gates first, and a dev job that changed more than ${FAST_FILES} files stops the dispatch for a gate); no FLOWS job on XS or in a fix round; XS is one repo; close needs, for EACH changed repo on its own, a tester PASS after that repo's last dev job and then a PACKAGE reviewer SHIP with a ready PR started after that PASS.\n`
   : ''
 const pmModel = (turn) => (turn === 1 || violation || !['XS', 'S'].includes(size) ? 'opus' : 'sonnet')
 for (let turn = 1; turn <= MAX_TURNS; turn++) {
@@ -551,6 +587,16 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
         // A later group usually depends on this one (judges after devs): stop and let the PM decide.
         const broken = recs.filter(stopsLaterGroups)
         const skipped = groups.filter((x) => x > g)
+        const big = ['XS', 'S'].includes(size) ? recs.filter((r) => r.job.role === 'dev' && r.report && r.report.status === 'done' &&
+          (r.report.filesChanged || []).length > FAST_FILES && !d.jobs.some((x) => isGate(x) && sameRepo(x.repo, r.job.repo) && x.group > g)) : []
+        if (!broken.length && big.length && skipped.length) {
+          const why = `not run: the small-task lane (no separate gate) is for changes of at most ${FAST_FILES} files — ${big.map((r) => `${r.job.repo} changed ${r.report.filesChanged.length}`).join(', ')}. Dispatch gate → tester → PACKAGE for it.`
+          log(`group ${g}: ${why}`)
+          const left = d.jobs.filter((j) => skipped.includes(j.group))
+          last.push(...left.map((j) => ({ job: j, report: { status: 'failed', verdict: 'NONE', summary: why }, turn, seq })))
+          left.forEach((j) => seenIds.delete(j.id))
+          break
+        }
         if (broken.length && skipped.length) {
           const left = d.jobs.filter((j) => skipped.includes(j.group)).map((j) => j.id)
           log(`group ${g}: ${broken.map((r) => `${r.job.id}${r.report && r.report.status === 'done' ? ` ${r.report.verdict}` : ' not done'}`).join(', ')} → skipped ${left.join(', ')}`)

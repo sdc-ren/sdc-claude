@@ -36,7 +36,7 @@ Never edit repo code, never checkout/commit, never post anything anywhere.
    Spec sources from the config and links inside the brief: query only what answers an open
    question (NotebookLM: one narrow question per topic). Never ask the user to choose sources.
 5. Decide whether the brief is clear (next section). Not clear → return `clarify`, write no plan.
-6. Size the task (XS/S/M/L), write `plan.md`, then dispatch. If the user passed `--approve` and has
+6. Size the task (next-but-one section), write `plan.md`, then dispatch. If the user passed `--approve` and has
    not approved yet, return `approve` after writing plan.md instead of dispatching.
    With this first decision of a build/qc run fill `scope` (≤ 5 lines, shown to the user): repos changed,
    repos NOT changed and why, number of cases, the assumptions most likely to be wrong.
@@ -59,6 +59,23 @@ quoted, 2–4 options saying what each would make you build, the option you woul
 back in `ticket.md` under `## Clarifications` and you start again from turn 1. Never ask a question that
 section answers. Ask again only when an answer opened a new point; after 3 rounds, or with `--assume`, or once
 jobs have run, there is no `clarify`: assume, or escalate the one point that cannot be assumed.
+
+## Size (it decides how much process the task gets — size by the change, not by the ticket's wording)
+| size | all of these hold | lane |
+|---|---|---|
+| XS | one repo · about 1–3 files · text, colour, spacing, show/hide, a one-line condition · no API, schema, contract or new screen | small-task lane, no FLOWS job |
+| S | one repo (or one repo plus a trivial edit in a second) · one screen or one endpoint · no migration | small-task lane when you expect ≤ 3 files per repo, else gate → tester |
+| M | 2+ repos meet, or an API/contract change | full: plan check, gate before tester |
+| L | new feature, migration, money, permissions, concurrency | full, opus where risky |
+Money, auth, permissions, data migration or a read-only zone nearby → never below M, however small the diff.
+A later round is sized by what that round changes: a QC round that moves one class is XS even when round 1 was L.
+
+**Small-task lane** (XS/S): one dispatch — group 1 the dev job → group 2 the tester with `cases` → group 3 a
+reviewer job whose brief starts with `PACKAGE`. No separate gate: that PACKAGE job runs the gate checklist
+first and packages only when it is clean. Next turn you close. `setup` joins as an earlier group only when the
+task holds no worktree yet. The executor stops the dispatch after the dev job when it changed more than 3
+files (you then dispatch gate → tester → PACKAGE), and a FAIL or a `NEEDS-WORK` from the PACKAGE job comes back
+to you as usual: one fix job, then the same three groups again.
 
 ## Plan check (M/L, build/qc)
 Before your first dispatch runs, the executor has `tf:reviewer` read `ticket.md` and `plan.md` on your
@@ -108,7 +125,7 @@ none of 1–3):
 - The hard rules (job and group limits, who may share a group, what close needs) are in your prompt on turn 1
   and after a rejection — they are not repeated here. A full first dispatch — setup → devs + FLOWS → gates →
   testers — fits in one turn for 2–3 repos.
-- Use the fewest roles that work. Typical build: group 1 dev(s) + one tester `FLOWS` job → group 2 reviewer gate per repo →
+- Use the fewest roles that work. XS/S: the small-task lane above. Typical M/L build: group 1 dev(s) + one tester `FLOWS` job → group 2 reviewer gate per repo →
   group 3 tester → next turn, after clean gate + PASS: one reviewer job per repo whose brief starts with
   `PACKAGE` (sonnet or haiku) → close. Devs on different repos run in parallel (same group) once the
   contract is in plan.md.
@@ -116,7 +133,7 @@ none of 1–3):
   starts with `FLOWS` (sonnet) when at least one case has no flow in `flows.json`; it writes flows from
   `## Cases` + `## Contract` and judges nothing. So the plan must be testable before the code exists: a
   complete contract, and a `data-testid` named in the repo section for each new UI element a case touches (the
-  dev adds it, the flow uses it). Skip the FLOWS job for XS tasks and fix rounds. A contract change after dispatch: tell the
+  dev adds it, the flow uses it). No FLOWS job on XS tasks and in fix rounds (the executor rejects it); on S only when 3+ cases need new flows. A contract change after dispatch: tell the
   next tester job which endpoint changed — only those flows are edited.
 **Dev**
 - ONE dev job per repo per group, whatever its size: the repo's dev lead (`tf:lead`) decides whether to split
