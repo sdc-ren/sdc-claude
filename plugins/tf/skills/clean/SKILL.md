@@ -20,7 +20,11 @@ Every action: show the plan, then act only after a clear yes from the user.
   `node ${CLAUDE_PLUGIN_ROOT}/scripts/resources.mjs reap --dry-run <cwd>`: list the tasks whose PRs are all
   merged or closed and the idle ones it would free. On yes the same without `--dry-run` — it frees their
   worktrees, DBs, caches and ports, promotes their passing flows to `_regression/` and archives their
-  folders. Report in one line each what was kept and why (uncommitted or unpushed work, a release that failed).
+  folders. The dry run prints, per resource, what freeing it will do — show those lines as they are. Report in
+  one line each what was kept and why (uncommitted or unpushed work, a release that failed).
+  A line marked `NOT a recipe of this workspace's config` is a command tf will not run on its own: quote it
+  to the user in full, and only on their yes for that command run
+  `node ${CLAUDE_PLUGIN_ROOT}/scripts/resources.mjs release <cwd> <slug> --unlisted`.
   Also run `--migrate` and `--legacy` as dry runs and mention them only when they have something to do.
 
 Reply in the user's language.

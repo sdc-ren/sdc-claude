@@ -34,6 +34,10 @@ const norm = (p) => { const s = posix(resolve(String(p))).replace(/\/+$/, ''); r
 // Is `child` the folder `parent` or inside it? Separator- and (on Windows) case-insensitive.
 export const under = (child, parent) => { if (!child || !parent) return false; const c = norm(child); const p = norm(parent); return c === p || c.startsWith(`${p}/`) }
 // <root> of a task folder <root>/.pipeline/<slug> (or …/_archive/<slug>).
+// A git branch or ref given on a command line or read from a config: plain characters, never an option.
+export const okRef = (s) => typeof s === 'string' && /^[A-Za-z0-9][A-Za-z0-9._/-]*$/.test(s) && !s.includes('..')
+// A path inside some folder, as written by a config or an argument: relative, and it never climbs out.
+export const okRel = (p) => typeof p === 'string' && !!p && !/^([\\/]|[A-Za-z]:)/.test(p) && !p.split(/[\\/]/).includes('..') && !p.includes('\0')
 export const rootOfTask = (dir) => String(dir).split(/[\\/]\.pipeline[\\/]/)[0]
 
 // Claude Code keeps its data in ~/.claude on every system unless CLAUDE_CONFIG_DIR moves it.

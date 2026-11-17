@@ -68,6 +68,10 @@ resources). `"optional": true` = only when named. Put every env override the loc
 ```
 
 ## Provisioning (setup job follows this; register every resource with `resources.mjs add`)
+For `worktree`, `port`, `server`, `browser` and `emulator` tf frees the resource itself from its id (register
+them with `--kind` and `--id` only). For every other kind the `--release` / `--stop` cell is the list of
+commands that may run: write each as one backticked command with `<placeholders>` for the values (one plain
+word each). A stored command that is not one of them is kept and shown by `/tf:clean`, never run on its own.
 | kind | allocate | `--release` | `--stop` |
 |---|---|---|---|
 | worktree | path `<root>/.worktrees/<SLUG>/<repo dir>` (from `task.mjs resolve`); reuse it if it exists; else `node pool.mjs take <root> <key> <repo> <path> --branch <branch> --base <base> --lock <lockfile>` (warm pool); else `git -C <repo> fetch origin` → `git -C <repo> worktree add -b <branch> <path> origin/<base>`; copy `.env`; deps: `node fastdeps.mjs <repo> <path> --lock <lockfile> --dirs <dirs>`, install only when it prints `cloned:false` | `git -C <repo> worktree remove --force <path>` | — |

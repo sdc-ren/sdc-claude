@@ -4,6 +4,29 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.16.5] — 2026-11-17
+
+### Security
+- **The resource ledger no longer carries commands for what tf knows how to free.** For `worktree`, `port`,
+  `server`, `browser` and `emulator` the action is built from the id; a `release`/`stop` string stored in
+  `resources.json` is ignored. A worktree is removed only inside `.worktrees/`.
+- **Other kinds run only the config's own recipes.** A stored command for a DB, a cache index… runs when it
+  is one of that kind's backticked commands in the config's Provisioning table with plain one-word values in
+  the `<placeholders>`. Anything else is kept, shown, and runs only with `resources.mjs release --unlisted`.
+- **You see what cleanup will run.** `resources.mjs list` and `reap --dry-run` print the action per resource;
+  passwords inside URLs are masked there and in the log.
+- **A port release stops only the task's own listener** — a process running from the task's worktrees or
+  task folder. Weeks after a run, whatever else listens on that port is left alone. `serve.mjs stop` likewise
+  needs to see the server running from the task's worktree.
+- **No shell around git and gh** in `resources.mjs`, `fresh.mjs`, `pool.mjs`, `task.mjs` and `doctor.mjs`:
+  a branch, a base or a path is one argument. Branches and bases must be plain refs; pool keys, lock files
+  and dependency folders must stay inside their folder; a dependency folder that is a symlink is refused.
+- **Server placeholders never bring shell syntax**: `{db}`, `{cache}` and the others are refused when their
+  value holds shell characters.
+
+### Changed
+- `resources.mjs add` needs `--release` only for kinds tf does not know.
+
 ## [1.16.4] — 2026-11-17
 
 ### Security

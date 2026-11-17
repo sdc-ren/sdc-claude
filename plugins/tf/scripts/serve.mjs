@@ -63,6 +63,9 @@ export function fill(str, vars) {
   return String(str).replace(/\{(port(?::[\w-]+)?|db|cache|wt|root|slug|dir)\}/g, (all, k) => {
     const v = k === 'port' ? vars.port : k.startsWith('port:') ? vars.ports[k.slice(5)] : vars[k]
     if (v === undefined || v === null || v === '') throw new Error(`placeholder ${all} has no value`)
+    // The filled string becomes a shell command, and some values come from the task's ledger: a value never
+    // brings shell syntax with it.
+    if (/[`$;&|<>()'"\n]/.test(String(v))) throw new Error(`placeholder ${all}: its value ${JSON.stringify(String(v))} holds shell characters`)
     return String(v)
   })
 }
@@ -140,7 +143,10 @@ export function stopOne(root, slug, name) {
   const members = groupOf(p.pgid)
   // Only our own group: its leader must still run from this task's worktree (pid reuse guard).
   const leaderCwd = members.length ? cwdOf(members[0].pid) : ''
-  if (members.length && leaderCwd && !under(leaderCwd, p.wt)) return { name, status: 'error', reason: `process group ${p.pgid} no longer runs from ${p.wt} — not touched` }
+  // servers.json is a file of the task folder: the worktree it names must be this task's, and where the
+  // system can tell (macOS, Linux) the leader must be seen running from it — unknown is not a yes.
+  const mine = under(p.wt, join(root, '.worktrees', slug)) && (IS_WIN || (!!leaderCwd && under(leaderCwd, p.wt)))
+  if (members.length && !mine) return { name, status: 'error', reason: `process group ${p.pgid} is not seen running from this task's worktree ${p.wt} — not touched` }
   if (members.length) killGroup(p.pgid)
   delete state.procs[name]
   writeState(dir, state)

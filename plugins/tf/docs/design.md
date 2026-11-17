@@ -185,6 +185,12 @@ adds:
 
 ## Retention
 
+The ledger (`.pipeline/<slug>/resources.json`) says what a task holds, not how to free it: for worktrees,
+ports, servers, browsers and emulators tf builds the action from the id and ignores any command stored with
+the entry; a port's listener is stopped only when it runs from the task's own folders. Other kinds (a DB, a
+cache index) are freed by the stored command only when it is one of that kind's recipes in the config's
+Provisioning table, with plain values in the placeholders — anything else waits for `release --unlisted`.
+
 Cleanup is never part of a task run: a run touches its own task only. `/tf:clean` runs `resources.mjs reap`
 for the workspace when the user asks, and nothing runs in the background; days via `TF_PRUNE_DAYS`,
 `TF_ARCHIVE_DAYS`.

@@ -28,8 +28,9 @@ export { keyFrom }
 
 const LEGACY_SUFFIX = /-(?:e2e\d*|qc\d*|r\d+|evd|fix|review|view|verify|before|after|app|app-thumb|thumb|header)\b/i
 const q = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`
-const git = (wt, args) => sh(`git -C ${q(wt)} ${args}`)
-const gitOk = (wt, args) => { try { execSync(`git -C ${q(wt)} ${args}`, { stdio: 'pipe', shell: SH, windowsHide: true, timeout: 30_000 }); return true } catch { return false } }
+// git runs without a shell; `args` is an array, so a path or a sha is one argument.
+const git = (wt, args) => { try { return execFileSync('git', ['-C', wt, ...args], { stdio: 'pipe', windowsHide: true, timeout: 30_000 }).toString().trim() } catch { return '' } }
+const gitOk = (wt, args) => { try { execFileSync('git', ['-C', wt, ...args], { stdio: 'pipe', windowsHide: true, timeout: 30_000 }); return true } catch { return false } }
 const sh = (cmd) => { try { return execSync(cmd, { stdio: 'pipe', shell: SH, windowsHide: true, timeout: 30_000 }).toString().trim() } catch { return '' } }
 const out = (o) => console.log(JSON.stringify(o, null, 2))
 
@@ -251,8 +252,8 @@ function legacy(root, repos, apply) {
     const rest = name.toLowerCase().slice(key.length + 1)
     if (repos.includes(rest)) continue
     const p = join(wtRoot, name)
-    const dirty = sh(`git -C ${JSON.stringify(p)} status --porcelain`) ? 'uncommitted changes'
-      : sh(`git -C ${JSON.stringify(p)} log --oneline -1 HEAD --not --remotes`) ? 'unpushed commits' : ''
+    const dirty = git(p, ['status', '--porcelain']) ? 'uncommitted changes'
+      : git(p, ['log', '--oneline', '-1', 'HEAD', '--not', '--remotes']) ? 'unpushed commits' : ''
     plan.worktrees.push({ path: p, key, keep: dirty })
   }
   if (!apply) return { dryRun: true, ...plan }
@@ -261,7 +262,7 @@ function legacy(root, repos, apply) {
   for (const f of plan.folders) {
     const ledger = join(f.from, 'resources.json')
     if (existsSync(ledger) && under(f.from, pipe) && !under(f.from, join(pipe, '_archive'))) {
-      sh(nodeCmd(join(S, 'resources.mjs'), 'release', JSON.stringify(root), JSON.stringify(base(f.from))))
+      try { execFileSync(process.execPath, [join(S, 'resources.mjs'), 'release', root, base(f.from)], { stdio: 'pipe', windowsHide: true, timeout: 300_000 }) } catch {}
     }
     // Anything still registered (release failed, e.g. Docker down) stays tracked: keep the folder where `reap` sees it.
     let left = []
@@ -284,9 +285,8 @@ function legacy(root, repos, apply) {
     if (w.keep) { done.kept.push(`${w.path}: ${w.keep}`); continue }
     if (held.has(w.path)) { done.kept.push(`${w.path}: registered by a kept folder`); continue }
     if (!existsSync(w.path)) continue
-    const common = sh(`git -C ${JSON.stringify(w.path)} rev-parse --path-format=absolute --git-common-dir`).replace(/\/\.git$/, '')
-    const r = sh(`git -C ${JSON.stringify(common)} worktree remove --force ${JSON.stringify(w.path)} && echo ok`)
-    if (r.endsWith('ok')) done.removed.push(w.path); else done.kept.push(`${w.path}: remove failed`)
+    const common = git(w.path, ['rev-parse', '--path-format=absolute', '--git-common-dir']).replace(/\/\.git$/, '')
+    if (common && gitOk(common, ['worktree', 'remove', '--force', w.path])) done.removed.push(w.path); else done.kept.push(`${w.path}: remove failed`)
   }
   return done
 }
@@ -317,8 +317,8 @@ function migrateWorktrees(root, repos, apply) {
   const moved = []
   for (const m of plan) {
     mkdirSync(dirname(m.dest), { recursive: true })
-    const common = sh(`git -C ${JSON.stringify(m.src)} rev-parse --path-format=absolute --git-common-dir`).replace(/\/\.git$/, '')
-    const ok = sh(`git -C ${JSON.stringify(common)} worktree move ${JSON.stringify(m.src)} ${JSON.stringify(m.dest)} && echo ok`).endsWith('ok')
+    const common = git(m.src, ['rev-parse', '--path-format=absolute', '--git-common-dir']).replace(/\/\.git$/, '')
+    const ok = !!common && gitOk(common, ['worktree', 'move', m.src, m.dest])
     if (ok) moved.push(m); else skipped.push(`${m.src}: git worktree move failed`)
   }
   // Rewrite ledger paths (live tasks, archive, legacy history copies).
@@ -383,17 +383,17 @@ if (isMain) {
         out({ script: file, name: slug })
         break
       }
-      case 'head': out({ head: git(resolve(a[0]), 'rev-parse HEAD') }); break
+      case 'head': out({ head: git(resolve(a[0]), ['rev-parse', 'HEAD']) }); break
       case 'uncommit': {
         const wt = resolve(a[0]); const sha = a[1] || ''
-        const head = git(wt, 'rev-parse HEAD')
+        const head = git(wt, ['rev-parse', 'HEAD'])
         if (!/^[0-9a-f]{7,40}$/.test(sha) || !head) throw new Error('usage: task.mjs uncommit <worktree> <sha before the job>')
         if (head.startsWith(sha) || sha.startsWith(head)) { out({ undone: 0, head }); break }
-        if (!gitOk(wt, `merge-base --is-ancestor ${sha} HEAD`)) throw new Error(`refused: ${sha} is not an ancestor of HEAD — the branch moved, undo by hand`)
-        if (git(wt, 'branch -r --contains HEAD')) throw new Error('refused: the commits are already pushed — leave them, tell the PM')
-        const n = Number(git(wt, `rev-list --count ${sha}..HEAD`)) || 0
-        if (!gitOk(wt, `reset -q ${sha}`)) throw new Error('git reset failed')
-        out({ undone: n, head: git(wt, 'rev-parse HEAD') })
+        if (!gitOk(wt, ['merge-base', '--is-ancestor', sha, 'HEAD'])) throw new Error(`refused: ${sha} is not an ancestor of HEAD — the branch moved, undo by hand`)
+        if (git(wt, ['branch', '-r', '--contains', 'HEAD'])) throw new Error('refused: the commits are already pushed — leave them, tell the PM')
+        const n = Number(git(wt, ['rev-list', '--count', `${sha}..HEAD`])) || 0
+        if (!gitOk(wt, ['reset', '-q', sha])) throw new Error('git reset failed')
+        out({ undone: n, head: git(wt, ['rev-parse', 'HEAD']) })
         break
       }
       case 'migrate-worktrees': {

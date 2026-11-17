@@ -16,9 +16,9 @@
 // Never deletes anything in the main checkout. Skips a dir that already exists in the worktree.
 
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, mkdirSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, mkdirSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
-import { cloneDir } from './platform.mjs'
+import { cloneDir, okRel } from './platform.mjs'
 
 const [main, wt, ...rest] = process.argv.slice(2)
 const opt = (n) => { const i = rest.indexOf(`--${n}`); return i >= 0 ? rest[i + 1] : undefined }
@@ -58,8 +58,12 @@ if (dirs.includes('node_modules')) {
 }
 const cloned = []
 for (const d of dirs) {
+  // A dependency folder is a real folder inside the worktree. A name that climbs out, or a link standing in
+  // its place (to the main checkout, say), would make the next install write somewhere else.
+  if (!okRel(d)) done({ cloned: false, reason: 'bad-dir', dir: d })
   const src = join(M, d)
   const dst = join(W, d)
+  try { if (lstatSync(dst).isSymbolicLink()) done({ cloned: false, reason: 'dir-is-a-link', dir: d }) } catch {}
   if (existsSync(dst)) { cloned.push(`${d} (exists)`); continue }
   if (!existsSync(src)) done({ cloned: false, reason: 'missing-dir', dir: d })
   mkdirSync(dirname(dst), { recursive: true })

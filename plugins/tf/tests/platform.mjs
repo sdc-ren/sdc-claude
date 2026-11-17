@@ -195,14 +195,17 @@ test('resources.mjs: a worktree only a tool dirtied is freed; real work still ke
   mkdirSync(join(root, '.claude'), { recursive: true })
   writeFileSync(join(root, '.claude', 'task-flow.md'), '# config\n\n## Tool-touched files\n- `analysis_options.yaml` — flutter pub get adds exclude lines\n- `./ios/Podfile.lock`\n\n## Doctor\n- `not-a-file.txt`\n')
   const make = (slug) => {
+    // A main checkout and a linked worktree of it under .worktrees/<slug>/, as setup makes them.
+    const main = join(root, `${slug}-mobile`)
     const wt = join(root, '.worktrees', slug, 'mobile')
-    mkdirSync(wt, { recursive: true })
+    mkdirSync(main, { recursive: true })
+    mkdirSync(join(root, '.worktrees', slug), { recursive: true })
     mkdirSync(join(root, '.pipeline', slug), { recursive: true })
-    const git = (args) => sh(`git -c user.email=t@example.com -c user.name=t -c commit.gpgsign=false ${args}`, wt)
+    const git = (args, cwd = main) => sh(`git -c user.email=t@example.com -c user.name=t -c commit.gpgsign=false ${args}`, cwd)
     git('init -q')
     git('config core.autocrlf false') // Windows runners check files out with CRLF otherwise; the test compares bytes
-    writeFileSync(join(wt, 'analysis_options.yaml'), 'analyzer:\n')
-    writeFileSync(join(wt, 'main.dart'), 'void main() {}\n')
+    writeFileSync(join(main, 'analysis_options.yaml'), 'analyzer:\n')
+    writeFileSync(join(main, 'main.dart'), 'void main() {}\n')
     git('add .')
     git('commit -q -m base')
     // Pushed to a remote, so the only thing that can keep the worktree is an uncommitted change.
@@ -211,7 +214,9 @@ test('resources.mjs: a worktree only a tool dirtied is freed; real work still ke
     git(`remote add origin ${JSON.stringify(origin)}`)
     git('push -q origin HEAD')
     git('fetch -q origin')
-    node('resources.mjs', ['add', root, slug, '--kind', 'worktree', '--id', wt, '--release', 'echo freed'], { env })
+    git(`worktree add -q --detach ${JSON.stringify(wt)}`)
+    // No --release: for a worktree the ledger says what is held, and tf builds the command itself.
+    node('resources.mjs', ['add', root, slug, '--kind', 'worktree', '--id', wt], { env })
     return wt
   }
   const held = (slug) => { const f = join(root, '.pipeline', slug, 'resources.json'); return existsSync(f) ? JSON.parse(readFileSync(f, 'utf8')).entries.length : 0 }
@@ -222,7 +227,7 @@ test('resources.mjs: a worktree only a tool dirtied is freed; real work still ke
   writeFileSync(join(tool, 'analysis_options.yaml'), 'analyzer:\n  exclude:\n    - build/**\n')
   node('resources.mjs', ['release', root, 'T-1'], { env })
   assert.equal(held('T-1'), 0, 'freed: its only change was a tool-touched file')
-  assert.equal(readFileSync(join(tool, 'analysis_options.yaml'), 'utf8'), 'analyzer:\n')
+  assert.ok(!existsSync(tool), 'the worktree itself is removed')
 
   const work = make('T-2')
   writeFileSync(join(work, 'analysis_options.yaml'), 'analyzer:\n  exclude:\n    - build/**\n')
@@ -282,4 +287,69 @@ test('flow-run.mjs: a flow that wrote PASS and then crashed did not pass', async
   const cases = JSON.parse(readFileSync(join(dir, 'flows.json'), 'utf8')).cases
   assert.equal(cases.C1.lastResult, 'FAIL', 'PASS on disk, exit code 1')
   assert.equal(cases.C2.lastResult, 'PASS', 'a clean exit keeps its PASS')
+})
+
+test('resources.mjs: a custom kind is freed by its config recipe; a command that is not one waits for a person', () => {
+  const root = tmp('recipe')
+  const env = { ...process.env, HOME: root, USERPROFILE: root }
+  mkdirSync(join(root, '.claude'), { recursive: true })
+  mkdirSync(join(root, '.pipeline', 'T-1'), { recursive: true })
+  const touch = (file) => `node -e "require('fs').writeFileSync('${file}','x')"`
+  writeFileSync(join(root, '.claude', 'task-flow.md'), `# config\n\n## Provisioning\n| kind | allocate | \`--release\` | \`--stop\` |\n|---|---|---|---|\n| db | clone it | \`${touch('<file>')}\` | — |\n\n## Doctor\n`)
+  const add = (id, release) => node('resources.mjs', ['add', root, 'T-1', '--kind', 'db', '--id', id, '--release', release], { env })
+  add('good', touch('freed.txt'))
+  add('bad', `${touch('freed2.txt')} && ${touch('pwned.txt')}`)
+  const listing = node('resources.mjs', ['list', root], { env })
+  assert.match(listing, /db good .*freed\.txt/, 'the command is shown')
+  assert.match(listing, /db bad .*NOT a recipe/)
+  try { node('resources.mjs', ['release', root, 'T-1'], { env }) } catch {}
+  assert.ok(existsSync(join(root, 'freed.txt')), 'the recipe ran')
+  assert.ok(!existsSync(join(root, 'pwned.txt')), 'the other command did not')
+  const left = JSON.parse(readFileSync(join(root, '.pipeline', 'T-1', 'resources.json'), 'utf8')).entries
+  assert.deepEqual(left.map((e) => e.id), ['bad'], 'it is kept, with the reason')
+  assert.match(left[0].error, /not a db recipe/)
+  node('resources.mjs', ['release', root, 'T-1', '--unlisted'], { env })
+  assert.ok(existsSync(join(root, 'pwned.txt')), 'a person who has seen it can still run it')
+  rmSync(root, { recursive: true, force: true })
+})
+
+test('resources.mjs: a worktree outside .worktrees/ is never removed, whatever the ledger says', () => {
+  const root = tmp('wtout')
+  const env = { ...process.env, HOME: root, USERPROFILE: root }
+  const victim = join(root, 'backend')
+  mkdirSync(victim, { recursive: true })
+  writeFileSync(join(victim, 'keep.txt'), 'x')
+  mkdirSync(join(root, '.pipeline', 'T-1'), { recursive: true })
+  node('resources.mjs', ['add', root, 'T-1', '--kind', 'worktree', '--id', victim, '--release', `rm -rf ${JSON.stringify(victim)}`], { env })
+  try { node('resources.mjs', ['release', root, 'T-1'], { env }) } catch {}
+  assert.ok(existsSync(join(victim, 'keep.txt')), 'the stored command is ignored for a kind tf knows')
+  rmSync(root, { recursive: true, force: true })
+})
+
+test('resources.mjs: releasing a port leaves a listener that is not this task\'s', { skip: P.IS_WIN && 'Windows cannot tell which folder a process runs from' }, async () => {
+  const root = tmp('port')
+  const env = { ...process.env, HOME: root, USERPROFILE: root }
+  const wt = join(root, '.worktrees', 'T-1', 'be')
+  const elsewhere = join(root, 'someone-else')
+  for (const d of [wt, elsewhere, join(root, '.pipeline', 'T-1')]) mkdirSync(d, { recursive: true })
+  const listen = "const s = require('http').createServer().listen(0, '127.0.0.1', () => console.log(s.address().port))"
+  const start = (cwd) => new Promise((res) => { const c = track(spawn(process.execPath, ['-e', listen], { cwd, stdio: ['ignore', 'pipe', 'ignore'] })); c.stdout.once('data', (b) => res({ pid: c.pid, port: Number(String(b).trim()) })) })
+  const theirs = await start(elsewhere)
+  const mine = await start(wt)
+  for (const s of [theirs, mine]) node('resources.mjs', ['add', root, 'T-1', '--kind', 'port', '--id', String(s.port)], { env })
+  node('resources.mjs', ['release', root, 'T-1'], { env })
+  assert.ok(await until(() => !P.alive(mine.pid)), 'the task\'s own server is stopped')
+  assert.ok(P.alive(theirs.pid), 'a process running from another folder is left alone')
+  rmSync(root, { recursive: true, force: true })
+})
+
+test('pool.mjs and fastdeps.mjs refuse names that leave their folder', () => {
+  const root = tmp('pool')
+  const repo = join(root, 'be')
+  mkdirSync(repo, { recursive: true })
+  const j = (script, args) => { try { return JSON.parse(node(script, args)) } catch (e) { return JSON.parse(String(e.stdout)) } }
+  assert.match(j('pool.mjs', ['fill', root, '../../x', repo]).reason, /bad pool key/)
+  assert.match(j('pool.mjs', ['fill', root, 'be', repo, '--base', '--upload-pack=x']).reason, /bad --base/)
+  assert.match(j('pool.mjs', ['fill', root, 'be', repo, '--lock', 'package-lock.json', '--dirs', '../../victim']).reason, /not a path inside/)
+  rmSync(root, { recursive: true, force: true })
 })
