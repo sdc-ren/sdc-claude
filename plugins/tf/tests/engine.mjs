@@ -184,6 +184,30 @@ test('a job that cannot finish twice in a row stops the run instead of being sen
   expect(mixed.out.question).toBe('stop')
 })
 
+test('size L: the design and the plan go to the user before the first job', async () => {
+  const big = D(oneRepo.jobs, 'L')
+  const r = await sim([big])
+  expect(r.out.status).toBe('approve')
+  expect(r.out.design).toBe('/r/.pipeline/T-1/design.md')
+  expect(r.ran).toEqual(['J0 reviewer:plan(opus)'])
+  expect(r.prompts['J0 reviewer:plan']).toContain('/r/.pipeline/T-1/design.md')
+  expect(r.pmPrompts[0]).toContain('write design.md before plan.md')
+  // approved, or --assume: it runs; and the lead is asked for its approach
+  const ok1 = await sim([big, pack(4), close], std, { approved: true })
+  expect(ok1.out.status).toBe('done')
+  expect(ok1.prompts['J1 lead:be']).toContain('## Approach')
+  expect((await sim([big, pack(4), close], std, { flags: { assume: true } })).out.status).toBe('done')
+  // M does not stop, and its plan check is not pointed at a design file
+  const m = await sim([oneRepo, pack(4), close])
+  expect(m.out.status).toBe('done')
+  expect(m.prompts['J0 reviewer:plan']).not.toContain('design.md')
+  expect(m.prompts['J1 lead:be']).not.toContain('## Approach')
+  // a plan-check point is settled first, then the user still sees the design
+  const pts = await sim([big, { ...big, planKept: [] }], l => (l === 'J0 reviewer:plan' ? ok('NEEDS-WORK', { issues: ['PP1: "x" — y'] }) : std(l)))
+  expect(pts.out.status).toBe('approve')
+  expect(pts.out.design).toBe('/r/.pipeline/T-1/design.md')
+})
+
 test('plan check: points go back to the PM once and the first dispatch is not run', async () => {
   const r = await sim([oneRepo, D([J('J1', 'dev', 'be', 1)]), escalate], l => (l === 'J0 reviewer:plan' ? ok('NEEDS-WORK', { issues: ['PP1: "also on the web admin" — no fe section'] }) : std(l)))
   expect(r.ran).toEqual(['J0 reviewer:plan(opus)', 'J1 lead:be(sonnet)'])

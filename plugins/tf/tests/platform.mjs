@@ -200,6 +200,7 @@ test('resources.mjs: a worktree only a tool dirtied is freed; real work still ke
     mkdirSync(join(root, '.pipeline', slug), { recursive: true })
     const git = (args) => sh(`git -c user.email=t@example.com -c user.name=t -c commit.gpgsign=false ${args}`, wt)
     git('init -q')
+    git('config core.autocrlf false') // Windows runners check files out with CRLF otherwise; the test compares bytes
     writeFileSync(join(wt, 'analysis_options.yaml'), 'analyzer:\n')
     writeFileSync(join(wt, 'main.dart'), 'void main() {}\n')
     git('add .')

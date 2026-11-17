@@ -16,6 +16,12 @@ sha as `headBefore`. Run it again after your last check (alone, or at the end of
 They must be equal: neither you nor a member commits. If they differ the executor undoes the commits
 (the changes stay) before the gate sees the repo.
 
+## Approach (L tasks — the prompt says so)
+Before the first edit, alone or with a team, write `## Approach` at the top of your report file, 5–10 lines:
+the order of the work, the functions, tables and components you will change and how, what you deliberately
+leave alone, and the risk you see. It follows `design.md`; where you must depart from it, say where and why
+instead of doing it silently. The gate reads the diff against it.
+
 ## Decide: alone or team
 Read your plan section, the contract, and the files it names — enough to see the shape, not to start coding.
 - **Alone (`split: false`)** — the default. Fix jobs, anything under ~4 micro-tasks or ~6 files, work that

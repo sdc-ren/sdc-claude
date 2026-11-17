@@ -12,6 +12,7 @@ of the jobs you dispatched last turn. You return ONE decision: `dispatch`, `clos
 - `board.md` — ledger: one line per dispatched job (id, role, repo, model, result), `## Assumptions`,
   `## Open issues` (IB/QP/RISK ids with status), `## Decisions`. Update it every turn before returning.
 - `plan.md` — the current round only, ≤ ~150 lines, one `##` section per repo (see Plan).
+- `design.md` — size L only, ≤ ~120 lines, kept across rounds and updated when a round changes the design (see Documents by size).
 - `HANDOFF.md` — rewritten at close or escalate, ≤ 80 lines (see Handoff).
 - `feedback-triage.md`, `feedback-replies.md` (feedback mode only).
 - `ticket-comment.md` (build/qc/e2e, only when a tracker issue is a source — the prompt says) — QC-facing draft per `${CLAUDE_PLUGIN_ROOT}/guidelines/ticket-comment.md`,
@@ -88,8 +89,35 @@ plan (`PP2 — the ticket's "admin" is the mobile admin role, see comment 3`). A
 stop and ask the user before a job starts — that is intended: two readers disagree. Points you took cost
 nothing. A point you cannot settle from the ticket is an escalation.
 
+## Documents by size
+Requirements → design → tasks, with as much paper as the task is big:
+| size | requirements | design | tasks |
+|---|---|---|---|
+| XS/S | `## Requirements` in plan.md, 1–5 lines | none | micro-tasks in plan.md |
+| M | `## Requirements` in plan.md | `## Design` in plan.md, ≤ 15 lines | micro-tasks in plan.md |
+| L | `## Requirements` in plan.md | `design.md`, written BEFORE plan.md | micro-tasks in plan.md, each naming the design section it implements |
+**Requirements** — the brief rewritten as numbered sentences a flow can check, never copied:
+`R1 When <condition>, <who or what> <does / sees> <result>.` followed by the words of the brief it comes from in
+quotes (a clarification answer counts). One behaviour per line. What the task will not do: `X1 Not in this
+task: … — why`. A sentence you cannot write this way is not understood yet: that is a `clarify` question or an
+assumption, not a requirement.
+**Design** (M: a section; L: `design.md` with these as `##` headings) — decisions, not a description of code:
+- *Data* — what is created, changed, deleted; where each value can change later and until when; whether what
+  depends on it is recomputed, blocked with a reason, or redone. An empty answer is a question, not a default.
+- *Neighbours* — the features, screens, jobs and open tickets that read or write the same data or share the
+  code this task changes; what must stay as it is for each (they become the regression cases).
+- *Interfaces* — the contract between repos, and inside a repo the functions, tables and components that
+  change shape. In plan.md `## Contract` then only points here.
+- *Decisions* — each choice that had an alternative: chosen · rejected · why, one line.
+- L only: *Flow and states* (the steps and state changes, as a list or a small table) and *Risks and open
+  points* (what could be wrong, who would know).
+On L the executor shows `design.md` and `plan.md` to the user before the first job (not with `--assume`); the
+plan check reads both. On a later round update the design where it changed and say so in `scope`.
+
 ## Plan (micro-tasks)
 ```
+## Requirements: `R<n> When …, … .` "<words of the brief>" — and `X<n> Not in this task: …`.
+## Design (M only; L has design.md): Data · Neighbours · Interfaces · Decisions.
 ## <repo> — branch <name> (base <base>) · worktree <path>
 - [M1] Create|Modify|Delete|Refactor `exact/path.ext` — what changes.
   How: only for API contracts, shared types, migrations, non-obvious decisions.
@@ -98,8 +126,8 @@ nothing. A point you cannot settle from the ticket is an escalation.
 ## Cases: one line per acceptance criterion / QC case: a stable id (ticket case number when QC gave one), the
    data it needs and the expected result (`C2c — a ROSTER_IMPORT tournament in status CANCELLED → 409`), so the
    tester seeds it instead of testing whatever the DB clone happens to hold.
-## Coverage: `ticket requirement (short quote) → micro-tasks → cases`, one line each; then every repo of the
-   config with `changed` or `not changed — why`. A requirement with no case, or a repo with no line, is a hole.
+## Coverage: `R<n> → micro-tasks → cases`, one line each; then every repo of the config with `changed` or
+   `not changed — why`. A requirement with no case, or a repo with no line, is a hole.
 ```
 No new unit tests unless the config `Test policy` allows them; verification is the e2e flows. Existing tests
 still run: the dev lead runs the repo's suite (config `## Checks`) and the gate checks it.
