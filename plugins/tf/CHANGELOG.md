@@ -4,6 +4,32 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.16.3] — 2026-11-17
+
+### Security
+- **A URL can no longer run a command.** `browser.mjs auth --url` put the URL's host into a `sqlite3` shell
+  command. sqlite3 now runs without a shell and with a fixed query; cookie domains are matched at a domain
+  boundary (`.example.com` no longer matches `notexample.com`).
+- **An emulator serial from the ledger is one argument.** `emulator.mjs` runs adb and the emulator without a
+  shell, and `stop` skips an entry that is not an emulator serial.
+- **A canvas cannot name files outside its folder.** A board key or `<dc-import>` with `..`, an absolute path
+  or anything but a `.dc.html` file is ignored by the export; a `file` field inside a board no longer replaces
+  its key.
+- **A task name is never a path.** `resources.mjs` refuses a slug with a separator or `..`.
+- **Saved logins are private from the first byte.** Session files are created with mode 600 instead of being
+  written and then restricted; the cleanup log is 600 too; the temp folder of the Chrome cookie copy is
+  removed; the browser server listens on 127.0.0.1 only.
+
+### Fixed
+- **PACKAGE never runs on untested code in build and qc.** A dispatch that went dev → PACKAGE with no tester
+  was accepted on XS/S tasks, so the PR was pushed before the close check refused it. It is now refused at
+  dispatch.
+- **A flow that wrote PASS and then crashed, was killed or timed out did not pass.** The run id is unique
+  per invocation, so a verdict left by an earlier run never counts.
+- **A cleanup dry run changes nothing.** It no longer restores tool-touched files in stray worktrees.
+- **Cleanup keeps what it cannot judge.** A task whose PR state cannot be read (gh offline or logged out) is
+  kept instead of deleted, and `.pipeline/digest/` is never treated as a task.
+
 ## [1.16.2] — 2026-11-17
 
 ### Fixed

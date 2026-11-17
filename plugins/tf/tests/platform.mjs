@@ -2,7 +2,7 @@
 // macOS, Linux and Windows in CI. Run: node --test tests/platform.mjs
 import assert from 'node:assert/strict'
 import { execFileSync, execSync, spawn } from 'node:child_process'
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync, utimesSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -242,4 +242,44 @@ test('resources.mjs: a worktree that is already gone counts as released', () => 
   node('resources.mjs', ['release', root, 'T-1'], { env }) // throws if the release is reported as failed
   assert.ok(!existsSync(join(root, '.pipeline', 'T-1', 'resources.json')), 'nothing is held any more')
   rmSync(root, { recursive: true, force: true })
+})
+
+test('resources.mjs: a task name is never a path', () => {
+  const root = tmp('slug')
+  const env = { ...process.env, HOME: root, USERPROFILE: root }
+  mkdirSync(join(root, 'backend'), { recursive: true })
+  mkdirSync(join(root, '.pipeline'), { recursive: true })
+  for (const bad of ['../backend', 'a/b', '..', '.hidden'])
+    assert.throws(() => node('resources.mjs', ['archive', root, bad], { env }), /not a task name/, bad)
+  assert.ok(existsSync(join(root, 'backend')), 'the folder outside .pipeline/ is still there')
+  rmSync(root, { recursive: true, force: true })
+})
+
+test('resources.mjs: cleanup never deletes the digest folder, and an idle task folder still goes', () => {
+  const root = tmp('digest')
+  const env = { ...process.env, HOME: root, USERPROFILE: root }
+  const old = new Date(Date.now() - 30 * 86_400_000)
+  for (const name of ['digest', 'T-9']) {
+    mkdirSync(join(root, '.pipeline', name), { recursive: true })
+    const f = join(root, '.pipeline', name, 'state.json')
+    writeFileSync(f, '{}')
+    utimesSync(f, old, old)
+    utimesSync(join(root, '.pipeline', name), old, old)
+  }
+  node('resources.mjs', ['prune', root, '--days', '7'], { env })
+  assert.ok(existsSync(join(root, '.pipeline', 'digest', 'state.json')), 'the digests and their checkpoint are kept')
+  assert.ok(!existsSync(join(root, '.pipeline', 'T-9')), 'an idle task with no PR is deleted as before')
+  rmSync(root, { recursive: true, force: true })
+})
+
+test('flow-run.mjs: a flow that wrote PASS and then crashed did not pass', async () => {
+  const dir = join(tmp('flow'), '.pipeline', 'T-1')
+  mkdirSync(join(dir, 'flows'), { recursive: true })
+  const verdict = "import { mkdirSync, writeFileSync } from 'node:fs'\nimport { join } from 'node:path'\nmkdirSync(process.env.EVD_DIR, { recursive: true })\nwriteFileSync(join(process.env.EVD_DIR, `${process.env.CASE}.verdict.json`), JSON.stringify({ case: process.env.CASE, status: 'PASS', runId: process.env.RUN_ID, shots: [], durationMs: 1 }))\n"
+  writeFileSync(join(dir, 'flows', 'C1.mjs'), verdict + 'process.exit(1)\n')
+  writeFileSync(join(dir, 'flows', 'C2.mjs'), verdict)
+  try { node('flow-run.mjs', [dir]) } catch {}
+  const cases = JSON.parse(readFileSync(join(dir, 'flows.json'), 'utf8')).cases
+  assert.equal(cases.C1.lastResult, 'FAIL', 'PASS on disk, exit code 1')
+  assert.equal(cases.C2.lastResult, 'PASS', 'a clean exit keeps its PASS')
 })
