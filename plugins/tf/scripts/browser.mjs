@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 // task-flow browsers: every task/agent gets its OWN browser process — never a shared MCP browser,
-// never another session's tabs. Logged-in sites reuse a saved session copy (storageState).
+// never another session's tabs. Logged-in sites reuse a saved session copy (storageState), written back when
+// the browser closes so it stays as fresh as the last use.
 //
 // Library (from an agent's scratch script):
 //   const { openBrowser, closeBrowser } = await import('<plugin>/scripts/browser.mjs')
@@ -19,7 +20,7 @@
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
-import { existsSync, mkdirSync, mkdtempSync, copyFileSync, readdirSync, rmSync, chmodSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, copyFileSync, readFileSync, readdirSync, renameSync, rmSync, chmodSync, writeFileSync } from 'node:fs'
 import { execSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { add, drop } from './resources.mjs'
@@ -51,10 +52,33 @@ export async function openBrowser({ root, slug, playwrightFrom, auth, headless =
   const browser = await chromium.connect(server.wsEndpoint())
   const storageState = auth && existsSync(authFile(auth)) ? authFile(auth) : undefined
   const context = await browser.newContext({ ...contextOptions, ...(storageState && { storageState }) })
-  return { server, browser, context, pid, root, slug }
+  return { server, browser, context, pid, root, slug, auth: storageState ? auth : undefined }
+}
+
+// What a saved session becomes after a browser used it. Sites rotate their session cookies while you browse,
+// so a snapshot that is never written back goes stale and the next run has to log in again.
+// Only the sites the saved session already covers are kept (the browser may have visited others), and the
+// result is null — keep the old file — when the session did not survive: a page sits on a login screen, or
+// a cookie domain of the saved session has no cookie left (logged out, or cleared by a test).
+export function refreshedSession(saved, current, pageUrls = []) {
+  if (pageUrls.some((u) => LOGIN_RE.test(u))) return null
+  const domains = new Set((saved.cookies || []).map((c) => c.domain))
+  const origins = new Set((saved.origins || []).map((o) => o.origin))
+  const cookies = (current.cookies || []).filter((c) => domains.has(c.domain))
+  if (!cookies.length || [...domains].some((d) => !cookies.some((c) => c.domain === d))) return null
+  return { cookies, origins: (current.origins || []).filter((o) => origins.has(o.origin)) }
+}
+async function saveSession(b) {
+  const file = authFile(b.auth)
+  const next = refreshedSession(JSON.parse(readFileSync(file, 'utf8')), await b.context.storageState(), b.context.pages().map((p) => p.url()))
+  if (!next) return
+  const tmp = `${file}.${process.pid}.tmp` // written whole, then swapped in: another task may be reading it
+  writeFileSync(tmp, JSON.stringify(next), { mode: 0o600 })
+  renameSync(tmp, file)
 }
 export async function closeBrowser(b) {
   if (!b) return
+  if (b.auth) await saveSession(b).catch(() => {}) // best effort: a failed save leaves the old session in place
   try { await b.browser.close() } catch {}
   try { await b.server.close() } catch {}
   if (b.root && b.slug) drop(b.root, b.slug, 'browser', String(b.pid))
