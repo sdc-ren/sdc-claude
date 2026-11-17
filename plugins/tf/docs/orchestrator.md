@@ -19,8 +19,8 @@ You never write, test, or review repo code yourself. Design and rationale: `docs
 | `/tf:review <PR url or task>` | review | Static code review of someone else's PR: logic, impact on other parts, security, standards, typecheck/build. Nothing is run on the app (that is `/tf:e2e`). No code changes |
 | `/tf:e2e <PR url or task> [--cases a,b]` | e2e | Tester only: run/save flows, EVD, ticket-comment draft (tracker source only). `--regression`: run `.pipeline/_regression` flows instead (no workflow) |
 | `/tf:demo <canvas link> [words]` | — | No workflow: `<PLUGIN>/docs/demo.md` — a Design canvas → a clickable demo (every screen, grouped by role), local, `--publish` as one artifact |
-| `/tf:status [--doctor] [--metrics [slug]]` | — | Resources per task and what cleanup would free (`resources.mjs list`, `reap --dry-run`); `--doctor` also runs `node $S/doctor.mjs <cwd>`; `--metrics` shows what runs cost (`metrics.mjs`) |
-| `/tf:clean <slug> \| --migrate \| --legacy` | — | Free one task, move flat worktrees into `.worktrees/<SLUG>/<repo>/`, or fold old suffixed folders — dry run first, apply only after the user's yes |
+| `/tf:status [--doctor] [--metrics [slug]]` | — | Resources per task and what cleanup would free (`resources.mjs list`, `reap --dry-run <cwd>`); `--doctor` also runs `node $S/doctor.mjs <cwd>`; `--metrics` shows what runs cost (`metrics.mjs`) |
+| `/tf:clean [<slug> \| --migrate \| --legacy]` | — | Free every task whose PRs are all merged or closed (no argument), free one task, move flat worktrees into `.worktrees/<SLUG>/<repo>/`, or fold old suffixed folders — dry run first, apply only after the user's yes |
 
 `<task>` = anything that names an existing task: its key, its link, its folder slug, or the same words.
 
@@ -50,9 +50,9 @@ language; `writingLang` = `Writing language` → a `Writing language:` line in t
 3. **Lock** — `node $S/task.mjs lock <dir>`; conflict → stop and tell the user.
 4. **Round** — `round = nextRound`. If it is a new round of an existing task folder (`format: current`):
    `node $S/task.mjs new-round <dir> <round>` (moves plan/board/jobs into `history/`).
-5. **Housekeeping** — `node $S/resources.mjs register-root <cwd>`, `node $S/resources.mjs reap`;
-   `node $S/fresh.mjs <path>:<base> …` for the config repos (report skipped checkouts in one line).
-   Reaper missing (`node $S/reaper.mjs status` exits 1) → offer `node $S/reaper.mjs install` once (macOS launchd, Linux systemd timer or cron, Windows Task Scheduler; re-run it after a plugin update — it copies the reaper to a stable path).
+5. **Fresh base** — `node $S/fresh.mjs <path>:<base> …` for the config repos (report skipped checkouts in
+   one line). A run works on its own task only: it never frees, archives or reports the resources of other
+   tasks — cleanup happens only when the user runs `/tf:clean`.
 6f. **Feedback mode instead of step 6** — no tracker read. PRs = every PR of the task from `resolve` (`prs`, open AND merged — the
    PM needs to know which may not be pushed to — plus the input PR URL). `node $S/pr-feedback.mjs fetch <dir> <pr urls…>` → `<dir>/feedback.md` + JSON summary.
    Nothing open (`total` 0, no new reviews or comments) → tell the user in one line and stop (unlock), no
@@ -127,7 +127,7 @@ in the Report as well.
    (wall time, minutes per role, time in tools vs model per job, slowest commands, tokens) and appends it to
    `<dir>/metrics.json`. Its first table line goes into the Report.
 2. PRs from the result, plus the input PR in review/e2e mode → `node $S/resources.mjs prs <cwd> <slug> <urls…>`
-   (reap frees resources once all are merged/closed; without a PR they stay until prune).
+   (`/tf:clean` frees resources once all are merged/closed; without a PR they stay until prune).
 3. Warm pool (background, `run_in_background`): for each repo the run touched, refill its pool —
    `node $S/pool.mjs fill <cwd> <key> <repoPath> --base <base> --lock <lockfile> --dirs <dirs> --install "<install cmd>"`
    (values from `C`; the install command is the one the Provisioning row uses when fastdeps cannot clone).

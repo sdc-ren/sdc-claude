@@ -166,7 +166,7 @@ test('serve.mjs: starts a configured server on the task port, reuses it, stops i
   rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
 })
 
-test('doctor and the reaper status run on this system', () => {
+test('doctor and the old reaper status run on this system', () => {
   const root = tmp('doctor')
   // No workspace config in an empty folder: doctor reports that and exits 1 — its table is what we read.
   let out

@@ -94,7 +94,7 @@ post one.
 | [`/tf:demo`](#tfdemo) | Turn a design canvas into a clickable demo for a client — no repo, no PR |
 | [`/tf:digest`](#tfdigest) | Read your Zalo group chats for a day (or since last time) and get what was decided, what is open, what needs you |
 | [`/tf:status`](#tfstatus) | See what tasks hold; check the machine |
-| [`/tf:clean`](#tfclean) | Free a task, migrate old layouts |
+| [`/tf:clean`](#tfclean) | Free finished tasks, migrate old layouts |
 
 ### Options shared by the task commands
 
@@ -321,7 +321,7 @@ Every form shows a **dry run first** and changes nothing until you say yes.
 | `<slug>` | Free one task's resources (worktrees, DB, cache, ports) and archive its folder. Worktrees with uncommitted or unpushed work are kept |
 | `--migrate` | Move old flat worktrees (`.worktrees/proj-123-fe`) into `.worktrees/PROJ-123/frontend/` and update the ledgers |
 | `--legacy` | Fold old suffixed task folders (`PROJ-123-e2e`, `-qc`, `-r2`…) into `.pipeline/PROJ-123/history/legacy/` |
-| *(nothing)* | Dry-run all of the above and say what each would do |
+| *(nothing)* | Clean the workspace: free and archive every task whose PRs are all merged or closed (and idle ones past `TF_PRUNE_DAYS`), promote their passing flows to `_regression/`. Also says what `--migrate` and `--legacy` would do |
 
 Nothing is ever posted to the tracker or GitHub as a comment without your approval of the exact text.
 tf never merges, approves, force-pushes, or enables auto-merge.
@@ -546,11 +546,12 @@ approved comments are posted).
   .pipeline/_regression/             passing flows of merged tickets
 ```
 
-`~/.claude/task-flow/` keeps machine-level state: saved tracker logins (`auth/`) and the reaper copy.
+`~/.claude/task-flow/` keeps machine-level state: saved tracker logins (`auth/`) and the cleanup log.
 
-**Cleanup.** The optional reaper (`node <plugin>/scripts/reaper.mjs install`, every 30 min) frees a task's
-resources once all its PRs are merged or closed and promotes its passing flows to `_regression/`; idle tasks
-are freed after `TF_PRUNE_DAYS` (7). Worktrees with uncommitted or unpushed work are never removed. The full
+**Cleanup.** A task run never cleans up after other tasks. `/tf:clean` frees a task's resources once all its
+PRs are merged or closed and promotes its passing flows to `_regression/`; idle tasks are freed after
+`TF_PRUNE_DAYS` (7). Nothing cleans up in the background: it happens only when you run `/tf:clean`. A job
+installed by a version before 1.16.0 is removed with `node <plugin>/scripts/reaper.mjs uninstall`. Worktrees with uncommitted or unpushed work are never removed. The full
 schedule is in [docs/design.md](docs/design.md#retention).
 
 ## E2E flows
@@ -605,7 +606,6 @@ run — servers, browser, emulator — has only been done on macOS so far; repor
 | | macOS | Linux | Windows |
 |---|---|---|---|
 | Shell for scripts and config recipes | `/bin/sh` | `/bin/sh` | Git Bash (required) |
-| Reaper (`reaper.mjs install`) | launchd | systemd user timer, else cron | Task Scheduler |
 | Dependency copy for a new worktree | APFS clone (instant) | reflink on btrfs/xfs, else copy | copy |
 | Who owns a busy port | by the process's folder | by the process's folder | the server tf started itself |
 | Tracker login | Chrome cookies, or log in once | log in once in the browser tf opens | log in once in the browser tf opens |
@@ -630,7 +630,7 @@ Run `/tf:status --doctor` to see what is missing.
 | Tester says `blocked-env` | The environment is missing something (DB, port, emulator, login). `/tf:status --doctor`, then fix the config's provisioning. |
 | Flow fails after an intended UI change | The tester marks it `flow-broken`, fixes the selector and re-runs — not an app bug. |
 | Old `-e2e` / `-qc` folders or flat worktrees | `/tf:clean --legacy`, `/tf:clean --migrate`. |
-| Plugin update not picked up | `claude plugin marketplace update sdc && claude plugin update tf@sdc`, then restart. Re-run `node <plugin>/scripts/reaper.mjs install` after updates. |
+| Plugin update not picked up | `claude plugin marketplace update sdc && claude plugin update tf@sdc`, then restart. |
 
 ## FAQ
 

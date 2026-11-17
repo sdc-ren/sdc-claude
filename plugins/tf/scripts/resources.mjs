@@ -17,7 +17,7 @@
 //                                               files); delete old _archive entries and stray clean worktrees
 //   promote <root> <slug>                       copy the task's passing flows into .pipeline/_regression/ (reap does it on merge)
 //   list [<root>...]                            print what every task holds (the only resource ledger)
-//   register-root <root>                        add a workspace to the reaper's list
+//   register-root <root>                        add a workspace to the list `reap` uses when no root is given
 //   restore-touched <root> <worktree>           put back the files tools rewrite on their own (config
 //                                               "## Tool-touched files"); done automatically before a worktree is freed
 //
@@ -340,7 +340,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       const dry = process.argv.includes('--dry-run')
       const list = roots(process.argv.slice(3).filter((a) => a !== '--dry-run'))
       reap(list, dry)
-      prune(list, Number(process.env.TF_PRUNE_DAYS || 7), dry) // the launchd job runs `reap`, so pruning rides along
+      prune(list, Number(process.env.TF_PRUNE_DAYS || 7), dry) // /tf:clean runs `reap`, so pruning rides along
       break
     }
     case 'prune': {

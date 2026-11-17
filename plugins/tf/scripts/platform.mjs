@@ -38,7 +38,7 @@ export const rootOfTask = (dir) => String(dir).split(/[\\/]\.pipeline[\\/]/)[0]
 
 // Claude Code keeps its data in ~/.claude on every system unless CLAUDE_CONFIG_DIR moves it.
 export const claudeDir = () => process.env.CLAUDE_CONFIG_DIR || join(homedir(), '.claude')
-// tf's own machine-wide state (reaper list, saved logins, artifact index).
+// tf's own machine-wide state (workspace list, saved logins, artifact index).
 export const stateDir = () => join(homedir(), '.claude', 'task-flow')
 // The transcript folder of a working directory: every character that is not a letter or digit becomes "-".
 export const projectDirName = (cwd) => resolve(String(cwd)).replace(/[^A-Za-z0-9]/g, '-')

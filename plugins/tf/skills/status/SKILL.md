@@ -8,8 +8,8 @@ disable-model-invocation: true
 Input: `$ARGUMENTS`. `<cwd>` is the workspace root (the folder that holds `.claude/task-flow.md`).
 
 1. `node ${CLAUDE_PLUGIN_ROOT}/scripts/resources.mjs list` and
-   `node ${CLAUDE_PLUGIN_ROOT}/scripts/resources.mjs reap --dry-run`: one short table per task — what it holds,
-   its PRs, what the reaper would free now.
+   `node ${CLAUDE_PLUGIN_ROOT}/scripts/resources.mjs reap --dry-run <cwd>`: one short table per task — what it holds,
+   its PRs, what `/tf:clean` would free now.
 2. With `--doctor` (or when the user asks whether the setup works):
    `node ${CLAUDE_PLUGIN_ROOT}/scripts/doctor.mjs <cwd>` — what passed, what failed, how to fix each failure.
 3. With `--metrics`: `node ${CLAUDE_PLUGIN_ROOT}/scripts/metrics.mjs <cwd> --all` (one line per run of the last
