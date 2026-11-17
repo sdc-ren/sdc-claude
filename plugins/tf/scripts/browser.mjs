@@ -179,7 +179,8 @@ async function manualLogin(name, url, playwrightFrom) {
       await page.waitForTimeout(2000)
       if (new URL(page.url()).host === new URL(url).host && !LOGIN_RE.test(page.url())) {
         await page.waitForTimeout(3000)
-        writePrivate(authFile(name), await ctx.storageState())
+        // Only this site's cookies and storage: the window may have passed through other sites on the way in.
+        writePrivate(authFile(name), siteOnly(await ctx.storageState(), url))
         return true
       }
     }

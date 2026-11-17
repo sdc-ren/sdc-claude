@@ -4,6 +4,25 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.17.0] — 2026-11-17
+
+### Security
+- **Rules every tf agent is held to, at the tool call.** Whatever a ticket, a PR comment or a page says, the
+  guard refuses a tf agent (the PM included) that reads, lists, copies or edits the saved logins in
+  `~/.claude/task-flow/auth`; merges, approves or reviews a PR; force-pushes; or posts a comment, reply or
+  review. Posting stays with the orchestrator, after the user approved the text. The checks are string tests
+  in memory — no process, file read or model call per tool call.
+- **The PM has a fixed tool list** (`Read, Write, Edit, Grep, Glob, Bash`, CodeGraph) instead of every tool of
+  the session.
+- **Text other people wrote is data.** Each agent prompt says so in one short paragraph; `feedback.md` and each
+  `## Source` of `ticket.md` are marked as written by other people.
+- **A manual login keeps only the site's own cookies**, as the Chrome copy already did.
+- **Metrics do not copy secrets.** A slow command quoted in `metrics.json` has passwords in URLs, bearer tokens
+  and `KEY=value` credentials masked.
+- **A workspace no longer lists a neighbour's sessions.** A transcript folder that only shares the name prefix
+  (`/work/app-private` next to `/work/app`) is taken when its transcripts say it was started inside the
+  workspace, and left out otherwise — for the artifact list and for metrics.
+
 ## [1.16.5] — 2026-11-17
 
 ### Security

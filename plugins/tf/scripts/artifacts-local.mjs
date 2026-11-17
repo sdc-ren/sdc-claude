@@ -12,7 +12,7 @@
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { base as baseName, claudeDir, projectDirName, projectMatch, stateDir } from './platform.mjs'
+import { base as baseName, claudeDir, projectDirs, stateDir } from './platform.mjs'
 
 const URL_RE = /https:\/\/claude\.ai\/(?:code\/)?artifact\/([A-Za-z0-9-]{10,})/g
 // Core Artifact type ids (the `type_url` a publish starts from) → kind shown to the user.
@@ -106,7 +106,7 @@ export function workspaceArtifacts(rootArg, { days = 365 } = {}) {
 
   // 1. Created here — publish calls in this workspace's session transcripts.
   const base = join(claudeDir(), 'projects')
-  const dirs = existsSync(base) ? readdirSync(base).filter(projectMatch(projectDirName(root))).map((d) => join(base, d)) : []
+  const dirs = projectDirs(root)
   const cutoff = Date.now() - days * 86_400_000
   const index = loadJson(INDEX, {})
   let dirty = false
