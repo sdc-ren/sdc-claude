@@ -110,7 +110,9 @@ them in its prompt on turn 1 and after a rejection, generated from the same cons
 
 **Limits**
 13. 12 PM turns · 12 jobs per dispatch · 6 jobs per group · 6 dev jobs per repo per run · 3 members per lead.
-    Two guard violations in a row → escalate. Token reserve 80k → handoff. (Three fix attempts on one issue →
+    Two guard violations in a row → escalate. A job of the same kind on the same repo that did not finish twice
+    in a row (blocked, failed, no answer) → the PM gets one turn to write the board and the handoff, then the
+    run escalates with both reasons; it is never sent a third time. Token reserve 80k → handoff. (Three fix attempts on one issue →
     the PM escalates; that one is the PM's rule, not the executor's.)
 
 **Tool guard** (`hooks/guard.ts`, a hooks module beside the executor; `tests/guard.test.ts`): when the

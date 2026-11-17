@@ -165,6 +165,25 @@ test('XS is one repo with no FLOWS job; no FLOWS job in a fix round', async () =
   expect((await sim([oneRepo, newRepo, pack(8, ['be', 'fe']), close])).out.status).toBe('done')
 })
 
+test('a job that cannot finish twice in a row stops the run instead of being sent again', async () => {
+  const blockedPack = (l) => (l.includes('reviewer') && l !== 'J2 reviewer:be' ? { status: 'blocked', verdict: 'NONE', summary: 'Bash refused by the auto-mode classifier', blocked: ['git push'] } : std(l))
+  const pm = [oneRepo, pack(4), pack(5), { ...escalate, escalate: 'allow git push for this session' }, pack(6)]
+  const r = await sim(pm, blockedPack)
+  expect(r.out.status).toBe('escalate')
+  expect(r.out.question).toContain('reviewer PACKAGE on be could not finish twice in a row (J4, J5)')
+  expect(r.out.question).toContain('tool-permission block')
+  expect(r.out.question).toContain('PM: allow git push for this session')
+  expect(r.ran.some(x => x.startsWith('J6'))).toBe(false)
+  expect(r.pmPrompts[3]).toContain('STUCK')
+  // one block followed by a finished job of the same kind is not stuck
+  let n = 0
+  const once = await sim([oneRepo, pack(4), pack(5), close], (l) => (l.includes('reviewer') && l !== 'J2 reviewer:be' && n++ === 0 ? { status: 'blocked', verdict: 'NONE', summary: 'port busy' } : std(l)))
+  expect(once.out.status).toBe('done')
+  // a blocked gate and a blocked PACKAGE are different jobs
+  const mixed = await sim([oneRepo, pack(4), escalate], (l) => (l.includes('reviewer') ? { status: 'blocked', verdict: 'NONE', summary: 'x' } : std(l)))
+  expect(mixed.out.question).toBe('stop')
+})
+
 test('plan check: points go back to the PM once and the first dispatch is not run', async () => {
   const r = await sim([oneRepo, D([J('J1', 'dev', 'be', 1)]), escalate], l => (l === 'J0 reviewer:plan' ? ok('NEEDS-WORK', { issues: ['PP1: "also on the web admin" — no fe section'] }) : std(l)))
   expect(r.ran).toEqual(['J0 reviewer:plan(opus)', 'J1 lead:be(sonnet)'])

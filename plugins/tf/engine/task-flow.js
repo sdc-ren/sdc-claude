@@ -467,6 +467,24 @@ async function runJob(j, turn) {
 let last = []
 let violation = ''
 let strikes = 0
+// A job of the same kind on the same repo that did not finish twice in a row (blocked, failed, no answer):
+// sending it a third time changes nothing — RVD-298 lost four PACKAGE jobs and seven PM turns to one
+// permission block. The PM gets one turn to write the board and the handoff, then the run escalates.
+let stuck = ''
+const kindOf = (j) => `${j.role}:${j.repo}:${isPackage(j) ? 'package' : isFlows(j) ? 'flows' : ''}`
+const unfinished = (r) => !r.report || r.report.status !== 'done'
+const whyNot = (r) => (r.report ? [r.report.summary, ...(r.report.blocked || [])].filter(Boolean).join(' · ') : 'the agent returned nothing')
+function stuckOn(rec) {
+  if (!unfinished(rec)) return ''
+  const before = ledger.filter((x) => x !== rec && kindOf(x.job) === kindOf(rec.job) && x.seq < rec.seq).pop()
+  if (!before || !unfinished(before)) return ''
+  const what = `${rec.job.role}${isPackage(rec.job) ? ' PACKAGE' : ''} on ${rec.job.repo}`
+  const text = `${whyNot(before)} ${whyNot(rec)}`
+  return `${what} could not finish twice in a row (${before.job.id}, ${rec.job.id}) and was not sent a third time.\n1. ${before.job.id}: ${whyNot(before)}\n2. ${rec.job.id}: ${whyNot(rec)}\n` +
+    (/classifier|permission|not allowed|denied|auto.?mode|approval/i.test(text)
+      ? 'This looks like a tool-permission block, not a code problem: check the session\'s permission mode and any hook that rewrites commands, then run the command again.'
+      : 'What it needs is outside the task (environment, access, a decision): fix that, then run the command again.')
+}
 // PM model: turn 1 is opus (sizing and planning need judgement). After that XS/S tasks run the PM on
 // sonnet; M/L stay on opus. A guard violation puts the PM back on opus for the retry.
 let size = ''
@@ -502,6 +520,7 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
       : `Reports from the last dispatch:\n${JSON.stringify(last.map(compact))}\n`) +
     (planNotes ? `Plan check (${planFile}) — your last decision was NOT executed. Points raised:\n${planNotes}\nFor each point: fix plan.md, or write under board.md Decisions why the plan stands (a point without a ticket quote may be dropped). Then return your decision again, with planKept = one line per point where the plan stays as it was (the user is asked about those before any job runs).\n` : '') +
     (mode === 'feedback' && turn > 1 ? `Feedback mode rules: ${S}/../docs/pm-feedback.md.\n` : '') +
+    (stuck ? `STUCK — the run stops after this turn: ${stuck}\nDo not dispatch anything. Update board.md (the two jobs, what they needed), write HANDOFF.md (Status: escalated) and return escalate with the one thing the user must do.\n` : '') +
     (violation ? `REJECTED last decision: ${violation}\nFix it this turn.\n` : '') +
     (turn === 1 || violation ? RULES : '') +
     (turn >= MAX_TURNS - 1 ? 'Last turns left: close or escalate now.\n' : '') +
@@ -511,6 +530,7 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
   if (!d) return { status: 'error', stage: `pm t${turn}`, slug }
   if (d.size) size = d.size
   log(`PM t${turn} [${d.size}] ${d.decision}: ${d.note}`)
+  if (stuck) return { status: 'escalate', slug, round, mode, question: stuck + (d.decision === 'escalate' && d.escalate ? `\nPM: ${d.escalate}` : '') }
   // Unclear brief: the questions go to the user before plan.md, the plan check or any job. Only as the first
   // move of a run — once jobs ran, an open point is an escalation.
   if (d.decision === 'clarify') {
@@ -582,6 +602,8 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
         if (testers.length > 1) testers.forEach((j, i) => { j._lib = i ? 'reader' : 'owner'; j._libOwner = testers[0].id })
         const recs = (await parallel(batch.map((j) => () => runJob(j, turn)))).filter(Boolean)
         last.push(...recs)
+        stuck = recs.map(stuckOn).filter(Boolean).join('\n')
+        if (stuck) { log(`stuck: ${stuck.split('\n')[0]}`); break }
         for (const r of recs) if (r.job.role === 'reviewer' && !isPackage(r.job) && r.report)
           for (const line of r.report.issues || []) if (/^\s*IMPACT\d*\b/.test(line)) impact.push({ repo: r.job.repo, line })
         // A later group usually depends on this one (judges after devs): stop and let the PM decide.
