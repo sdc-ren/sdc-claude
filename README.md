@@ -6,7 +6,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin%20marketplace-d97757)](https://code.claude.com/docs/en/plugins/install.md)
-[![tf](https://img.shields.io/badge/tf-v1.1.0-2ea44f)](plugins/tf/CHANGELOG.md)
+[![tf changelog](https://img.shields.io/badge/tf-changelog-2ea44f)](plugins/tf/CHANGELOG.md)
 
 </div>
 
@@ -17,9 +17,46 @@ is self-contained: skills (slash commands), subagents, workflows, scripts and th
 
 ## Plugins
 
-| Plugin | Version | What it does |
-|---|---|---|
-| [**tf** — task-flow](plugins/tf/README.md) | 1.1.0 | A PM agent plans each ticket, staffs dev / tester / reviewer agents, keeps re-runnable e2e flows, and ships **ready** PRs with evidence. Commands: `/tf:build`, `/tf:qc`, `/tf:review`, `/tf:e2e`. |
+| Plugin | What it does |
+|---|---|
+| [**tf** — task-flow](plugins/tf/README.md) | A PM agent plans each task, staffs dev / tester / reviewer agents, keeps re-runnable e2e flows, and ships **ready** PRs with evidence — from a ticket, any link, or plain words. |
+
+Versions and release notes: [plugins/tf/CHANGELOG.md](plugins/tf/CHANGELOG.md).
+
+### tf at a glance
+
+You give it a ticket; it gives you a pull request that has been tested end to end:
+
+```
+/tf:build PROJ-123
+```
+
+The PM agent reads the ticket and the code and writes a plan, dev agents implement it in the task's own
+worktrees, a tester runs the cases on the running app and saves the evidence, and a reviewer gates the diff
+and opens the PR. It stops for you only when the ticket has two plausible readings or the task is large.
+
+| Command | Use it to |
+|---|---|
+| `/tf:build` | Do a new task end to end |
+| `/tf:qc` | Answer a QC report on a task tf already did |
+| `/tf:address-review` | Check and answer the team's review on the PRs tf pushed |
+| `/tf:review` | Review a teammate's PR by reading the code |
+| `/tf:e2e` | Run e2e only, or the regression suite |
+| `/tf:demo` | Turn a design canvas into a clickable demo for a client |
+| `/tf:digest` | Summarise your Zalo group chats: what was decided, what is open, what needs you |
+| `/tf:status` | See what tasks hold; check the machine (`--doctor`) |
+| `/tf:clean` | Free the resources of finished tasks |
+
+Every command, option and the way the team works: [plugins/tf/README.md](plugins/tf/README.md).
+
+## Requirements
+
+- Claude Code with Workflows enabled.
+- Node ≥ 22, git, and `gh` logged in.
+- For e2e: a package in your workspace that depends on `@playwright/test`.
+- macOS, Linux or Windows (Git for Windows). A whole ticket run has only been done on macOS so far.
+
+Details: [plugins/tf/README.md#requirements](plugins/tf/README.md#requirements).
 
 ## Installation
 
@@ -55,6 +92,15 @@ Commit this to the project's `.claude/settings.json` so everyone who opens the p
 
 Each teammate still installs once: `claude plugin install tf@sdc --scope project`.
 
+### First run
+
+In your workspace (the folder that holds your repos):
+
+```
+/tf:status --doctor   # checks tools, gh login, config, repos, Playwright, devices
+/tf:build PROJ-123    # first run offers to create .claude/task-flow.md if it is missing
+```
+
 ## Updating
 
 ```bash
@@ -84,8 +130,7 @@ Issues and pull requests are welcome.
    claude plugin validate .
    claude plugin validate plugins/tf
    claude plugin test plugins/tf                # the Artifacts band
-   node --test plugins/tf/tests/engine.mjs      # the executor's hard rules, with mock agents
-   node --test plugins/tf/tests/platform.mjs    # ports, processes, shell on your system (CI runs it on macOS, Linux, Windows)
+   node --test plugins/tf/tests/*.mjs           # what CI runs on macOS, Linux and Windows
    ```
 4. Bump the plugin's `version` in `plugins/<name>/.claude-plugin/plugin.json` and add a CHANGELOG entry.
 
