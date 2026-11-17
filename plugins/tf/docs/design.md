@@ -64,11 +64,16 @@ them in its prompt on turn 1 and after a rejection, generated from the same cons
    once, then the job fails). The lead merges and reports once.
 4. Gate before test: a reviewer gate never shares a group with a tester of its repo. When a job is not `done`,
    or a gate returns `NEEDS-WORK`/`BLOCK`, the later groups of that dispatch are skipped and the PM decides —
-   a gate next to a running tester throws the test run away (RVD-293 round 3: ~16 min).
+   a gate next to a running tester throws the test run away (RVD-293 round 3: ~16 min). In code modes a
+   tester that did not PASS skips them too, so a `PACKAGE` job dispatched after it never pushes failing code.
 5. A gate runs on the model of the dev lead it judges (the repo's last dev job); the executor sets it.
    `PACKAGE` jobs keep the PM's model.
 6. Several testers in one group: each gets its own scratch folder (`<task>/tmp/<job>/`); only the first may
    edit the shared flow library, the others read it and park new helpers in `flows/_new/`.
+
+6a. A gate's `IMPACT<n>` issues (other users of the changed code that no case covers) are added to the prompt
+   of the tester jobs of that repo in the later groups of the same dispatch, on top of their `cases`. They
+   never change the gate's verdict.
 
 **What a job may leave behind**
 7. Dev jobs never commit. The lead reports the worktree HEAD before and after; when it moved, the executor has

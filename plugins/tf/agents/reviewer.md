@@ -18,8 +18,11 @@ asks, then read `plan.md` and the workspace config (repo list, read-only zones, 
 3. **Assumption against the ticket** — an assumption in `board.md` or a decision in the plan that the
    ticket contradicts, or that silently drops part of the ask.
 4. **Untestable case** — a case with no data or no expected result, or an acceptance criterion with no case.
-Every point quotes the ticket: `PP<n>: "<ticket words>" — what the plan lacks — what to add`. A point you
-cannot back with a quote is not a point; style, wording and implementation choices are not your business
+5. **Thin cases** — one of the four kinds of `${CLAUDE_PLUGIN_ROOT}/agents/pm.md` "Cases that human reviewers
+   ask for" applies to the plan and has no case: a limit, a mode, another user of shared code the plan
+   modifies, a visual defect not restated as something measurable.
+Every point quotes the ticket (kind 5: or the plan line): `PP<n>: "<quoted words>" — what the plan lacks — what
+to add`. A point you cannot back with a quote is not a point; style, wording and implementation choices are not your business
 here. No git, no edits, do not rewrite the plan. Verdict `SHIP` when you have no point, `NEEDS-WORK`
 otherwise (it does not block: the PM fixes the plan or records why it stands, once). Report in a few lines.
 
@@ -37,18 +40,30 @@ otherwise (it does not block: the PM fixes the plan or records why it stands, on
 6. **Tamper** — hardcoded expected output, mocks hiding the chain, new unit tests the policy forbids.
 7. **Review lessons** — every rule in the workspace `Review lessons` file is checked against the diff;
    a broken rule is at least P2. Your job is to catch what the human reviewers would catch.
-8. **Feedback mode** — every point the brief lists (`feedback-triage.md`, verdict `fix`) is addressed in the
+8. **Existing tests** (config `## Checks`) — the dev report must show them run on the final code, with every
+   failure classified (`broken by this job` / `pre-existing` with the base result). Missing, or the tree changed
+   since → run the command yourself. A test this diff broke and left red is P2 (`QP`), whatever the test
+   policy says about new tests; a test deleted or skipped to get green is tamper.
+9. **Impact** — for every function, helper, component, query or constant this diff changes that is used
+   outside the files of the plan: list its other users (codegraph `codegraph_explore` with `projectPath`, else
+   grep) and name the screen or flow each belongs to. For each user whose result can change, find the case in
+   plan.md `## Cases` that proves it still behaves as on the base. None → an issue line
+   `IMPACT<n>: <user file:line — screen/flow> — <input that now behaves differently or might> — expected: as on the base`.
+   IMPACT lines are cases for the tester, not defects: they do not make the verdict `NEEDS-WORK` (the executor
+   hands them to the tester jobs that follow in the same dispatch). A user you can show is broken by reading
+   the code is a `QP` as usual.
+10. **Feedback mode** — every point the brief lists (`feedback-triage.md`, verdict `fix`) is addressed in the
    diff the way the reviewer asked (or the triage reason says why differently); an unaddressed point is
    P2. Nothing beyond those points changed (scope).
 Rate problems with the P0–P3 scale of `${CLAUDE_PLUGIN_ROOT}/guidelines/pr-review.md` (`file:line`, scenario,
 introduced by this diff). Ids `QP<n> [P1]: file:line — problem — fix`, stable across rounds.
 
 ## Verdict
-- `NEEDS-WORK` — any P0–P2 open. P3/INFO go to notes only.
+- `NEEDS-WORK` — any P0–P2 open. P3/INFO go to notes only; `IMPACT` lines go into `issues` beside any verdict.
 - `BLOCK` — tamper, read-only zone edit, or scope you cannot exclude. Evidence required.
-- `SHIP` — nothing P0–P2 left. A **gate** brief (the default; it runs before the tester, and a
-  `NEEDS-WORK`/`BLOCK` skips the tester, so rate honestly: P3 never blocks) stops here: no git writes. Only a brief that starts with **`PACKAGE`** (the PM sends it after
-  the tester passed the latest code) goes on to commit, push and the PR. Re-check that nothing changed
+- `SHIP` — nothing P0–P2 left. A **gate** brief (the default) stops here with no git writes; it runs before
+  the tester and `NEEDS-WORK`/`BLOCK` skips the tester, so rate honestly. Only a brief that starts with
+  **`PACKAGE`** (sent after the tester passed the latest code) goes on to commit, push and the PR. Re-check that nothing changed
   since the gate (`git status`, diff stat) before packaging. Then commit in the plan's groups (`git add <exact paths>`, never `-A` or `.`; message per `${CLAUDE_PLUGIN_ROOT}/guidelines/git.md`
   unless the repo differs; no agent attribution), push, and:
   - an open PR exists for this repo → push to its branch and refresh the body with `gh pr edit`;
@@ -76,4 +91,4 @@ Also flag any change inside a read-only zone. Then findings as P0–P3 with file
 
 ## Report
 `jobs/<id>-reviewer-<repo>.md`: verdict, checklist evidence, commits, PR link. Plain prose, no filler.
-Report language from the prompt; commit, PR, and comment text in the writing language.
+Languages as the prompt says.

@@ -89,7 +89,7 @@ const REPORT = {
     status: { type: 'string', enum: ['done', 'blocked', 'failed'] },
     verdict: { type: 'string', enum: ['NONE', 'PASS', 'FAIL', 'SHIP', 'NEEDS-WORK', 'BLOCK'], description: 'tester: PASS|FAIL · reviewer: SHIP|NEEDS-WORK|BLOCK · others: NONE' },
     summary: { type: 'string', description: 'At most 5 lines.' },
-    issues: { type: 'array', items: { type: 'string' }, description: 'Stable ids: IB<n> (tester), QP<n> [P0-P2] (reviewer), RISK<n>.' },
+    issues: { type: 'array', items: { type: 'string' }, description: 'Stable ids: IB<n> (tester), QP<n> [P0-P2] (reviewer), IMPACT<n> (reviewer gate: a user of the changed code with no case — for the tester), RISK<n>.' },
     cases: { type: 'array', items: { type: 'string' }, description: 'tester: "case | PASS|Failed — BUG: impact|Not tested — reason | evidence files"' },
     repo: { type: 'string' },
     prUrl: { type: 'string' },
@@ -177,10 +177,12 @@ const isPackage = (j) => /^\s*PACKAGE\b/.test(j.brief || '')
 // works. It judges nothing: verdict NONE, never counts as a test, may share a group with the dev.
 const isFlows = (j) => j.role === 'tester' && /^\s*FLOWS\b/.test(j.brief || '')
 // A job that did not finish, or a reviewer gate asking for changes: later groups (the tester) would judge
-// code that is about to change, so they are skipped and the PM re-plans.
+// code that is about to change, so they are skipped and the PM re-plans. Same for a tester that did not PASS
+// in a code mode: a PACKAGE job in a later group would commit and push code that just failed.
 const stopsLaterGroups = (r) =>
   !isFlows(r.job) && (!r.report || r.report.status !== 'done' ||
-  (r.job.role === 'reviewer' && !isPackage(r.job) && mode !== 'review' && ['NEEDS-WORK', 'BLOCK'].includes(r.report.verdict)))
+  (r.job.role === 'reviewer' && !isPackage(r.job) && mode !== 'review' && ['NEEDS-WORK', 'BLOCK'].includes(r.report.verdict)) ||
+  (r.job.role === 'tester' && CODE_MODES.includes(mode) && r.report.verdict !== 'PASS'))
 
 function checkDispatch(d) {
   if (mode === 'feedback' && flags.check) return '--check is triage only: write feedback-triage.md and return close, no jobs'
@@ -281,6 +283,9 @@ function jobPrompt(j) {
       : '') +
     (j.role === 'tester' && !isFlows(j) && String(j.cases || '').trim()
       ? `Cases: ${j.cases} — run ONLY these (flow-run.mjs --cases ${String(j.cases).replace(/\s+/g, '')}). Do not run, re-run or repair any other saved flow, and add no smoke case.\n`
+      : '') +
+    (j.role === 'tester' && !isFlows(j) && j._impact && j._impact.length
+      ? `Impact cases (from the reviewer gate of this dispatch — other users of code this change touched; write and run one flow each on top of your cases, tester.md): ${j._impact.join(' · ')}\n`
       : '') +
     (isFlows(j)
       ? `FLOWS job: the code is being changed right now by the dev job(s) of this group. Write the flows only (tester.md "FLOWS briefs"); do not judge the app, return verdict NONE.\n`
@@ -491,22 +496,28 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
       d.jobs.forEach((j) => seenIds.add(j.id))
       const groups = [...new Set(d.jobs.map((j) => j.group))].sort((a, b) => a - b)
       last = []
+      // IMPACT lines of this dispatch's gates (other users of the changed code that no case covers) become
+      // cases of the testers that run after them, for the same repo.
+      const impact = []
       phase('Jobs')
       for (const g of groups) {
         seq++
-        const batch = d.jobs.filter((j) => j.group === g).map((j) => ({ ...j, _seq: seq }))
+        const batch = d.jobs.filter((j) => j.group === g).map((j) => ({ ...j, _seq: seq,
+          _impact: impact.filter((x) => j.repo === 'all' || x.repo === 'all' || x.repo === j.repo).map((x) => x.line) }))
         // Several testers at once: one of them owns the shared flow library, the others only read it.
         const testers = batch.filter((j) => j.role === 'tester')
         if (testers.length > 1) testers.forEach((j, i) => { j._lib = i ? 'reader' : 'owner'; j._libOwner = testers[0].id })
         const recs = (await parallel(batch.map((j) => () => runJob(j, turn)))).filter(Boolean)
         last.push(...recs)
+        for (const r of recs) if (r.job.role === 'reviewer' && !isPackage(r.job) && r.report)
+          for (const line of r.report.issues || []) if (/^\s*IMPACT\d*\b/.test(line)) impact.push({ repo: r.job.repo, line })
         // A later group usually depends on this one (judges after devs): stop and let the PM decide.
         const broken = recs.filter(stopsLaterGroups)
         const skipped = groups.filter((x) => x > g)
         if (broken.length && skipped.length) {
           const left = d.jobs.filter((j) => skipped.includes(j.group)).map((j) => j.id)
           log(`group ${g}: ${broken.map((r) => `${r.job.id}${r.report && r.report.status === 'done' ? ` ${r.report.verdict}` : ' not done'}`).join(', ')} → skipped ${left.join(', ')}`)
-          last.push(...d.jobs.filter((j) => skipped.includes(j.group)).map((j) => ({ job: j, report: { status: 'failed', verdict: 'NONE', summary: 'not run: an earlier group in this dispatch did not finish or its reviewer gate asked for changes' }, turn, seq })))
+          last.push(...d.jobs.filter((j) => skipped.includes(j.group)).map((j) => ({ job: j, report: { status: 'failed', verdict: 'NONE', summary: 'not run: an earlier group in this dispatch did not finish, its reviewer gate asked for changes, or its tester did not PASS' }, turn, seq })))
           left.forEach((id) => seenIds.delete(id))
           break
         }
