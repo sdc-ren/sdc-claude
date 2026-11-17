@@ -82,6 +82,9 @@ them in its prompt on turn 1 and after a rejection, generated from the same cons
 8. A PR is ready. `prDraft: true` is a violation unless the user passed `--draft`.
 
 **The plan**
+8a. Clarify: as the first decision of a run the PM may return `clarify` with questions instead of a plan; the
+    run ends with status `clarify`, the orchestrator asks the user, writes the answers into `ticket.md` and
+    relaunches. Rejected once a job has run, with `--assume`, or after 3 rounds (the PM assumes or escalates).
 9. Plan check (build/qc, size M/L): before the PM's first dispatch or `approve` is executed, `tf:reviewer`
    reads `ticket.md` and `plan.md` once, on the PM's model (`jobs/J0-reviewer-plan.md`). It cannot block: with
    points, the PM gets them next turn and fixes the plan or records why it stands, returning `planKept` for

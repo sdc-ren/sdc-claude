@@ -7,8 +7,8 @@
 //
 // args: { root, slug, dir, mode: 'build'|'qc'|'feedback'|'review'|'e2e', round, input, description?, sources?, tracker?, cases?, notes?,
 //         prs?: {repo: url}, worktrees?: {repo: path|null}, worktreePaths?: {repo: path}, format?: 'new'|'old'|'current',
-//         flags?: { approve?: bool, draft?: bool, check?: bool (feedback: triage only) }, approved?: bool, lang?, writingLang?, scripts, config }
-// returns { status: 'done'|'triaged'|'verified'|'reviewed'|'escalate'|'approve'|'handoff'|'error', … }
+//         flags?: { approve?: bool, draft?: bool, check?: bool (feedback: triage only), assume?: bool (never ask, assume) }, approved?: bool, clarifyRound?: n (times the user already answered questions), lang?, writingLang?, scripts, config }
+// returns { status: 'done'|'triaged'|'verified'|'reviewed'|'escalate'|'approve'|'clarify'|'handoff'|'error', … }
 
 export const meta = {
   name: 'task-flow',
@@ -26,6 +26,7 @@ const MAX_JOBS = 12 // jobs in one dispatch, all groups together
 const MAX_GROUP = 6 // jobs in one group, i.e. running at the same time
 const MAX_MEMBERS = 3 // dev members a repo's lead may run at once (one worktree, disjoint files)
 const MAX_DEV_PER_REPO = 6 // dev jobs per repo per run: the build plus the fix loop
+const MAX_CLARIFY = 3 // times a task may go back to the user with questions before any job runs
 const RESERVE = 80_000
 
 const ROLES = {
@@ -44,7 +45,23 @@ const DISPATCH = {
   type: 'object',
   required: ['decision', 'size', 'note'],
   properties: {
-    decision: { type: 'string', enum: ['dispatch', 'close', 'escalate', 'approve'] },
+    decision: { type: 'string', enum: ['dispatch', 'close', 'escalate', 'approve', 'clarify'] },
+    questions: {
+      type: 'array',
+      description: 'decision=clarify (first decision of a run only, before plan.md): what the brief leaves open and an answer would change what gets built.',
+      items: {
+        type: 'object',
+        required: ['id', 'question', 'quote', 'options', 'assume'],
+        properties: {
+          id: { type: 'string', description: 'Q<n>' },
+          question: { type: 'string', description: 'One question, answerable by picking an option.' },
+          quote: { type: 'string', description: 'The words of the brief that are unclear, or "(not said)" with what is missing.' },
+          options: { type: 'array', items: { type: 'string' }, description: '2–4 readings, each with what it would make you build.' },
+          assume: { type: 'string', description: 'The option you would take if nobody answers, and why.' },
+          who: { type: 'string', enum: ['user', 'po'], description: 'po: a product decision the ticket owner must make; user: the person running the command can say.' },
+        },
+      },
+    },
     size: { type: 'string', enum: ['XS', 'S', 'M', 'L'] },
     note: { type: 'string', description: 'One or two lines: what this turn decided and why.' },
     planKept: { type: 'array', items: { type: 'string' }, description: 'The turn after a plan check: one line per point where you did NOT change the plan — "PP<n> — why the plan stands". Empty when you took every point.' },
@@ -135,6 +152,7 @@ const { root, slug, dir, scripts: S, config: cfg } = A
 const mode = ROLES[A.mode] ? A.mode : 'build'
 const round = Math.max(1, Number(A.round) || 1)
 const flags = A.flags || {}
+const clarifyRound = Math.max(0, Number(A.clarifyRound) || 0)
 const lang = A.lang || 'en'
 const writingLang = A.writingLang || 'en'
 const prs = A.prs || {}
@@ -437,6 +455,11 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
     (turn === 1
       ? (A.format === 'old' ? 'This folder has the old layout (STATUS.md/spec.md, no HANDOFF.md): build HANDOFF.md/board.md from them first, keep only what the new round needs.\n' : '') +
         (A.approved ? 'The user approved plan.md — dispatch it.\n' : '') +
+        (flags.assume
+          ? 'The user passed --assume: do not ask (no clarify) — decide every open point yourself and list it under Assumptions and in scope.\n'
+          : clarifyRound
+            ? `The user answered your earlier questions (ticket.md "## Clarifications") — never ask those again. ${clarifyRound >= MAX_CLARIFY ? 'No more questions: assume what is still open, or escalate if it cannot be assumed.' : 'Ask again (clarify) only for something those answers opened up.'}\n`
+            : 'Understand before you plan (pm.md "Clear or not"): if the brief leaves open something that changes what gets built, return clarify with the questions instead of planning; if it is clear, plan and say so in scope.\n') +
         (mode === 'feedback'
           ? `Feedback mode: read ${S}/../docs/pm-feedback.md first (its rules bind this run), then start from HANDOFF.md, board.md, feedback.md (NOT a QC round — do not re-plan ticket cases). Triage every point into feedback-triage.md${flags.check ? ', then return close (check = triage only)' : ', then plan only the fix points'}.\n`
           : 'Start from HANDOFF.md (if present), board.md, ticket.md (new comments are marked), then plan.\n')
@@ -452,6 +475,20 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
   if (!d) return { status: 'error', stage: `pm t${turn}`, slug }
   if (d.size) size = d.size
   log(`PM t${turn} [${d.size}] ${d.decision}: ${d.note}`)
+  // Unclear brief: the questions go to the user before plan.md, the plan check or any job. Only as the first
+  // move of a run — once jobs ran, an open point is an escalation.
+  if (d.decision === 'clarify') {
+    const qs = (d.questions || []).filter((q) => q && q.question)
+    violation = flags.assume ? 'the user passed --assume: no questions — decide, and record each guess under Assumptions'
+      : ledger.length ? 'clarify is only for the first decision of a run, before any job — mid-run, decide and record the assumption, or escalate'
+      : clarifyRound >= MAX_CLARIFY ? `the user already answered questions ${MAX_CLARIFY} times — assume what is left, or escalate the one point that cannot be assumed`
+      : !qs.length ? 'decision=clarify needs at least one question' : ''
+    if (!violation) return { status: 'clarify', slug, round, mode, note: d.note, questions: qs, clarifyRound: clarifyRound + 1 }
+    strikes++
+    log(`guard: ${violation}`)
+    if (strikes >= 2) return { status: 'escalate', slug, round, mode, question: `PM decision rejected twice by the hard rules: ${violation}` }
+    continue
+  }
   // Two readers of the ticket still disagree after the PM answered the plan check: that is the moment to ask
   // the user, before any code is written. A plan the PM corrected, or a clean check, runs straight on.
   if (planAsked && !A.approved && Array.isArray(d.planKept) && d.planKept.length && (d.decision === 'dispatch' || d.decision === 'approve')) {

@@ -98,6 +98,7 @@ post one.
 | `--attach` | build · qc · review · e2e · demo | Before the PM starts, show a checkbox list of this workspace's artifacts and design systems; ticked items are read into `specs/` and used by the PM, devs and testers |
 | `--lang <code>` | build · qc · feedback · review · e2e | Report language for this run (`vi`, `en`, …); overrides the workspace config |
 | `--approve` | build · qc | Stop after the PM writes the plan and wait for your approval |
+| `--assume` | all | Never stop to ask about an unclear task: the PM assumes and lists what it assumed |
 | `--check` | feedback | Only fetch and triage the review points — no code, nothing posted |
 | `--draft` | build · qc | Allow a draft PR. Without it every PR is opened ready, and agents never choose draft |
 | pasted `https://claude.ai/artifact/…` | build · qc · review · e2e · demo | Attach that artifact directly (same as ticking it) |

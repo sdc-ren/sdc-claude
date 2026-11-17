@@ -108,6 +108,25 @@ test('IMPACT lines of a gate reach the testers of the same repo later in the dis
   expect(r.prompts['J6 tester:fe']).not.toContain('Impact cases')
 })
 
+test('an unclear brief goes back to the user before anything runs', async () => {
+  const ask = { decision: 'clarify', size: 'S', note: 'two readings', questions: [{ id: 'Q1', question: 'Which icon?', quote: '"icon lệch"', options: ['glyph inside the circle', 'icon vs label'], assume: 'glyph' }] }
+  const first = await sim([ask])
+  expect(first.out.status).toBe('clarify')
+  expect(first.out.questions[0].id).toBe('Q1')
+  expect(first.out.clarifyRound).toBe(1)
+  expect(first.ran).toEqual([])
+  expect(first.pmPrompts[0]).toContain('Understand before you plan')
+  // answered: the PM is told not to ask again, and a clear task runs straight through
+  const answered = await sim([D(withCases, 'S'), D([J('J4', 'reviewer', 'be', 1, 'PACKAGE')], 'S'), close], std, { clarifyRound: 1 })
+  expect(answered.out.status).toBe('done')
+  expect(answered.pmPrompts[0]).toContain('never ask those again')
+  // not mid-run, not with --assume, not a fourth time
+  const mid = await sim([D(withCases, 'S'), ask, ask])
+  expect(mid.out.question).toContain('only for the first decision of a run')
+  expect((await sim([ask, ask], std, { flags: { assume: true } })).out.question).toContain('--assume')
+  expect((await sim([ask, ask], std, { clarifyRound: 3 })).out.question).toContain('already answered questions 3 times')
+})
+
 test('plan check: points go back to the PM once and the first dispatch is not run', async () => {
   const r = await sim([oneRepo, D([J('J1', 'dev', 'be', 1)]), escalate], l => (l === 'J0 reviewer:plan' ? ok('NEEDS-WORK', { issues: ['PP1: "also on the web admin" — no fe section'] }) : std(l)))
   expect(r.ran).toEqual(['J0 reviewer:plan(opus)', 'J1 lead:be(sonnet)'])
