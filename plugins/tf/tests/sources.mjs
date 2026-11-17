@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
+import { refreshedSession } from '../scripts/browser.mjs'
 import { classify, configSources, strictKey } from '../scripts/sources.mjs'
 import { slugFor, slugFromText } from '../scripts/task.mjs'
 
@@ -77,4 +78,19 @@ test('every input maps to a stable, readable folder name', () => {
   assert.equal(slugFor(r, 'anything', 'OPS-3'), 'OPS-3')
   // The slug typed back resolves to the same folder.
   assert.equal(slugFromText('dung-demo-man-hinh-dat'), 'dung-demo-man-hinh-dat')
+})
+
+test('a saved login is refreshed from the browser that used it, unless the session was lost', () => {
+  const ck = (domain, value) => ({ name: 's', value, domain, path: '/', expires: 2e9 })
+  const saved = { cookies: [ck('.atlassian.net', 'old'), ck('acme.atlassian.net', 'old')], origins: [{ origin: 'https://acme.atlassian.net', localStorage: [] }] }
+  const used = {
+    cookies: [ck('.atlassian.net', 'new'), ck('acme.atlassian.net', 'new'), ck('dev.app.test', 'x')],
+    origins: [{ origin: 'https://acme.atlassian.net', localStorage: [{ name: 'k', value: 'v' }] }, { origin: 'https://dev.app.test', localStorage: [] }],
+  }
+  const next = refreshedSession(saved, used, ['https://acme.atlassian.net/browse/PROJ-1'])
+  assert.deepEqual(next.cookies.map((c) => `${c.domain}=${c.value}`), ['.atlassian.net=new', 'acme.atlassian.net=new'], 'rotated cookies kept, other sites dropped')
+  assert.deepEqual(next.origins.map((o) => o.origin), ['https://acme.atlassian.net'])
+  assert.equal(refreshedSession(saved, used, ['https://id.atlassian.com/login?continue=x']), null, 'on a login page: keep the old file')
+  assert.equal(refreshedSession(saved, { cookies: [ck('.atlassian.net', 'new')], origins: [] }, []), null, 'a cookie domain went missing: keep the old file')
+  assert.equal(refreshedSession(saved, { cookies: [], origins: [] }, []), null)
 })

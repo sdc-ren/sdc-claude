@@ -4,6 +4,14 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.16.2] — 2026-11-17
+
+### Fixed
+- **A saved login stays fresh.** A browser opened with `auth` now writes the session back to
+  `~/.claude/task-flow/auth/<name>.json` when it closes, so cookies the site rotated during use are kept and
+  the next run does not have to log in again. The file is left as it was when the session was lost (a page on
+  a login screen, or the site's cookies gone), and only the sites it already covered are saved.
+
 ## [1.16.1] — 2026-11-17
 
 ### Fixed
