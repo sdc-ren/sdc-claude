@@ -86,17 +86,34 @@ conflicts in files this task changed (others → `blocked`), re-run typecheck, p
 Never merge, approve, force-push, change base, or enable auto-merge.
 
 ## Review mode (someone else's PR — the brief says review)
-No git writes, no commits, nothing posted. Read the PR diff (`gh pr diff`), the ticket, and the
-tester's results if given. Write `<task>/review.md` answering:
-1. **Risk** — permissions, money, migrations, transactions, concurrency, security; rate each.
-2. **Impact on other features** — callers of every changed function (codegraph `codegraph_explore`
-   with `projectPath`, else grep); name the screens or flows they belong to.
-3. **UI changes** — changed UI files and the screens they render (the tester shoots before/after).
-4. **Acceptance criteria** — each AC of the ticket: covered / missing / partial, with file:line.
-5. **Typecheck and build** — run them in the task worktree; paste the result.
-Also flag any change inside a read-only zone. Then findings as P0–P3 with file:line. Draft (do not post)
-`<task>/pr-comment.md` per `${CLAUDE_PLUGIN_ROOT}/guidelines/pr-review.md`. Return `verdict` `SHIP` (approve-worthy),
-`NEEDS-WORK`, or `BLOCK`, plus `issues`.
+A static review: you read the code, nobody runs the app. No git writes, no commits, nothing posted. Read the PR
+diff (`gh pr diff`), the ticket, and the code around every change — not the diff alone. Write
+`<task>/review.md` answering, in this order:
+1. **Logic** — does the code do what the ticket asks? Walk each changed branch: edge cases (empty, null, zero,
+   limits), error paths, async order and races, state left behind on failure, off-by-one, wrong operator or
+   condition. Each acceptance criterion: covered / missing / partial, with file:line.
+2. **Impact on other parts** — everything this PR defines or changes that someone else uses: functions and their
+   signatures, exported variables and constants, types, enums, config and env keys, API contracts (path,
+   status, field name/type/optionality, error key), DB schema, shared components and styles. For each, its
+   callers and readers (codegraph `codegraph_explore` with `projectPath`, else grep) in every repo of the
+   workspace; name the screen, flow or client that can now behave differently and whether the PR handles it.
+   A new name that shadows or duplicates an existing one is a finding.
+3. **Security** — go through the OWASP Top 10:2025 table of `${CLAUDE_PLUGIN_ROOT}/guidelines/pr-review.md`
+   ("Security"), row by row, for what the diff touches; a finding names its row (`A01`…). Plus money,
+   migrations, transactions and concurrency where the PR touches them. `review.md` lists the rows checked
+   and the rows the diff does not touch.
+4. **Standards** — the areas of the same guideline's "What to look at" table (design, complexity, naming,
+   comments, consistency, documentation), then the repo's own conventions (its CLAUDE.md, lint, naming, structure), the workspace review
+   lessons, dead code, duplicated logic, missing error handling, tests for the changed behaviour where the
+   workspace test policy asks for them.
+5. **Typecheck and build** — run them in the task worktree; paste the result. They are the only commands you
+   run: no server, no flow, no emulator.
+Also flag any change inside a read-only zone, and list the UI files changed with the screens they render.
+Then findings as P0–P3 with file:line. `review.md` ends with `Not run on the app` and the acceptance criteria
+or screens worth an e2e, so the author can ask for `/tf:e2e` when they want it. Draft (do not post)
+`<task>/pr-comment.md` per `${CLAUDE_PLUGIN_ROOT}/guidelines/pr-review.md` (several PRs: `pr-comment-<repo>.md` each;
+every finding in the bullet form it gives, so it can be posted on its line). Return `verdict` `SHIP` (approve-worthy
+as code), `NEEDS-WORK`, or `BLOCK`, plus `issues`.
 
 ## Report
 `jobs/<id>-reviewer-<repo>.md`: verdict, checklist evidence, commits, PR link. Plain prose, no filler.

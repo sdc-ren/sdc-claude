@@ -43,7 +43,7 @@ The roster is a menu. The PM uses the fewest roles that satisfy the hard rules.
 | `/tf:build <anything>` | build | setup, dev, tester, reviewer | PR(s) ready |
 | `/tf:qc <task>` | qc | setup, dev, tester, reviewer | existing PR updated (or new PR if merged) |
 | `/tf:address-review <task\|PR> [--check]` | feedback | setup, dev, tester, reviewer (none with `--check`) | triage, fixes pushed to the same PR, reply drafts |
-| `/tf:review <PR\|task>` | review | setup, tester, reviewer | review report + PR/ticket comment drafts |
+| `/tf:review <PR\|task>` | review | setup, reviewer | static review report + PR comment draft |
 | `/tf:e2e <PR\|task> [--cases a,b]` | e2e | setup, tester | evidence + ticket comment draft |
 | `/tf:demo <canvas> [words]` | — (no workflow, `docs/demo.md`) | none | clickable demo of the canvas, local or one artifact |
 

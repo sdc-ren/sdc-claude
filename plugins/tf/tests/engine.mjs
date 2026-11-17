@@ -93,9 +93,17 @@ test('a tester FAIL skips the later groups: PACKAGE never pushes code that just 
   // the skipped id is free again, and a PASS lets the same dispatch run through
   const pass = await sim([D([...oneRepo.jobs, J('J4', 'reviewer', 'be', 4, 'PACKAGE')]), close])
   expect(pass.out.status).toBe('done')
-  // review mode: the tester's verdict is the result, it stops nothing
-  const review = await sim([D([J('J1', 'tester', 'all', 1), J('J2', 'reviewer', 'all', 2)]), close], l => (l.includes('tester') ? ok('FAIL') : std(l)), { mode: 'review' })
-  expect(review.ran.some(x => x.startsWith('J2'))).toBe(true)
+})
+
+test('review mode is static: a reviewer alone closes it, no tester and no app server', async () => {
+  const review = await sim([D([J('J1', 'setup', 'all', 1), J('J2', 'reviewer', 'all', 2)]), close], std, { mode: 'review' })
+  expect(review.out.status).toBe('reviewed')
+  expect(review.ran.length).toBe(2)
+  expect(review.prompts[Object.keys(review.prompts).find(k => k.startsWith('J1'))]).toContain('start NO app server')
+  // e2e is its own command: a tester job is refused here
+  const withTester = await sim([D([J('J1', 'tester', 'all', 1), J('J2', 'reviewer', 'all', 2)]), close, close], std, { mode: 'review' })
+  expect(withTester.ran.some(x => x.includes('tester'))).toBe(false)
+  expect(withTester.pmPrompts[1]).toContain('role tester is not allowed in mode review')
 })
 
 test('IMPACT lines of a gate reach the testers of the same repo later in the dispatch', async () => {

@@ -34,7 +34,7 @@ const ROLES = {
   build: ['setup', 'dev', 'tester', 'reviewer'],
   qc: ['setup', 'dev', 'tester', 'reviewer'],
   feedback: ['setup', 'dev', 'tester', 'reviewer'],
-  review: ['setup', 'tester', 'reviewer'],
+  review: ['setup', 'reviewer'], // static: reading the code. Running the app is /tf:e2e, asked for on its own.
   e2e: ['setup', 'tester'],
 }
 const DONE_STATUS = { build: 'done', qc: 'done', feedback: 'done', review: 'reviewed', e2e: 'verified' }
@@ -327,9 +327,11 @@ function jobPrompt(j) {
         (mode === 'review' || mode === 'e2e'
           ? `Mode ${mode}: check out the code under test (the PR head, \`git fetch origin pull/<n>/head\`, or its branch) DETACHED in the task worktree — never create a branch, never commit. `
           : '') +
-        `Start the app servers the plan needs with node ${S}/serve.mjs start ${root} ${slug} (config "## Servers"; it waits for each health check) and LEAVE THEM RUNNING — ` +
+        (mode === 'review'
+          ? `A review reads the code and runs typecheck/build only: start NO app server, NO emulator, build NO APK.\n`
+          : `Start the app servers the plan needs with node ${S}/serve.mjs start ${root} ${slug} (config "## Servers"; it waits for each health check) and LEAVE THEM RUNNING — ` +
         `later jobs reuse them and the orchestrator stops them at run end. A config without "## Servers": smoke-check backend/frontend by hand, then stop what you started. ` +
-        `Emulator + APK only when the plan needs the App (stop the emulator when done).\n`
+        `Emulator + APK only when the plan needs the App (stop the emulator when done).\n`)
       : '') +
     (j.role === 'tester' && !isFlows(j) && String(j.cases || '').trim()
       ? `Cases: ${j.cases} — run ONLY these (flow-run.mjs --cases ${String(j.cases).replace(/\s+/g, '')}). Do not run, re-run or repair any other saved flow, and add no smoke case.\n`

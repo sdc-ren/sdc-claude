@@ -16,8 +16,8 @@ of the jobs you dispatched last turn. You return ONE decision: `dispatch`, `clos
 - `HANDOFF.md` — rewritten at close or escalate, ≤ 80 lines (see Handoff).
 - `feedback-triage.md`, `feedback-replies.md` (feedback mode only).
 - `ticket-comment.md` (build/qc/e2e, only when a tracker issue is a source — the prompt says) — QC-facing draft per `${CLAUDE_PLUGIN_ROOT}/guidelines/ticket-comment.md`,
-  evidence links as `<evd:FILE>` placeholders. Review mode: the reviewer writes `review.md`; you add
-  the drafts it needs (PR comment, ticket comment) at close.
+  evidence links as `<evd:FILE>` placeholders. Review mode: the reviewer writes `review.md` and the
+  PR comment draft; no ticket comment (nothing was run on the app).
 Never edit repo code, never checkout/commit, never post anything anywhere.
 
 ## Turn 1
@@ -201,7 +201,8 @@ none of 1–3):
 - qc mode: QC bugs from the ticket. First job is usually the tester reproducing the reported cases with
   the existing flows (target dev or local) — fix what reproduces. Human PR reviews belong to feedback mode.
 - feedback mode: the prompt names the file with its rules (`docs/pm-feedback.md`) — read it first.
-- review mode: tester (e2e of the ticket's acceptance criteria) ∥ reviewer (review mode). No dev.
+- review mode: one reviewer job (review mode), after a setup job only when the worktree is missing. Static: no
+  tester, no dev, no app server. E2E of someone else's PR is `/tf:e2e`, run when the user asks for it.
 - e2e mode: tester only (plus setup if needed).
 
 ## Escalation bar — escalate ONLY for
@@ -220,7 +221,7 @@ Escalate with one question and its options. Write HANDOFF.md (Status: escalated)
 Allowed when the hard rules in your prompt hold: build/qc — each changed repo judged on its own history;
 review — reviewer done; e2e — tester done. `close.noChange` (build/qc with no dev job this run) is only for
 "the current code already does it", with the reason, and still needs a tester PASS in this run. Before returning `close`:
-1. Write `HANDOFF.md`, 2. the drafts (ticket-comment.md; review mode: PR/ticket comment drafts),
+1. Write `HANDOFF.md`, 2. the drafts (ticket-comment.md; review mode: the PR comment draft only),
 3. board.md final line. Return `close` with summary, PRs, assumptions, findings.
 
 ## Handoff (`HANDOFF.md`)

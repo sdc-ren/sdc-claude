@@ -16,6 +16,11 @@
 //   reply <dir> <Rn> --body-file <f> [--resolve]   one late reply in thread Rn (and resolve it)
 //   resolve <dir> <Rn>
 //   comment <dir> <pr-url> --body-file <f>         one late conversation comment on the PR
+//   review <dir> <pr-url> [--file <f>] [--dry-run]   OUR review of someone else's PR, from <dir>/pr-comment.md
+//                                    (guidelines/pr-review.md): ONE review, event COMMENT — each finding whose
+//                                    `path:line` is a line of the PR diff becomes an inline comment on that line,
+//                                    Summary + Recommendation are the body; a finding the diff does not show
+//                                    stays in the body. Never approves or requests changes.
 //
 // Posting commands are for the orchestrator only, after the user approved the exact text.
 
@@ -243,6 +248,68 @@ export function postRound(plan, api) {
   return done
 }
 
+// Pure: a unified diff → Map(path → Set of new-side line numbers GitHub accepts an inline comment on).
+export function diffLines(diff) {
+  const files = new Map()
+  let cur = null
+  let n = 0
+  let inHunk = false
+  for (const l of String(diff).split('\n')) {
+    if (l.startsWith('diff --git ')) { cur = null; inHunk = false; continue }
+    if (!inHunk && l.startsWith('+++ ')) { const p = l.slice(4).trim(); cur = p === '/dev/null' ? null : new Set(); if (cur) files.set(p.replace(/^b\//, ''), cur); continue }
+    const h = l.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/)
+    if (h) { n = Number(h[1]); inHunk = true; continue }
+    if (!inHunk || !cur) continue
+    if (l.startsWith('+') || l.startsWith(' ')) cur.add(n++)
+    else if (!l.startsWith('-') && !l.startsWith('\\')) inHunk = false
+  }
+  return files
+}
+
+// Pure: pr-comment.md → { summary, recommendation, findings:[{level, path, line, text, raw}] }.
+export function parseReview(text) {
+  const sec = { summary: [], findings: [], recommendation: [] }
+  let cur = null
+  for (const l of String(text).split(/\r?\n/)) {
+    const h = l.match(/^##\s+(Summary|Findings|Recommendation)\s*$/i)
+    if (h) { cur = h[1].toLowerCase(); continue }
+    if (cur) sec[cur].push(l)
+  }
+  const findings = []
+  for (const l of sec.findings) {
+    if (/^-\s+/.test(l)) findings.push(l.replace(/^-\s+/, ''))
+    else if (findings.length && l.trim()) findings[findings.length - 1] += `\n${l.trim()}`
+  }
+  return {
+    summary: sec.summary.join('\n').trim(),
+    recommendation: sec.recommendation.join('\n').trim(),
+    findings: findings.map((raw) => {
+      const level = (raw.match(/^\[(P[0-3]|INFO)\]/) || [])[1] || ''
+      const loc = raw.match(/`([^`\s]+?):(\d+)(?:-\d+)?`/)
+      // The inline comment sits on the line already: drop the location and the dash that follows it.
+      const text = loc ? raw.replace(loc[0], '').replace(/^(\[[^\]]+\])\s*[—–-]?\s*/, '$1 ').replace(/\s{2,}/g, ' ').trim() : raw
+      return { level, path: loc ? loc[1].replace(/^\.\//, '') : '', line: loc ? Number(loc[2]) : 0, text, raw }
+    }),
+  }
+}
+
+// Pure: what goes on a line and what stays in the body.
+export function planReview(parsed, lines) {
+  if (!parsed.summary && !parsed.findings.length && !parsed.recommendation) throw new Error('nothing to post — no Summary, Findings or Recommendation section found')
+  const inline = []
+  const rest = []
+  for (const f of parsed.findings) {
+    if (f.path && lines.get(f.path)?.has(f.line)) inline.push({ path: f.path, line: f.line, side: 'RIGHT', body: f.text })
+    else rest.push(f.raw)
+  }
+  const body = [
+    parsed.summary && `## Summary\n${parsed.summary}`,
+    rest.length && `## Findings\n${rest.map((r) => `- ${r}`).join('\n')}`,
+    parsed.recommendation && `## Recommendation\n${parsed.recommendation}`,
+  ].filter(Boolean).join('\n\n')
+  return { body, inline, rest }
+}
+
 function main() {
   const [cmd, dirArg, ...rest] = process.argv.slice(2)
   const flags = {}
@@ -253,7 +320,7 @@ function main() {
     else if (rest[i].startsWith('--')) flags[rest[i].slice(2)] = rest[++i]
     else pos.push(rest[i])
   }
-  if (!cmd || !dirArg) { console.error('usage: pr-feedback.mjs fetch|post|reply|resolve|comment <dir> …'); process.exit(2) }
+  if (!cmd || !dirArg) { console.error('usage: pr-feedback.mjs fetch|post|review|reply|resolve|comment <dir> …'); process.exit(2) }
   const dir = resolve(dirArg)
   const body = () => { if (!flags['body-file']) throw new Error('--body-file required'); return readFileSync(flags['body-file'], 'utf8').trim() }
   if (cmd === 'fetch') return fetchAll(dir, pos)
@@ -263,6 +330,16 @@ function main() {
     const plan = planRound(parseReplies(readFileSync(file, 'utf8')), stateOf(dir))
     if (flags.dry) return console.log(JSON.stringify(plan.map((p) => ({ pr: p.pr, as: p.threads.length ? 'one review' : 'one comment', summary: !!p.summary, replies: p.threads.map((t) => t.rid), resolve: p.threads.filter((t) => t.resolve).map((t) => t.rid) })), null, 2))
     return console.log(JSON.stringify(postRound(plan, { graphql, gh }), null, 2))
+  }
+  if (cmd === 'review') {
+    const { owner, repo, n } = parsePr(pos[0])
+    const file = flags.file ? resolve(flags.file) : join(dir, 'pr-comment.md')
+    if (!existsSync(file)) throw new Error(`${file} not found`)
+    const plan = planReview(parseReview(readFileSync(file, 'utf8')), diffLines(gh(['pr', 'diff', String(n), '--repo', `${owner}/${repo}`])))
+    if (flags.dry) return console.log(JSON.stringify({ pr: pos[0], event: 'COMMENT', inline: plan.inline.map((c) => `${c.path}:${c.line}`), inBody: plan.rest.length, body: plan.body }, null, 2))
+    // One call: the review and all its inline comments exist together or not at all.
+    const r = JSON.parse(gh(['api', '-X', 'POST', `repos/${owner}/${repo}/pulls/${n}/reviews`, '--input', '-'], JSON.stringify({ event: 'COMMENT', body: plan.body, comments: plan.inline })))
+    return console.log(JSON.stringify({ pr: pos[0], review: r.html_url, inline: plan.inline.length, inBody: plan.rest.length }))
   }
   if (cmd === 'reply' || cmd === 'resolve') {
     const t = threadOf(dir, pos[0])
