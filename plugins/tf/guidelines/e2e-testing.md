@@ -6,7 +6,8 @@ workspace config; this file is the shared standard.
 
 ## One flow = one case
 
-- One file per case, named by the case id (`flows/21.mjs`, ticket/QC case number when there is one).
+- One file per case, named by the case's internal id (`flows/TC1.mjs`; `cases.mjs` derives it from the ticket/QC
+  case number when there is one).
 - A flow is self-contained and re-runnable: it creates the data it needs (API first, UI only when the
   UI itself is under test) with a unique suffix per run, and never depends on another flow's leftovers.
 - Assert the acceptance criterion as the user sees it (text, state, navigation), plus the API/DB effect
@@ -14,6 +15,19 @@ workspace config; this file is the shared standard.
 - Keep flows short: setup → the action under test → assertions. Shared steps (login, seeding, waiting for a
   background job) live in the workspace library `.pipeline/_lib/` (`FLOW_LIB`), listed in its `README.md` —
   written once, imported by every task's flows, extended but never changed incompatibly.
+
+## Evidence that points at the bug
+
+A failed case must be readable without the flow: the screenshot shows where it fails, the way QC marks one.
+- Name the element in the assertion: `expect(cond, 'Nút bị khoá, BTC không biết vì sao', { at: page.getByRole('button',
+  { name: 'Tiếp theo' }), expected: 'có câu lỗi dưới ô', actual: 'không có câu lỗi' })`. On failure the flow kit
+  shoots the screen with that element scrolled into view, and the runner draws a red box around it and the
+  label next to it (`scripts/annotate.mjs`); a small element also gets a close-up.
+- Several wrong places on one screen: `await mark(at, label)` for each, then `shot('<name>', { caption, crop })`.
+- `label` is one short sentence in the writing language, may use "→" for the consequence. `expected` / `actual`
+  become the Mong muốn / Hiện tại columns of the ticket comment.
+- Android: `at` is a `find()` selector (`{ id }`, `{ text }`, `{ desc }`), its uiautomator bounds are the box.
+- Case ids are internal ids (`[A-Za-z0-9_-]`): QC ids with spaces or accents stay in `cases.md` headings only.
 
 ## Selectors (most stable first)
 

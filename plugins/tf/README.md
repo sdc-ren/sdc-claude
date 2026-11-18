@@ -205,21 +205,31 @@ as one review, each finding as an inline comment on its line (never an approve o
 ### `/tf:e2e`
 
 ```
-/tf:e2e <PR url | ticket> [--cases <ids>] [--attach] [--lang <code>]
+/tf:e2e <PR url | ticket> [--cases <ids>] [--target local | dev] [--assume] [--attach] [--lang <code>]
 /tf:e2e --regression [--target local | dev]
 ```
 
-E2E only, no code changes: re-runs saved flows, writes flows for cases that have none, saves evidence, and
-drafts the ticket comment.
+E2E only, no code changes. You approve the test cases before anything runs:
+
+1. The PM reads the ticket, its acceptance criteria and screens, the previous round's plan and the PR, and
+   writes `.pipeline/<TICKET>/cases.md`: one section per test case (platform, screen, data, steps, expected),
+   which acceptance criterion each covers, ⚠ on guesses and vague expectations, open questions and missing
+   specs. A QC test-case list, when the ticket has one, is the main source and keeps QC's ids.
+2. The run stops there. You answer the questions, attach missing specs, edit `cases.md` and approve.
+3. Exactly the approved cases run. Saved flows that still match a case re-run without any agent; the tester
+   writes or fixes only the rest. A later `/tf:e2e` with nothing changed re-runs in minutes with no model.
+4. Each failed case has a screenshot that points at the bug (red box, red label, close-up), and the ticket
+   comment draft follows the QC layout (summary table, then Vấn đề · Hiện tại · Mong muốn · Evidence).
 
 | Option | Effect |
 |---|---|
-| `--cases 21,22` | Only these case ids (QC case numbers or plan case ids) |
+| `--cases TC1,TC2` | Only these approved cases |
+| `--target local\|dev` | Where the cases run: the task's local ports or the shared dev environment from the config |
+| `--assume` | Approve the PM's cases without stopping (unattended runs) |
 | `--regression` | Instead of a ticket, run `.pipeline/_regression/` — the passing flows of merged tickets |
-| `--target local\|dev` | With `--regression`: run against the task's local ports (default) or the shared dev environment from the config |
 
 ```
-/tf:e2e PROJ-123 --cases 21,22
+/tf:e2e PROJ-123 --cases TC1,TC2
 /tf:e2e https://github.com/org/app/pull/213
 /tf:e2e --regression --target dev
 ```
@@ -571,14 +581,16 @@ await webFlow('21', async ({ page, step, shot, gotoReady, expect, uniq }) => {
 ```bash
 node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --target local          # all cases
 node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --failed                # only what failed last time
-node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --cases 21 --target dev # reproduce a QC report
+node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --cases TC1 --target dev # reproduce a QC report
+node <plugin>/scripts/cases.mjs status .pipeline/PROJ-123                      # approved cases: flow fresh/stale/missing, result valid?
 node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --jobs 3                # three cases at a time
 node <plugin>/scripts/flow-peek.mjs .pipeline/PROJ-123 /some/screen           # what is on a screen, with locators
 ```
 
 - Waits for the app, not the clock: `waitApi`, `ready`, `gotoReady`; a 15 s ceiling per step, never a delay.
 - Evidence: `<case>-after.webp` (+ `before` for visual changes), failure screenshot automatically,
-  Playwright trace only with `TRACE=1`. A visual case passes only when before and after differ where the
+  Playwright trace only with `TRACE=1`. `expect(cond, label, { at, expected, actual })` and `mark(at, label)` make
+  the runner draw a red box and label on the element (`annotate.mjs`, Chromium; ffmpeg draws boxes only). A visual case passes only when before and after differ where the
   ticket says and the after state is measured.
 - Cheapest level that proves a case: API before Web before App. Login and seeding live once in
   `.pipeline/_lib/`, not in every flow.

@@ -4,6 +4,43 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.18.0] — 2026-11-18
+
+### Added
+- **`/tf:e2e` asks you to approve the test cases first.** The PM reads the ticket, its acceptance criteria and
+  screens, the previous round's plan, the PR diff and any QC test-case list, and writes `cases.md`: one section
+  per case (platform, screen, data, steps, expected), `AC → TC` coverage, ⚠ on guesses and vague expectations,
+  open questions (each naming the cases it affects) and missing specs — then the run stops with status `cases`.
+  Nothing runs before you edit and approve it. The questions come in the same stop; there is no separate
+  `clarify` in e2e. `--assume` approves without stopping.
+- **`scripts/cases.mjs`** — parse, validate, approve (freezes `cases.approved.json`), status, scope, preview and
+  results. A case's `rev` covers only what changes the run (platform, screen, data, steps, expected); a flow is
+  fresh for one rev; a result counts only for the same rev, target and commit.
+- **Re-runs without an agent.** With approved cases unchanged, the orchestrator re-runs the flows that still
+  match with `flow-run.mjs` alone and launches a tester only for stale, missing or failing cases; with nothing to
+  run it just writes the results. The PM turn after approval runs on sonnet and does not re-analyse the task.
+- **Evidence points at the bug.** `expect(cond, label, { at, expected, actual })` and `mark(at, label)` in the
+  flow kit record the element (Web: locator, scrolled into view; Android: uiautomator bounds); the runner draws a
+  red box and a red label on the shot, and a close-up when the element is small (`scripts/annotate.mjs`,
+  Chromium; ffmpeg draws boxes only). `shot(name, { caption, crop })` captions an image.
+- **Ticket comment in the QC layout**, written by `cases.mjs results --write`: environment line, a summary table
+  of every approved case, then Vấn đề · Hiện tại · Mong muốn · Evidence for the failed ones, images copied to
+  `evd/comment/` as `<SLUG>-<DDMM>-<case><a|b>-<what it shows>`. The verdict is `verified`, `verified-bugs` or
+  `incomplete`.
+- `task.mjs commit <taskDir>` — the HEAD of every task worktree plus a fingerprint of uncommitted changes.
+- `flow-run.mjs --cases-file`, `--ensure-target`, `--mark-written`, `--commit`.
+
+### Changed
+- `flow-run.mjs` refuses instead of skipping: an id with no flow, an empty selection or an unsaved `--target`
+  is an error (exit 2), never a green run. It keeps what other tools recorded about a case (`caseRev`) and
+  stores the commit and target of each result.
+- Case ids in file names are internal ids (`[A-Za-z0-9_-]`); QC ids stay in `cases.md` headings.
+- The task lock is taken atomically and carries a token: only its holder renews or releases it, an expired
+  lock is reported `stale` and taken only with `--steal`. The orchestrator stops the run's servers before it
+  releases the lock.
+- The engine rejects an e2e dispatch without approved cases, a tester job outside the run scope, and an e2e
+  close that leaves a case of the run scope without a result.
+
 ## [1.17.0] — 2026-11-17
 
 ### Security

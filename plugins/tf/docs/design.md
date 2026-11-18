@@ -44,7 +44,7 @@ The roster is a menu. The PM uses the fewest roles that satisfy the hard rules.
 | `/tf:qc <task>` | qc | setup, dev, tester, reviewer | existing PR updated (or new PR if merged) |
 | `/tf:address-review <task\|PR> [--check]` | feedback | setup, dev, tester, reviewer (none with `--check`) | triage, fixes pushed to the same PR, reply drafts |
 | `/tf:review <PR\|task>` | review | setup, reviewer | static review report + PR comment draft |
-| `/tf:e2e <PR\|task> [--cases a,b]` | e2e | setup, tester | evidence + ticket comment draft |
+| `/tf:e2e <PR\|task> [--cases a,b]` | e2e | setup, tester (only on approved cases) | cases.md to approve, then evidence + ticket comment draft |
 | `/tf:demo <canvas> [words]` | — (no workflow, `docs/demo.md`) | none | clickable demo of the canvas, local or one artifact |
 
 There is no `--repos`: the PM inspects every repo the workspace config lists. Flags are in the README.
@@ -179,6 +179,15 @@ adds:
   screenshots to WebP and updates `flows.json`. A later round re-runs them instead of re-driving the UI.
 - **Shared library.** `<root>/.pipeline/_lib/` (`FLOW_LIB`) holds login, seeding and other helpers for the
   whole workspace, indexed in its `README.md`, so no task starts from an empty folder.
+- **Approved cases, then the cheapest run.** In e2e the PM writes `cases.md` and the run stops (status
+  `cases`); the user edits and approves it and `cases.mjs approve` freezes it in `cases.approved.json`. Three
+  things are tracked apart: the snapshot (invalid when the user edits cases.md or the ticket/specs change), a
+  flow (written for one `rev` of its case — `flow-run.mjs --mark-written`; stale when the case changes) and a
+  result (valid only for the same `rev`, target and commit — `task.mjs commit`). The orchestrator runs fresh
+  flows with no agent and launches a tester only for stale, missing or failing ones; `cases.mjs results` alone
+  decides the verdict (`verified`, `verified-bugs`, `incomplete`) and writes the ticket comment.
+- **Evidence points at the bug.** `expect(..., { at })` / `mark()` record the element; `annotate.mjs` draws a red
+  box and label (and a close-up) before WebP conversion — no model looks at an image.
 - **Look before writing.** `flow-peek.mjs` opens a screen and prints the real test ids, labels and role + name
   locators; a failed web step saves the same description of the page it failed on, so a selector is fixed
   from what is there, not by re-running.

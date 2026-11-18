@@ -17,7 +17,7 @@ You never write, test, or review repo code yourself. Design and rationale: `docs
 | `/tf:qc <task>` | qc | Next round on the same folder/branches: reproduce QC cases with saved flows, fix, re-test, update the PR |
 | `/tf:address-review <task or PR url> [--check]` | feedback | Team review on our own PRs: fetch unresolved threads/reviews/comments, triage each point, fix only the `fix` points on the same PR, draft one answer per PR for the whole round (posted after approval). `--check`: triage only |
 | `/tf:review <PR url or task>` | review | Static code review of someone else's PR: logic, impact on other parts, security, standards, typecheck/build. Nothing is run on the app (that is `/tf:e2e`). No code changes |
-| `/tf:e2e <PR url or task> [--cases a,b]` | e2e | Tester only: run/save flows, EVD, ticket-comment draft (tracker source only). `--regression`: run `.pipeline/_regression` flows instead (no workflow) |
+| `/tf:e2e <PR url or task> [--cases a,b] [--target t]` | e2e | Test cases first: the PM writes `cases.md`, the user edits and approves it, then the tester runs exactly the approved cases (section 2e). Saved flows that still match re-run without any agent. EVD with bugs marked, ticket-comment draft (tracker source only). `--regression`: run `.pipeline/_regression` flows instead (no workflow) |
 | `/tf:demo <canvas link> [words]` | — | No workflow: `<PLUGIN>/docs/demo.md` — a Design canvas → a clickable demo (every screen, grouped by role), local, `--publish` as one artifact |
 | `/tf:status [--doctor] [--metrics [slug]]` | — | Resources per task and what cleanup would free (`resources.mjs list`, `reap --dry-run <cwd>`); `--doctor` also runs `node $S/doctor.mjs <cwd>`; `--metrics` shows what runs cost (`metrics.mjs`) |
 | `/tf:clean [<slug> \| --migrate \| --legacy]` | — | Free every task whose PRs are all merged or closed (no argument), free one task, move flat worktrees into `.worktrees/<SLUG>/<repo>/`, or fold old suffixed folders — dry run first, apply only after the user's yes |
@@ -47,7 +47,9 @@ language; `writingLang` = `Writing language` → a `Writing language:` line in t
    `oldLayout`, `legacyDirs`, `locked`, `format`. `oldLayout` non-empty → suggest `/tf:clean --migrate` once.
    Use exactly that slug and folder — never invent suffixes. `locked: true` → stop: another run holds
    it. `legacyDirs`/`legacyWorktrees` non-empty → mention once (`/tf:clean --legacy`), keep going.
-3. **Lock** — `node $S/task.mjs lock <dir>`; conflict → stop and tell the user.
+3. **Lock** — `node $S/task.mjs lock <dir>` → keep its `token` for this run (renew: `lock <dir> --token <t>`;
+   release: `unlock <dir> --token <t>`). Conflict → stop and tell the user; `stale: true` (an older run left it)
+   → ask the user before `lock <dir> --steal`.
 4. **Round** — `round = nextRound`. If it is a new round of an existing task folder (`format: current`):
    `node $S/task.mjs new-round <dir> <round>` (moves plan/board/jobs into `history/`).
 5. **Fresh base** — `node $S/fresh.mjs <path>:<base> …` for the config repos (report skipped checkouts in
@@ -117,14 +119,60 @@ then `Workflow` with `scriptPath: <that script>`. Args:
   "attachments": [ { "title": "…", "kind": "design-system|canvas|artifact|doc|url|file", "file": "<abs specs/… file>", "url": "…" } ] }
 ```
 
+e2e adds `"snapshot"`, `"runScope"`, `"editRound"` (section 2e).
+
 The user watches `/workflows`. Do not poll. The run logs a `scope:` line after the PM's first plan (repos
 changed / not changed, cases, risky assumptions) — it is the user's early chance to stop a wrong plan; put it
 in the Report as well.
 
+## 2e. E2E: approved test cases, then the cheapest run
+
+`commit` below = `node $S/task.mjs commit <dir>` (the code under test: the HEAD of each task worktree). Empty
+(no worktree yet) → no result is reused: the whole snapshot is the run scope. Every step runs while this run
+holds the lock.
+
+1. **State** — `node $S/cases.mjs status <dir> --commit "<commit>"`.
+   - No `cases.md` / no snapshot, `edited` (the user changed cases.md after approving) or `requirementsChanged`
+     (ticket or specs changed since) → **gate**: launch with `snapshot` unset (the PM writes or updates
+     cases.md and stops with status `cases`).
+2. **Fast path** — approved, nothing edited or changed: `node $S/cases.mjs scope <dir> --commit "<commit>" --out
+   <dir>/tmp/scope.json` → the cases without a valid result.
+   - Empty → nothing to run: `node $S/cases.mjs results <dir> --commit "<commit>" --write`, then section 3.
+   - Of those, the ones whose flow is `fresh` run with no agent: local target → `node $S/serve.mjs start <cwd>
+     <slug>` (and the emulator for App cases, `emulator.mjs`); `node $S/flow-run.mjs <dir> --ensure-target <t>`;
+     `node $S/flow-run.mjs <dir> --cases-file <fresh ids> --target <t> --commit "<commit>"`. Its `requested` must
+     equal the ids you passed — a missing id or an error is not a result.
+   - Then `cases.mjs scope` again: still not valid (stale or missing flows, FAIL, BLOCKED, a boot or runner
+     error) → launch with `snapshot: "<dir>/cases.approved.json"` and `runScope` = those ids. Nothing left →
+     `cases.mjs results --write`, section 3, no workflow.
+   - `--cases a,b` from the user narrows the scope to those ids.
+3. **Launch** (gate or tester run) with the normal args plus `snapshot`, `runScope`, `editRound`.
+
+**Status `cases`** (nothing has run; release the lock — `end-run`, then `unlock --token` — while the user reads):
+1. Show `node $S/cases.mjs preview <dir>` as it prints (one row per case, ⚠, flows), then the counts: cases per
+   platform, acceptance criteria without a case, ⚠, target.
+2. Questions → `AskUserQuestion` as for `clarify` (the PM's pick first, recommended; `who: po` adds "Hỏi PO").
+   Answers go under `## Clarifications` in `ticket.md`, each with the cases it affects.
+3. `missingSpecs` → list them; the user attaches (`--attach`, a link — `docs/attach.md`) or says to go on.
+4. Open `<dir>/cases.md` for the user (`mcp__ccd_host__open_in_editor` when available, else its path) and wait
+   until they say it is done. They may also ask you to change it — edit cases.md as they say.
+5. Lock again (`lock <dir>`, new token), then:
+   - answers or new specs that change what is tested → relaunch WITHOUT `snapshot`, `clarifyRound` from the
+     result, `editRound` + 1; the PM updates cases.md and it is shown again;
+   - otherwise → `node $S/cases.mjs validate <dir>` (errors → show them, the user fixes, repeat) →
+     `node $S/cases.mjs approve <dir>` → `node $S/flow-run.mjs <dir> --ensure-target <target>` when the target is
+     remote (local is built after setup) → continue at step 2 of this section.
+   - `assume: true` in the result (`--assume`): approve at once and go on — nobody is asked.
+
+**Status `verified`** (e2e): the verdict is what `node $S/cases.mjs results <dir> --commit "<commit>" --write`
+says — `verified` (all PASS), `verified-bugs` (a Failed case), `incomplete` (not verified or blocked cases).
+Report it with the summary table; the marked images are under `<dir>/evd/comment/`.
+
 ## 3. After the run (always, any status)
 
-1. `node $S/task.mjs unlock <dir>` and `node $S/resources.mjs end-run <cwd> <slug>` (closes browsers,
-   emulators, servers of this run; worktrees/DB/ports stay for later rounds).
+1. `node $S/resources.mjs end-run <cwd> <slug>` (closes browsers, emulators, servers of this run;
+   worktrees/DB/ports stay for later rounds), THEN `node $S/task.mjs unlock <dir> --token <token>` — never the
+   other way round: another run could take the task while this one is still stopping its servers.
 1b. **Metrics** — `node $S/metrics.mjs <cwd> <slug> --last`: measures the run from the agents' transcripts
    (wall time, minutes per role, time in tools vs model per job, slowest commands, tokens) and appends it to
    `<dir>/metrics.json`. Its first table line goes into the Report.
@@ -139,10 +187,11 @@ in the Report as well.
 | status | Action |
 |---|---|
 | `done` (feedback) | Report the triage table, what was fixed (commits, PR links), then show `<dir>/feedback-replies.md`. Post only after the user approves the text (they may edit or drop blocks in the file): `node $S/pr-feedback.mjs post <dir> --dry-run` to show what goes where, then `node $S/pr-feedback.mjs post <dir>` — per PR one submitted review holding every thread reply with the Summary as its body (one notification, one conversation entry); `resolve: yes` threads are resolved after. Never post the round thread by thread; `reply` / `comment` are only for a single late answer. Then Review lessons (below). |
-| `done` / `verified` / `reviewed` | Report (below). Close-out per `C`: upload `<dir>/evd/`, fill `<evd:FILE>` links in the drafts, show drafts; post only after the user approves the text. Review mode: the PR comment draft goes out as ONE review with its findings inline — `node $S/pr-feedback.mjs review <dir> <pr url> [--file <dir>/pr-comment-<repo>.md] --dry-run` to show what lands on which line, then the same without `--dry-run`; never `gh pr comment` or `gh pr review` by hand. |
+| `done` / `verified` / `reviewed` | Report (below). Close-out per `C`: upload `<dir>/evd/` (e2e: `<dir>/evd/comment/`, the images named for the comment), fill `<evd:FILE>` links in the drafts, show drafts; post only after the user approves the text. Review mode: the PR comment draft goes out as ONE review with its findings inline — `node $S/pr-feedback.mjs review <dir> <pr url> [--file <dir>/pr-comment-<repo>.md] --dry-run` to show what lands on which line, then the same without `--dry-run`; never `gh pr comment` or `gh pr review` by hand. |
 | `triaged` (feedback `--check`) | Show `<dir>/feedback-triage.md` as a short table (id · reviewer · point · P · verdict · reason) and ask whether to run `/tf:address-review` without `--check`. |
 | `clarify` | The brief is not clear enough to plan; nothing has run. Ask the user every question with `AskUserQuestion` (≤ 4 per call, several calls when there are more): the question with its quote, the PM's options, the PM's own pick first and marked recommended. `who: po` questions get one more option, "Hỏi PO": for those, draft one tracker comment with the questions (posted only after the user approves the text), then unlock and stop — the next `/tf:build <task>` reads the PO's reply as a new comment. Append the answers verbatim to `<dir>/ticket.md` under `## Clarifications` (`Q<n> — question — answer`, dated; "PM decides" when the user says so), then relaunch with the same args and `clarifyRound` from the result. Repeat until the run returns another status: no job starts while a question is open. |
 | `approve` | Show the plan summary (`<dir>/plan.md`) and ask for approval; on yes relaunch with `approved: true`. With `design` in the result (a size L task): show `scope`, then `design.md` in short — Data, Neighbours, Decisions, Risks and open points — then the plan's Requirements and the micro-task titles, and ask whether to build it; a change the user wants goes into `notes` and the relaunch runs WITHOUT `approved` so the PM redoes the design and it is shown again. Without `--approve` this status means the plan check and the PM still disagree: show `scope`, then each `planOpen` line next to the reviewer's point (`planCheck` file) and ask the user which reading is right; relaunch with `approved: true` and the answer in `notes`. |
+| `cases` | e2e: section 2e "Status `cases`". |
 | `escalate` | One `🛑` line with the PM's question and options. After the answer relaunch with the same args, the answer in `notes`. The PM resumes from board.md. |
 | `handoff` | Token budget low — relaunch in a new session with the same args. |
 | `error` | Report the failing stage; relaunch once; then escalate. |

@@ -35,7 +35,7 @@ function ffmpegWebp() {
   return ''
 }
 
-function playwright(from) {
+export function playwright(from) {
   for (const c of [from, process.env.TF_PLAYWRIGHT, join(process.cwd(), 'package.json')].filter(Boolean)) {
     try { return createRequire(resolve(c))('@playwright/test') } catch {}
     try { return createRequire(resolve(c))('playwright') } catch {}

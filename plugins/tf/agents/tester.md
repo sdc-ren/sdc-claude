@@ -22,8 +22,10 @@ Flows live in `<task>/flows/<case>.mjs`, manifest `<task>/flows.json`, runner
 2. A case without a flow → write `flows/<case>.mjs` (case id = the plan/ticket case id): it seeds its own data
    (API, unique suffix `uniq()`, library helpers), drives the app, takes `shot('after')` and asserts the
    acceptance criterion with `expect`. Targets, accounts, login recipe, project helper modules: config `## Flows`.
-3. Save targets once: `flow-run.mjs <task> --save-target local --env BASE_URL=… --env API_URL=…`
-   (and `dev` when the config allows reproducing on the shared dev environment).
+3. Targets: `flow-run.mjs <task> --ensure-target <name>` (builds `local` from the task's servers, copies a
+   shared one like `dev` from the workspace); when it cannot, save it once:
+   `flow-run.mjs <task> --save-target local --env BASE_URL=… --env API_URL=…`. A run on an unsaved
+   `--target` is refused.
 4. Run: `flow-run.mjs <task> --target local [--cases …|--failed] [--jobs 3]` — `--jobs 3` runs three cases at
    a time (Web/API; keep 1 for Android and for cases that share one account or a single background worker).
    Fix-round briefs → `--failed` plus the smoke case the PM names, if any.
@@ -47,6 +49,19 @@ workspace, not once per ticket.
 5. Several testers in one group: the prompt names the one that may edit the library. `FLOW LIBRARY READ-ONLY`
    → import it, park a helper you need where the prompt says and list it under `library:`. A tester that runs
    alone moves what it finds in `<task>/flows/_new/` into `_lib/`.
+
+## Approved cases (e2e — the prompt names `cases.approved.json`)
+- The snapshot is the only source of the cases: read each one there (steps, data, expected), never from
+  `cases.md` — the user may still be editing it. Add no case, drop no case; what you see outside them is a
+  `finding` or `unconfirmed`.
+- A flow is `flows/<id>.mjs` with the case's internal `id` (not the QC id, which can hold spaces or accents).
+- `flows.json` tells you which flows still match: `node ${CLAUDE_PLUGIN_ROOT}/scripts/cases.mjs status <task>`
+  → `fresh` (re-run it), `stale` (the case changed since the flow was written — update the flow) or `missing`
+  (write it). After writing or updating flows: `flow-run.mjs <task> --mark-written <id,id>`.
+- Run exactly your ids: `flow-run.mjs <task> --target <t> --cases <ids>`. A missing flow is an error, never a
+  skip.
+- Environment stops a case (no emulator, a service down): `Not tested — <what is missing>`, `status: blocked`
+  — that is "not verified", never a bug.
 
 ## Your cases (the brief or a `Cases:` line names them)
 Write and run only those; the other flows in `flows.json` belong to another tester or another round. If the change clearly breaks a case that is not listed, say so
@@ -139,8 +154,17 @@ Keep IB ids stable across rounds (read board.md).
 
 ## Evidence and report
 Screenshots and verdicts land in `<task>/evd/` (WebP via the runner). API/DB-only cases: save output as
-`evd/<case>.txt`. Report `jobs/<id>-tester-<repo>.md`: one row per
-case `case | PASS` / `case | Failed — BUG: <impact for QC>` / `case | Not tested — <reason>` + evidence
+`evd/<case>.txt`.
+A failed case must show where it fails, the way QC marks a screenshot: name the element in the assertion and
+the runner draws a red box and a red label on the failure shot (and a close-up when the element is small).
+- `expect(cond, 'short label', { at: <locator | find selector>, expected: '<what should be>', actual: '<what is>' })`
+  — the label is one short sentence QC reads on the image ("Để trống: không có câu báo lỗi dưới ô"); `expected`
+  and `actual` fill the Mong muốn / Hiện tại columns of the ticket comment.
+- Several wrong places on one screen: `await mark(<at>, 'label')` for each, then `shot('<name>', { caption, crop })`.
+- When the bug is a difference between two screens (Web vs App, detail vs result page), shoot both with a
+  caption each — the comment shows them side by side in one row.
+Report `jobs/<id>-tester-<repo>.md`: one row per
+case, starting with the case id, `case | PASS` / `case | Failed — BUG: <impact for QC>` / `case | Not tested — <reason>` + evidence
 files, then issues. Return `verdict: PASS` only when every case in scope passed; otherwise `FAIL`
 (or `status: blocked` when the environment stopped you).
 

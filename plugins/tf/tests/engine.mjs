@@ -254,8 +254,8 @@ test('a small task runs only the cases its change touches', async () => {
 test('job limits: 12 per dispatch, 6 per group', async () => {
   const nine = D([J('J1', 'setup', 'all', 1), J('J2', 'dev', 'be', 2), J('J3', 'dev', 'mobile', 2), J('J4', 'tester', 'all', 2, 'FLOWS a'), J('J5', 'tester', 'all', 2, 'FLOWS b'), ...gates(['be', 'mobile'], 3, 6), J('J8', 'tester', 'be', 4), J('J9', 'tester', 'mobile', 4)])
   expect((await sim([nine, pack(10, ['be', 'mobile']), close])).out.status).toBe('done')
-  const seven = D([1, 2, 3, 4, 5, 6, 7].map(n => J(`J${n}`, 'tester', 'all', 1)))
-  expect((await sim([seven, seven], std, { mode: 'e2e' })).out.question).toContain('at most 6 run at the same time')
+  const seven = D([1, 2, 3, 4, 5, 6, 7].map(n => J(`J${n}`, 'tester', 'all', 1, 'x', 'sonnet', 'C1')))
+  expect((await sim([seven, seven], std, { mode: 'e2e', snapshot: '/r/.pipeline/T-1/cases.approved.json', runScope: ['C1'] })).out.question).toContain('at most 6 run at the same time')
 })
 
 test('writer and judge never share a group; one dev job per repo', async () => {
@@ -329,4 +329,76 @@ test('build and qc never run a PACKAGE job on code no tester passed, whatever th
   // The same PACKAGE job is accepted once a tester for that repo sits between the dev job and it.
   const fine = await sim([D([J('J1', 'dev', 'be', 1), J('J2', 'tester', 'be', 2, 'x', 'sonnet', 'C1'), J('J3', 'reviewer', 'be', 3, 'PACKAGE')], 'S'), close])
   expect(fine.ran.some(x => x.startsWith('J3'))).toBe(true)
+})
+
+// ── e2e: approved test cases ────────────────────────────────────────────────
+const SNAP = { mode: 'e2e', snapshot: '/r/.pipeline/T-1/cases.approved.json', runScope: ['TC1', 'TC2'] }
+const casesD = (extra = {}) => ({ decision: 'cases', size: 'M', note: 'n', caseIds: ['TC1', 'TC2'], target: 'local', ...extra })
+const testerOk = (lines) => (label) => (label.includes('tester') ? ok('PASS', { cases: lines }) : ok('NONE'))
+
+test('e2e without approved cases stops at status cases, before any job', async () => {
+  const r = await sim([casesD({ questions: [{ id: 'Q1', question: 'q?', quote: 'x', options: ['a', 'b'], assume: 'a', who: 'user', cases: ['TC2'] }], missingSpecs: ['screen X'] })], std, { mode: 'e2e' })
+  expect(r.out.status).toBe('cases')
+  expect(r.out.caseIds).toEqual(['TC1', 'TC2'])
+  expect(r.out.clarifyRound).toBe(1)
+  expect(r.out.missingSpecs).toEqual(['screen X'])
+  expect(r.ran).toEqual([])
+  expect(r.pmPrompts[0]).toContain('E2E test cases first')
+})
+
+test('e2e gate holds on every turn: a dispatch or a clarify without approved cases is rejected', async () => {
+  const r = await sim([D([J('J1', 'tester', 'all', 1, 'x', 'sonnet', 'TC1')]), casesD()], std, { mode: 'e2e' })
+  expect(r.out.status).toBe('cases')
+  expect(r.ran).toEqual([])
+  expect(r.pmPrompts[1]).toContain('e2e runs only approved test cases')
+  const c = await sim([{ decision: 'clarify', size: 'M', note: 'n', questions: [{ id: 'Q1', question: 'q', quote: 'x', options: ['a'], assume: 'a' }] }, casesD()], std, { mode: 'e2e' })
+  expect(c.out.status).toBe('cases')
+  expect(c.pmPrompts[1]).toContain('the questions go with the cases')
+})
+
+test('e2e cases: --assume allows no questions; caseIds are required', async () => {
+  const q = [{ id: 'Q1', question: 'q', quote: 'x', options: ['a'], assume: 'a' }]
+  const r = await sim([casesD({ questions: q }), casesD()], std, { mode: 'e2e', flags: { assume: true } })
+  expect(r.out.status).toBe('cases')
+  expect(r.out.assume).toBe(true)
+  expect(r.pmPrompts[1]).toContain('--assume')
+  const n = await sim([casesD({ caseIds: [] }), casesD()], std, { mode: 'e2e' })
+  expect(n.pmPrompts[1]).toContain('needs caseIds')
+})
+
+test('e2e: approved without a snapshot, or a snapshot without a run scope, is an error', async () => {
+  expect((await sim([], std, { mode: 'e2e', approved: true })).out.status).toBe('error')
+  expect((await sim([], std, { mode: 'e2e', snapshot: '/x.json' })).out.status).toBe('error')
+})
+
+test('e2e with a snapshot: PM on sonnet, testers only inside the run scope, read the snapshot', async () => {
+  const outside = D([J('J1', 'tester', 'all', 1, 'x', 'sonnet', 'TC1, TC9')])
+  const good = D([J('J2', 'tester', 'all', 1, 'x', 'sonnet', 'TC1, TC2')])
+  const r = await sim([outside, good, close], testerOk(['TC1 | PASS', 'TC2 | Failed — BUG: x']), SNAP)
+  expect(r.out.status).toBe('verified')
+  expect(r.pmPrompts[1]).toContain('outside this run')
+  expect(r.ran).toEqual(['J2 tester:all(sonnet)'])
+  expect(r.prompts['J2 tester:all']).toContain('read each case from /r/.pipeline/T-1/cases.approved.json')
+  expect(r.prompts['J2 tester:all']).toContain('--mark-written')
+  expect(r.pmPrompts[0]).toContain('Do NOT analyse the task again')
+  const none = await sim([D([J('J1', 'tester', 'all', 1)]), good, close], testerOk(['TC1 | PASS', 'TC2 | PASS']), SNAP)
+  expect(none.pmPrompts[1]).toContain('needs "cases"')
+})
+
+test('e2e close needs a result for every case in the run scope; FLOWS jobs do not count, blocked does', async () => {
+  const one = D([J('J1', 'tester', 'all', 1, 'x', 'sonnet', 'TC1, TC2')])
+  const partial = await sim([one, close, escalate], testerOk(['TC1 | PASS']), SNAP)
+  expect(partial.pmPrompts[2]).toContain('no tester result for TC2')
+  const flowsOnly = await sim([D([J('J1', 'tester', 'all', 1, 'FLOWS write', 'sonnet', 'TC1, TC2')]), close, escalate],
+    (label) => ok('NONE', { cases: ['TC1 | PASS', 'TC2 | PASS'] }), SNAP)
+  expect(flowsOnly.pmPrompts[2]).toContain('no tester result for TC1, TC2')
+  const blocked = await sim([one, close], (label) => ({ status: 'blocked', verdict: 'FAIL', summary: 's', cases: ['TC1 | PASS', 'TC2 | Not tested — no emulator'] }), SNAP)
+  expect(blocked.out.status).toBe('verified')
+})
+
+test('decision=cases outside e2e, or after approval, is rejected', async () => {
+  const b = await sim([casesD(), escalate])
+  expect(b.pmPrompts[1]).toContain('decision=cases is for e2e only')
+  const a = await sim([casesD(), escalate], std, SNAP)
+  expect(a.pmPrompts[1]).toContain('already approved')
 })
