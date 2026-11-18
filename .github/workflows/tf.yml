@@ -39,3 +39,9 @@ jobs:
         run: node --test plugins/tf/tests/digest.mjs
       - name: Review round (one answer per PR)
         run: node --test plugins/tf/tests/feedback.mjs
+      - name: E2E test cases (parse, approve, status, results)
+        run: node --test plugins/tf/tests/cases.mjs
+      - name: E2E runner (fake flows) and evidence marking
+        run: node --test plugins/tf/tests/flow-run.mjs plugins/tf/tests/annotate.mjs
+      - name: Task lock and commit fingerprint
+        run: node --test plugins/tf/tests/task.mjs

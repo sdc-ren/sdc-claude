@@ -21,7 +21,12 @@
 // FLOW_LIB (the workspace's shared helpers, <root>/.pipeline/_lib — `await import(`${process.env.FLOW_LIB}/auth.mjs`)`).
 // A web step that fails also saves <case>-fail-<step>.page.txt: what was on the page (roles, names, test ids)
 // with ready-to-use locators — read it before editing the flow instead of guessing and re-running.
-// Result: <EVD_DIR>/<case>.verdict.json  { case, status: PASS|FAIL|BLOCKED, steps[], shots[], warnings[], trace?, error }
+// Pointing at the bug (evidence QC can read without the flow): expect(cond, msg, { at, label, expected, actual })
+// marks the element `at` (a Playwright locator or selector on Web, a find() selector on Android) when it fails;
+// mark(at, label) adds another marked element to the next shot; shot(name, { caption, crop }) gives the image a
+// one-line caption and asks for a close-up. flow-run.mjs draws the red boxes and labels (annotate.mjs).
+// Result: <EVD_DIR>/<case>.verdict.json  { case, status: PASS|FAIL|BLOCKED, platform, steps[], shots[], marks[],
+//         captions{}, crop[], warnings[], trace?, error }
 // Standard: <plugin>/guidelines/e2e-testing.md
 // Exit code: 0 PASS · 1 FAIL · 2 BLOCKED (environment, not the app).
 
@@ -31,16 +36,28 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 export class Blocked extends Error {}
+// A failed expect() carries what to point at, so the failure screenshot marks the wrong element.
+export class ExpectError extends Error {
+  constructor(msg, mark) { super(`expect failed: ${msg}`); this.mark = mark }
+}
+// Internal case ids are what file names, verdicts and evidence are made of (QC ids are display-only).
+export const CASE_ID = /^[A-Za-z0-9_-]{1,64}$/
 const env = process.env
 const EVD = resolve(env.EVD_DIR || 'evd')
 const RUN = env.RUN_ID || String(Math.floor(Date.now() / 1000))
 
-function base(caseId) {
+function base(caseId, platform) {
+  if (!CASE_ID.test(String(caseId))) {
+    console.error(`flow-kit: case id ${JSON.stringify(String(caseId))} is not an internal id ([A-Za-z0-9_-], max 64) — name the flow file and the case by the id cases.mjs gives`)
+    process.exit(2)
+  }
   mkdirSync(EVD, { recursive: true })
-  const v = { case: String(caseId), status: 'PASS', target: env.TARGET || '', baseUrl: env.BASE_URL || '', runId: RUN, startedAt: new Date().toISOString(), steps: [], shots: [], error: '' }
+  const v = { case: String(caseId), status: 'PASS', platform, target: env.TARGET || '', baseUrl: env.BASE_URL || '', runId: RUN, startedAt: new Date().toISOString(), steps: [], shots: [], marks: [], captions: {}, crop: [], error: '' }
   const t0 = Date.now()
   const uniq = (prefix = 'tf') => `${prefix}-${RUN}`
-  const expect = (cond, msg) => { if (!cond) throw new Error(`expect failed: ${msg}`) }
+  const expect = (cond, msg, o = {}) => {
+    if (!cond) throw new ExpectError(msg, { at: o.at, label: o.label || msg, expected: o.expected, actual: o.actual })
+  }
   const blocked = (reason) => { throw new Blocked(reason) }
   async function api(method, path, { body, token, headers = {} } = {}) {
     const url = /^https?:/.test(path) ? path : `${(env.API_URL || '').replace(/\/$/, '')}${path}`
@@ -63,7 +80,28 @@ function base(caseId) {
     console.log(`${v.case} ${v.status}${v.error ? ` — ${v.error.split('\n')[0]}` : ''}`)
     process.exitCode = v.status === 'PASS' ? 0 : v.status === 'BLOCKED' ? 2 : 1
   }
-  return { v, uniq, expect, blocked, api, finish }
+  // Marks wait here until the next shot() takes them.
+  const pending = []
+  const take = (file, fullPage, scroll) => {
+    for (const m of pending.splice(0)) {
+      const box = m.box && fullPage && scroll ? [m.box[0] + scroll[0], m.box[1] + scroll[1], m.box[2], m.box[3]] : m.box
+      v.marks.push({ file, box, label: String(m.label || '').slice(0, 200), ...(m.expected !== undefined ? { expected: String(m.expected).slice(0, 300) } : {}), ...(m.actual !== undefined ? { actual: String(m.actual).slice(0, 300) } : {}), ...(m.step ? { step: m.step } : {}) })
+    }
+  }
+  const noteShot = (file, o) => {
+    if (o.caption) v.captions[file] = String(o.caption).slice(0, 200)
+    if (o.crop) v.crop.push(file)
+  }
+  return { v, uniq, expect, blocked, api, finish, pending, take, noteShot }
+}
+
+// The failure shot of a step (or of the flow, when the error came from outside any step): the element a
+// failed expect() named gets a box and its label; any other error gets a label without a box.
+async function failMark(k, markOf, err, stepName) {
+  const first = String(err && err.message || err).split('\n')[0].replace(/^expect failed: /, '').slice(0, 160)
+  const m = err && err.mark
+  const box = m && m.at ? await markOf(m.at).catch(() => null) : null
+  k.pending.push({ box, label: m ? m.label : `${stepName}: ${first}`, expected: m && m.expected, actual: m && m.actual, step: stepName })
 }
 
 function stepper(v, onFail) {
@@ -74,7 +112,11 @@ function stepper(v, onFail) {
     try { return await fn() } catch (e) {
       s.ok = false
       s.error = String(e && e.message || e).slice(0, 500)
-      try { await onFail(name) } catch {}
+      if (!(e && e.shot)) {
+        try { await onFail(name, e) } catch {}
+        // The innermost failing step took the shot; outer steps re-throw without another one.
+        try { if (e && typeof e === 'object') e.shot = true } catch {}
+      }
       throw e
     } finally { s.ms = Date.now() - t }
   }
@@ -106,7 +148,7 @@ export async function describePage(page, { max = 9000 } = {}) {
 }
 
 export async function webFlow(caseId, fn, opts = {}) {
-  const k = base(caseId)
+  const k = base(caseId, 'web')
   let b = null
   try {
     const { openBrowser } = await import('./browser.mjs')
@@ -141,21 +183,42 @@ export async function webFlow(caseId, fn, opts = {}) {
       if (resp) await resp
       await ready(selector)
     }
+    // Where an element is on the screenshot: scrolled into view first, so the marked area is not hidden.
+    const markOf = async (at) => {
+      const l = typeof at === 'string' ? page.locator(at).first() : at && typeof at.first === 'function' ? at.first() : at
+      if (!l || typeof l.boundingBox !== 'function') return null
+      await l.scrollIntoViewIfNeeded({ timeout: 2000 }).catch(() => {})
+      const b = await l.boundingBox({ timeout: 2000 }).catch(() => null)
+      return b ? [b.x, b.y, b.width, b.height].map(Math.round) : null
+    }
+    const mark = async (at, label, extra = {}) => { k.pending.push({ box: await markOf(at), label, ...extra }) }
     const shot = async (name, o = {}) => {
-      const file = `${k.v.case}-${name}.png`
+      const file = `${k.v.case}-${String(name).replace(/[^\w-]+/g, '_').slice(0, 60)}.png`
+      const scroll = o.fullPage ? await page.evaluate(() => [window.scrollX, window.scrollY]).catch(() => null) : null
       await page.screenshot({ path: join(EVD, file), fullPage: !!o.fullPage })
       k.v.shots.push(file)
+      k.take(file, !!o.fullPage, scroll)
+      k.noteShot(file, o)
       return file
     }
-    const step = stepper(k.v, async (name) => {
+    let failShot = false
+    const step = stepper(k.v, async (name, err) => {
+      failShot = true
       const tag = `fail-${name.replace(/[^\w-]+/g, '_').slice(0, 40)}`
+      await failMark(k, markOf, err, name)
       await shot(tag)
       // The page as it was when the step failed, so the fix comes from what is really there.
       const file = `${k.v.case}-${tag}.page.txt`
       writeFileSync(join(EVD, file), await describePage(page))
       k.v.page = file
     })
-    await fn({ page, context: b.context, step, shot, waitApi, ready, gotoReady, describe: () => describePage(page), lib: env.FLOW_LIB || '', api: k.api, uniq: k.uniq, expect: k.expect, blocked: k.blocked, env })
+    try {
+      await fn({ page, context: b.context, step, shot, mark, waitApi, ready, gotoReady, describe: () => describePage(page), lib: env.FLOW_LIB || '', api: k.api, uniq: k.uniq, expect: k.expect, blocked: k.blocked, env })
+    } catch (e) {
+      // Failed outside any step (an expect() after the steps): still leave a marked failure shot.
+      if (!failShot && !(e instanceof Blocked)) { try { await failMark(k, markOf, e, 'end'); await shot('fail-end') } catch {} }
+      throw e
+    }
     if (tracing) { try { await b.context.tracing.stop() } catch {} }
     k.finish()
   } catch (e) {
@@ -170,7 +233,7 @@ export async function webFlow(caseId, fn, opts = {}) {
 }
 
 export async function androidFlow(caseId, fn) {
-  const k = base(caseId)
+  const k = base(caseId, 'android')
   const serial = env.ANDROID_SERIAL
   const ADB = env.ADB || 'adb'
   const adb = (...args) => execFileSync(ADB, ['-s', serial, ...args], { stdio: 'pipe', timeout: 60_000, maxBuffer: 64 * 1024 * 1024 })
@@ -201,16 +264,36 @@ export async function androidFlow(caseId, fn) {
   }
   const type = async (text) => { adb('shell', 'input', 'text', String(text).replace(/ /g, '%s')); await sleep(300) }
   const key = async (code) => { adb('shell', 'input', 'keyevent', String(code)); await sleep(300) }
-  const shot = async (name) => {
-    const file = `${k.v.case}-${name}.png`
+  // Screen pixels of a node (uiautomator bounds are already in screencap pixels).
+  const markOf = async (sel) => {
+    const n = sel && sel.bounds ? sel : find(sel)
+    if (!n || !n.bounds) return null
+    const [x1, y1, x2, y2] = n.bounds
+    return [x1, y1, x2 - x1, y2 - y1]
+  }
+  const mark = async (at, label, extra = {}) => { k.pending.push({ box: await markOf(at).catch(() => null), label, ...extra }) }
+  const shot = async (name, o = {}) => {
+    const file = `${k.v.case}-${String(name).replace(/[^\w-]+/g, '_').slice(0, 60)}.png`
     writeFileSync(join(EVD, file), adb('exec-out', 'screencap', '-p'))
     k.v.shots.push(file)
+    k.take(file, false, null)
+    k.noteShot(file, o)
     return file
   }
+  let failShot = false
   try {
     if (!serial) k.blocked('ANDROID_SERIAL not set — start the task emulator first')
-    const step = stepper(k.v, (name) => shot(`fail-${name.replace(/[^\w-]+/g, '_').slice(0, 40)}`))
-    await fn({ adb, dump, find, waitFor, tap, type, key, shot, step, sleep, api: k.api, uniq: k.uniq, expect: k.expect, blocked: k.blocked, env })
+    const step = stepper(k.v, async (name, err) => {
+      failShot = true
+      await failMark(k, markOf, err, name)
+      await shot(`fail-${name.replace(/[^\w-]+/g, '_').slice(0, 40)}`)
+    })
+    try {
+      await fn({ adb, dump, find, waitFor, tap, type, key, shot, mark, step, sleep, api: k.api, uniq: k.uniq, expect: k.expect, blocked: k.blocked, env })
+    } catch (e) {
+      if (!failShot && serial && !(e instanceof Blocked)) { try { await failMark(k, markOf, e, 'end'); await shot('fail-end') } catch {} }
+      throw e
+    }
     k.finish()
   } catch (e) {
     k.finish(e)

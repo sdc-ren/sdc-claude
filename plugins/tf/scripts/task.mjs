@@ -8,8 +8,11 @@
 //       input points at (sources.mjs) → the user's words → the first link (host + path + short hash).
 //       Prints JSON: { slug, dir, created, restoredFromArchive, round, nextRound, status, mode, prs{},
 //       worktrees{}, legacyDirs[], legacyWorktrees[], format: 'current'|'old'|'new', locked }
-//   lock <dir> [--ttl 5400]      → {"conflict":false} or {"conflict":true,"holder":…}
-//   unlock <dir>
+//   lock <dir> [--ttl 5400] [--token T] [--steal]
+//                                → {"conflict":false,"token":…} (keep the token: renew with it, unlock with it)
+//                                  or {"conflict":true,"stale":bool,"holder":…}; an expired lock is taken only with --steal
+//   unlock <dir> --token T [--force]   releases only the holder's lock
+//   commit <taskDir>             → {"commit":"be:<sha>,fe:<sha>*<dirty>"} what code a run tests
 //   new-round <dir> <round>      archive plan/board/jobs of the previous round into history/r<round-1>/
 //   journal <dir> <text…>        append "<ISO time> <text>" to journal.md
 //   handoff-get <dir>            HANDOFF.md header as JSON
@@ -20,7 +23,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, s
 import { execSync, execFileSync } from 'node:child_process'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { createHash } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { SH, base, nodeCmd, under } from './platform.mjs'
 import { classify, keyFrom } from './sources.mjs'
 
@@ -199,15 +202,64 @@ function resolveTask(root, input, repos, name) {
   }
 }
 
-function lock(dir, ttl = 5400) {
+// One run holds a task at a time. The lock is taken atomically (create-or-fail) and carries a token: only the
+// holder renews or releases it. An expired lock is not taken over silently — it is reported as stale, and the
+// caller decides (--steal) after telling the user.
+function lock(dir, ttl = 5400, { token = '', steal = false } = {}) {
   mkdirSync(dir, { recursive: true })
   const f = join(dir, '.lock')
+  const read = () => { try { return JSON.parse(readFileSync(f, 'utf8')) } catch { return null } }
+  const ageOf = () => { try { return (Date.now() - statSync(f).mtimeMs) / 1000 } catch { return Infinity } }
+  const body = (t) => JSON.stringify({ token: t, startedAt: Math.floor(Date.now() / 1000), pid: process.ppid }) + '\n'
+  const held = read()
+  if (held && token && held.token === token) { writeFileSync(f, body(token)); return { conflict: false, token, renewed: true } }
   if (existsSync(f)) {
-    const age = (Date.now() - statSync(f).mtimeMs) / 1000
-    if (age < ttl) return { conflict: true, holder: readFileSync(f, 'utf8').trim(), ageSec: Math.round(age) }
+    const age = ageOf()
+    if (age < ttl || !steal) return { conflict: true, stale: age >= ttl, holder: held ? { startedAt: held.startedAt, pid: held.pid } : readFileSync(f, 'utf8').trim(), ageSec: Math.round(age) }
+    rmSync(f, { force: true })
   }
-  writeFileSync(f, JSON.stringify({ startedAt: Math.floor(Date.now() / 1000), pid: process.ppid }) + '\n')
-  return { conflict: false }
+  const t = randomBytes(12).toString('hex')
+  try { writeFileSync(f, body(t), { flag: 'wx' }) } catch (e) {
+    if (e && e.code === 'EEXIST') return { conflict: true, stale: false, holder: read(), ageSec: 0 }
+    throw e
+  }
+  return { conflict: false, token: t }
+}
+
+// Release only with the holder's token (a lock from before tokens existed has none and can be released).
+function unlock(dir, token = '', force = false) {
+  const f = join(dir, '.lock')
+  if (!existsSync(f)) return { unlocked: true, held: false }
+  let held = null
+  try { held = JSON.parse(readFileSync(f, 'utf8')) } catch {}
+  if (!force && held && held.token && held.token !== token) return { unlocked: false, reason: 'the lock belongs to another run (token differs)' }
+  rmSync(f, { force: true })
+  return { unlocked: true }
+}
+
+// What code a run tested: the HEAD of every worktree of the task, plus a fingerprint of uncommitted changes.
+// A result recorded with another value no longer counts (cases.mjs).
+export function commitOf(taskDir) {
+  const dir = resolve(taskDir)
+  const slug = basename(dir)
+  const root = dir.split(/[\\/]\.pipeline[\\/]/)[0]
+  const wts = join(root, '.worktrees', slug)
+  if (!existsSync(wts)) return ''
+  const parts = []
+  for (const name of readdirSync(wts).sort()) {
+    const wt = join(wts, name)
+    const head = git(wt, ['rev-parse', '--short=10', 'HEAD'])
+    if (!head) continue
+    const dirty = git(wt, ['status', '--porcelain'])
+    let untracked = ''
+    if (dirty) {
+      const files = git(wt, ['ls-files', '--others', '--exclude-standard'])
+      if (files) { try { untracked = execFileSync('git', ['-C', wt, 'hash-object', '--stdin-paths'], { input: files, stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, timeout: 30_000 }).toString() } catch {} }
+    }
+    const mark = dirty ? `*${createHash('sha256').update(git(wt, ['diff', 'HEAD']) + dirty + untracked).digest('hex').slice(0, 8)}` : ''
+    parts.push(`${name}:${head}${mark}`)
+  }
+  return parts.join(',')
 }
 
 function newRound(dir, round) {
@@ -354,8 +406,19 @@ if (isMain) {
         out(resolveTask(a[0], a.slice(1).join(' '), repos, name))
         break
       }
-      case 'lock': out(lock(resolve(a[0]), Number(flag('ttl', 5400)))); break
-      case 'unlock': rmSync(join(resolve(a[0]), '.lock'), { force: true }); out({ unlocked: true }); break
+      case 'lock': {
+        const token = flag('token', ''); const steal = a.includes('--steal')
+        out(lock(resolve(a[0]), Number(flag('ttl', 5400)), { token, steal }))
+        break
+      }
+      case 'unlock': {
+        const token = flag('token', ''); const force = a.includes('--force')
+        const r = unlock(resolve(a[0]), token, force)
+        out(r)
+        if (!r.unlocked) process.exitCode = 1
+        break
+      }
+      case 'commit': out({ commit: commitOf(a[0]) }); break
       case 'new-round': out(newRound(resolve(a[0]), a[1])); break
       case 'journal': {
         const dir = resolve(a[0])
@@ -408,7 +471,7 @@ if (isMain) {
         break
       }
       default:
-        console.error('usage: task.mjs resolve <root> <input> [--repos a,b] [--name N] | lock <dir> | unlock <dir> | new-round <dir> <n> | journal <dir> <text> | handoff-get <dir> | engine <dir> <engine.js> [--title T] | head <worktree> | uncommit <worktree> <sha> | legacy <root> [--apply]')
+        console.error('usage: task.mjs resolve <root> <input> [--repos a,b] [--name N] | lock <dir> [--token T] [--steal] | unlock <dir> --token T [--force] | commit <taskDir> | new-round <dir> <n> | journal <dir> <text> | handoff-get <dir> | engine <dir> <engine.js> [--title T] | head <worktree> | uncommit <worktree> <sha> | legacy <root> [--apply]')
         process.exit(1)
     }
   } catch (e) {

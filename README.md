@@ -41,7 +41,7 @@ and opens the PR. It stops for you only when the ticket has two plausible readin
 | `/tf:qc` | Answer a QC report on a task tf already did |
 | `/tf:address-review` | Check and answer the team's review on the PRs tf pushed |
 | `/tf:review` | Review a teammate's PR by reading the code |
-| `/tf:e2e` | Run e2e only, or the regression suite |
+| `/tf:e2e` | Approve the test cases, then run exactly those (bugs marked on the screenshots), or the regression suite |
 | `/tf:demo` | Turn a design canvas into a clickable demo for a client |
 | `/tf:digest` | Summarise your Zalo group chats: what was decided, what is open, what needs you |
 | `/tf:status` | See what tasks hold; check the machine (`--doctor`) |

@@ -8,7 +8,11 @@
 // args: { root, slug, dir, mode: 'build'|'qc'|'feedback'|'review'|'e2e', round, input, description?, sources?, tracker?, cases?, notes?,
 //         prs?: {repo: url}, worktrees?: {repo: path|null}, worktreePaths?: {repo: path}, format?: 'new'|'old'|'current',
 //         flags?: { approve?: bool, draft?: bool, check?: bool (feedback: triage only), assume?: bool (never ask, assume; no design approval on L) }, approved?: bool, clarifyRound?: n (times the user already answered questions), lang?, writingLang?, scripts, config }
-// returns { status: 'done'|'triaged'|'verified'|'reviewed'|'escalate'|'approve'|'clarify'|'handoff'|'error', … }
+//         e2e only: snapshot?: <task>/cases.approved.json (the test cases the user approved — verified by the orchestrator with cases.mjs),
+//         runScope?: [internal case ids this run must give a result for], editRound?: n (times the user edited the cases)
+// returns { status: 'done'|'triaged'|'verified'|'reviewed'|'escalate'|'approve'|'clarify'|'cases'|'handoff'|'error', … }
+// e2e without a snapshot always stops at 'cases' (cases.md written, nothing run): the user edits and approves the
+// test cases, the orchestrator freezes them (cases.mjs approve) and relaunches with snapshot + runScope.
 
 export const meta = {
   name: 'task-flow',
@@ -46,10 +50,13 @@ const DISPATCH = {
   type: 'object',
   required: ['decision', 'size', 'note'],
   properties: {
-    decision: { type: 'string', enum: ['dispatch', 'close', 'escalate', 'approve', 'clarify'] },
+    decision: { type: 'string', enum: ['dispatch', 'close', 'escalate', 'approve', 'clarify', 'cases'] },
+    caseIds: { type: 'array', items: { type: 'string' }, description: 'decision=cases (e2e only): the internal ids of the cases you wrote to cases.md, in order.' },
+    missingSpecs: { type: 'array', items: { type: 'string' }, description: 'decision=cases: one line per screen or flow with no spec to take the expected result from — what is missing and how to add it.' },
+    target: { type: 'string', description: 'decision=cases: the target you propose (local, dev, …), as written in cases.md.' },
     questions: {
       type: 'array',
-      description: 'decision=clarify (first decision of a run only, before plan.md): what the brief leaves open and an answer would change what gets built.',
+      description: 'decision=clarify (first decision of a run only, before plan.md): what the brief leaves open and an answer would change what gets built. In e2e the questions go with decision=cases instead, each naming the cases it affects.',
       items: {
         type: 'object',
         required: ['id', 'question', 'quote', 'options', 'assume'],
@@ -60,6 +67,7 @@ const DISPATCH = {
           options: { type: 'array', items: { type: 'string' }, description: '2–4 readings, each with what it would make you build.' },
           assume: { type: 'string', description: 'The option you would take if nobody answers, and why.' },
           who: { type: 'string', enum: ['user', 'po'], description: 'po: a product decision the ticket owner must make; user: the person running the command can say.' },
+          cases: { type: 'array', items: { type: 'string' }, description: 'e2e: the case ids whose expected result depends on the answer.' },
         },
       },
     },
@@ -154,11 +162,17 @@ const mode = ROLES[A.mode] ? A.mode : 'build'
 const round = Math.max(1, Number(A.round) || 1)
 const flags = A.flags || {}
 const clarifyRound = Math.max(0, Number(A.clarifyRound) || 0)
+const editRound = Math.max(0, Number(A.editRound) || 0)
+// e2e runs only an approved snapshot of the test cases; runScope = the ids this run must give a result for.
+const snapshot = mode === 'e2e' && typeof A.snapshot === 'string' && A.snapshot ? A.snapshot : ''
+const runScope = snapshot && Array.isArray(A.runScope) ? A.runScope.map(String).filter(Boolean) : []
 const lang = A.lang || 'en'
 const writingLang = A.writingLang || 'en'
 const prs = A.prs || {}
 const worktrees = A.worktrees || {}
 if (!root || !slug || !dir || !S || !cfg) return { status: 'error', note: 'args need { root, slug, dir, scripts, config } — see the header of workflow.mjs' }
+if (mode === 'e2e' && A.approved && !snapshot) return { status: 'error', note: 'e2e: approved without a snapshot — approve the cases with cases.mjs approve and pass snapshot (+ runScope)' }
+if (snapshot && !runScope.length) return { status: 'error', note: 'e2e: a snapshot needs runScope (cases.mjs scope) — the ids this run must give a result for' }
 const langRule = `Report language: ${lang} (all .pipeline files and free-text you return). Writing language for commits/PR/ticket comments: ${writingLang}, per ${S}/../guidelines/ (git.md, pr-description.md, pr-review.md, ticket-comment.md, e2e-testing.md).`
 const budgetLow = () => budget.total && budget.remaining() < RESERVE
 // Cost and timing are measured after the run from the agents' transcripts (scripts/metrics.mjs); the
@@ -175,6 +189,7 @@ const context =
   `Brief: ${dir}/ticket.md (the user's request and every source it points at${A.sources ? `: ${A.sources}` : ''}). ` +
   (A.tracker === false ? 'No tracker issue is a source: skip ticket-comment.md; put the QC-facing summary in HANDOFF.md.\n' : 'A tracker issue is a source: ticket-comment.md is drafted at close.\n') +
   (A.cases ? `Target cases: ${A.cases}\n` : '') + (A.notes ? `User notes: ${A.notes}\n` : '') +
+  (snapshot ? `Approved test cases (frozen; the only cases of this run): ${snapshot} · run scope: ${runScope.join(', ')}\n` : '') +
   `PRs: ${JSON.stringify(prs)}\nWorktrees (existing): ${JSON.stringify(worktrees)}\nWorktree paths (one folder per task, one subfolder per repo — use exactly these): ${JSON.stringify(A.worktreePaths || {})}\n` +
   `Flags: approve=${!!flags.approve} draft=${!!flags.draft}${mode === 'feedback' ? ` check=${!!flags.check}` : ''}\n` +
   (mode === 'feedback' ? `PR feedback: ${dir}/feedback.md (fetched review threads R<n>, reviews, conversation comments) · triage: ${dir}/feedback-triage.md · reply drafts: ${dir}/feedback-replies.md\n` : '') +
@@ -235,8 +250,23 @@ function tested(j, jobs) {
   return tests.length > 0 && tests.reduce((a, b) => (b.seq > a.seq ? b : a)).report.verdict === 'PASS'
 }
 
+// e2e: an approved snapshot is the only thing a run tests, and every id in runScope needs a result.
+const caseIdsOf = (j) => String(j.cases || '').split(',').map((x) => x.trim()).filter(Boolean)
+function e2eResults() {
+  const latest = new Map()
+  for (const x of ledger) {
+    if (x.job.role !== 'tester' || isFlows(x.job) || !x.report || !['done', 'blocked'].includes(x.report.status)) continue
+    for (const line of x.report.cases || []) {
+      const id = String(line).split('|')[0].trim()
+      if (id) latest.set(id, { seq: x.seq, line: String(line) })
+    }
+  }
+  return latest
+}
+
 function checkDispatch(d) {
   if (mode === 'feedback' && flags.check) return '--check is triage only: write feedback-triage.md and return close, no jobs'
+  if (mode === 'e2e' && !snapshot) return 'e2e runs only approved test cases: write cases.md (pm.md "e2e: cases") and return decision=cases — no job runs before the user approves them'
   const jobs = d.jobs || []
   if (!jobs.length) return 'decision=dispatch needs at least one job'
   if (jobs.length > MAX_JOBS) return `at most ${MAX_JOBS} jobs per dispatch (got ${jobs.length}) — dispatch the first groups now, the rest next turn`
@@ -250,6 +280,14 @@ function checkDispatch(d) {
   }
   const ids = jobs.map((j) => j.id)
   if (new Set(ids).size !== ids.length) return 'duplicate job ids in one dispatch'
+  if (snapshot) {
+    for (const j of jobs.filter((x) => x.role === 'tester' && !isFlows(x))) {
+      const cs = caseIdsOf(j)
+      if (!cs.length) return `tester job ${j.id} needs "cases": the ids from the run scope it runs (${runScope.join(', ')})`
+      const out = cs.filter((c) => !runScope.includes(c))
+      if (out.length) return `tester job ${j.id} names cases outside this run's scope: ${out.join(', ')} — the run scope is ${runScope.join(', ')} (approved cases only)`
+    }
+  }
   if (CODE_MODES.includes(mode)) {
     const sz = d.size || size
     const devRepos = [...new Set(jobs.filter((j) => j.role === 'dev').map((j) => j.repo))]
@@ -297,7 +335,13 @@ function checkDispatch(d) {
 function checkClose(d) {
   const c = d.close || {}
   const ok = (x) => x.report && x.report.status === 'done'
-  if (mode === 'e2e') return ledger.some((x) => x.job.role === 'tester' && !isFlows(x.job) && ok(x)) ? '' : 'e2e cannot close without a finished tester job'
+  if (mode === 'e2e') {
+    if (!snapshot) return 'e2e cannot close without approved cases — return decision=cases'
+    const got = e2eResults()
+    const missing = runScope.filter((id) => !got.has(id))
+    if (missing.length) return `e2e cannot close: no tester result for ${missing.join(', ')} — every case in the run scope needs PASS, Failed or Not tested (with what is missing) from a tester that finished or was blocked`
+    return ''
+  }
   if (mode === 'review') return ledger.some((x) => x.job.role === 'reviewer' && ok(x)) ? '' : 'review cannot close without a finished reviewer job'
   if (mode === 'feedback' && flags.check) return ''
   const devs = ledger.filter((x) => x.job.role === 'dev')
@@ -355,6 +399,11 @@ function jobPrompt(j) {
       : '') +
     (j.role === 'tester' && !isFlows(j) && String(j.cases || '').trim()
       ? `Cases: ${j.cases} — run ONLY these (flow-run.mjs --cases ${String(j.cases).replace(/\s+/g, '')}). Do not run, re-run or repair any other saved flow, and add no smoke case.\n`
+      : '') +
+    (j.role === 'tester' && snapshot
+      ? `Approved cases: read each case from ${snapshot} (never from cases.md, which the user may still be editing). A flow is flows/<id>.mjs with the internal id; ` +
+        `after you write or rewrite one, record it: node ${S}/flow-run.mjs ${dir} --mark-written <ids>. Point at every failure: expect(cond, msg, { at, label, expected, actual }) (tester.md "Evidence"). ` +
+        `Report one line per case that starts with its id: "<id> | PASS" · "<id> | Failed — BUG: <impact>" · "<id> | Not tested — <what is missing>".\n`
       : '') +
     (j.role === 'tester' && !isFlows(j) && j._impact && j._impact.length
       ? `Impact cases (from the reviewer gate of this dispatch — other users of code this change touched; write and run one flow each on top of your cases, tester.md): ${j._impact.join(' · ')}\n`
@@ -524,7 +573,9 @@ const RULES = CODE_MODES.includes(mode)
     `a tester or reviewer never shares a group with a dev job on its repo (a FLOWS tester may); a reviewer gate never shares a group with a tester of its repo; ` +
     `a gate runs on the model of that repo's last dev job, whatever model you give it; on M/L a PACKAGE job needs a gate SHIP after that repo's last dev job; on XS/S the gate may be left out (dev → tester → PACKAGE in one dispatch: the PACKAGE job gates first, and a dev job that changed more than ${FAST_FILES} files stops the dispatch for a gate); no FLOWS job on XS or in a fix round; XS is one repo; close needs, for EACH changed repo on its own, a tester PASS after that repo's last dev job and then a PACKAGE reviewer SHIP with a ready PR started after that PASS.\n`
   : ''
-const pmModel = (turn) => (turn === 1 || violation || !['XS', 'S'].includes(size) ? 'opus' : 'sonnet')
+// e2e with approved cases: nothing is left to judge but the dispatch and the reports — sonnet; writing the
+// cases (no snapshot yet) stays on opus.
+const pmModel = (turn) => (snapshot ? (violation ? 'opus' : 'sonnet') : turn === 1 || violation || !['XS', 'S'].includes(size) ? 'opus' : 'sonnet')
 for (let turn = 1; turn <= MAX_TURNS; turn++) {
   if (budgetLow()) return { status: 'handoff', slug, round, mode, note: 'token budget low — relaunch with the same args; the PM resumes from board.md' }
   phase('PM')
@@ -532,8 +583,15 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
     `${context}\n\nPM turn ${turn}/${MAX_TURNS}. Allowed roles in this mode: ${ROLES[mode].join(', ')}.\n` +
     (turn === 1
       ? (A.format === 'old' ? 'This folder has the old layout (STATUS.md/spec.md, no HANDOFF.md): build HANDOFF.md/board.md from them first, keep only what the new round needs.\n' : '') +
-        (A.approved ? 'The user approved plan.md — dispatch it.\n' : '') +
-        (flags.assume
+        (A.approved && !snapshot ? 'The user approved plan.md — dispatch it.\n' : '') +
+        (mode === 'e2e'
+          ? (snapshot
+            ? `The user approved the test cases (${snapshot}). Do NOT analyse the task again: dispatch setup only if this task's resources are missing, then tester job(s) whose "cases" cover the run scope (${runScope.join(', ')}). ` +
+              `At close run node ${S}/cases.mjs results ${dir} --write and use what it decides (pm.md "e2e: cases").\n`
+            : `E2E test cases first (pm.md "e2e: cases"): write ${dir}/cases.md and return decision=cases with caseIds, questions (each naming the cases it affects), missingSpecs and target. Dispatch nothing — the user reviews and approves the cases before any job runs.` +
+              (flags.assume ? ' The user passed --assume: no questions — assume and mark the case ⚠; the cases are approved as you write them.' : clarifyRound ? ` The user answered earlier questions (ticket.md "## Clarifications") — never ask those again${clarifyRound >= MAX_CLARIFY ? '; no more questions' : ''}.` : '') +
+              (editRound ? ` The user edited the cases ${editRound} time(s): keep their edits, change only what the new answers or specs require.` : '') + '\n')
+          : flags.assume
           ? 'The user passed --assume: do not ask (no clarify) — decide every open point yourself and list it under Assumptions and in scope.\n'
           : clarifyRound
             ? `The user answered your earlier questions (ticket.md "## Clarifications") — never ask those again. ${clarifyRound >= MAX_CLARIFY ? 'No more questions: assume what is still open, or escalate if it cannot be assumed.' : 'Ask again (clarify) only for something those answers opened up.'}\n`
@@ -556,6 +614,26 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
   if (d.size) size = d.size
   log(`PM t${turn} [${d.size}] ${d.decision}: ${d.note}`)
   if (stuck) return { status: 'escalate', slug, round, mode, question: stuck + (d.decision === 'escalate' && d.escalate ? `\nPM: ${d.escalate}` : '') }
+  // e2e: the test cases (and the questions and missing specs that come with them) go to the user before any job.
+  if (d.decision === 'cases' || (mode === 'e2e' && !snapshot && d.decision === 'clarify')) {
+    const qs = (d.questions || []).filter((q) => q && q.question)
+    const ids = (d.caseIds || []).map(String).filter(Boolean)
+    violation = mode !== 'e2e' ? 'decision=cases is for e2e only'
+      : snapshot ? 'the cases are already approved — dispatch the run scope'
+      : d.decision === 'clarify' ? 'in e2e the questions go with the cases: write cases.md and return decision=cases with the questions'
+      : !ids.length ? 'decision=cases needs caseIds: the internal ids of the cases you wrote to cases.md'
+      : qs.length && flags.assume ? 'the user passed --assume: no questions — assume, mark the case ⚠ and record it under Assumptions'
+      : qs.length && clarifyRound >= MAX_CLARIFY ? `the user already answered questions ${MAX_CLARIFY} times — assume what is left (⚠ on the case), or escalate the one point that cannot be assumed`
+      : ''
+    if (!violation) {
+      return { status: 'cases', slug, round, mode, note: d.note, cases: `${dir}/cases.md`, caseIds: ids, questions: qs, missingSpecs: d.missingSpecs || [], target: d.target || '',
+        clarifyRound: clarifyRound + (qs.length ? 1 : 0), editRound, assume: !!flags.assume }
+    }
+    strikes++
+    log(`guard: ${violation}`)
+    if (strikes >= 2) return { status: 'escalate', slug, round, mode, question: `PM decision rejected twice by the hard rules: ${violation}` }
+    continue
+  }
   // Unclear brief: the questions go to the user before plan.md, the plan check or any job. Only as the first
   // move of a run — once jobs ran, an open point is an escalation.
   if (d.decision === 'clarify') {
