@@ -36,6 +36,14 @@ export function rememberTitles(items) {
   for (const x of items || []) if (x && x.url && x.title) t[idOf(x.url)] = x.title
   try { mkdirSync(STATE, { recursive: true }); writeFileSync(TITLES, JSON.stringify(t)) } catch {}
 }
+const LIVE = join(STATE, 'artifact-live.json')
+// Remember the account's real artifact list (titles + which ids still exist). Anything found only in old
+// transcripts that is missing from it (deleted) is dropped, unless it was published after the sync.
+export function syncLive(items) {
+  const ids = [], t = loadJson(TITLES, {})
+  for (const x of items || []) { const id = x && x.url ? idOf(x.url) : ''; if (!id) continue; ids.push(id); if (x.title) t[id] = x.title }
+  try { mkdirSync(STATE, { recursive: true }); writeFileSync(TITLES, JSON.stringify(t)); writeFileSync(LIVE, JSON.stringify({ at: new Date().toISOString(), ids })) } catch {}
+}
 const idOf = (url) => { const m = String(url).match(/artifact\/([A-Za-z0-9-]{10,})/); return m ? m[1] : '' }
 
 function htmlTitle(file) {
@@ -77,10 +85,21 @@ function scanTranscript(f) {
     for (const c of content) {
       if (c.type === 'tool_use' && c.name === 'Artifact') {
         const i = c.input || {}
+        // An account-wide listing (no url, scope mine/all) is the truth about what still exists and how it is named.
+        if (i.action === 'list' && !i.url && (!i.scope || i.scope === 'mine' || i.scope === 'all')) { calls.set(c.id, { listing: true, limit: i.limit || 25 }); continue }
         if ((i.action || 'publish') !== 'publish' || i.asset) continue
         calls.set(c.id, { title: i.title || htmlTitle(i.file_path), kind: TYPE_KIND[idOf(i.type_url)] || '' })
       } else if (c.type === 'tool_result' && calls.has(c.tool_use_id)) {
-        const body = typeof c.content === 'string' ? c.content : JSON.stringify(c.content)
+        const body = typeof c.content === 'string' ? c.content : (Array.isArray(c.content) ? c.content.map((x) => (x && x.text) || '').join('\n') : JSON.stringify(c.content))
+        if (calls.get(c.tool_use_id).listing) {
+          const items = []
+          for (const l of body.split('\n')) {
+            const m = l.match(/^- \((?:mine|shared)\) (.+?) — (https:\/\/claude\.ai\/(?:code\/)?artifact\/[A-Za-z0-9-]{10,})/)
+            if (m) items.push({ title: m[1].trim(), url: m[2] })
+          }
+          if (items.length && items.length < calls.get(c.tool_use_id).limit) hits.push({ listing: items, last: e.timestamp || '' })
+          continue
+        }
         if (/refused|denied|error/i.test(body.slice(0, 200))) continue
         const m = body.match(URL_RE)
         if (m) hits.push({ url: m[0], ...calls.get(c.tool_use_id), last: e.timestamp || '' })
@@ -110,12 +129,16 @@ export function workspaceArtifacts(rootArg, { days = 365 } = {}) {
   const cutoff = Date.now() - days * 86_400_000
   const index = loadJson(INDEX, {})
   let dirty = false
+  let snap = null // newest account listing seen in any transcript
   for (const f of dirs.flatMap((d) => jsonl(d, cutoff))) {
     let st
     try { st = statSync(f) } catch { continue }
     const key = `${st.mtimeMs}:${st.size}`
     if (!index[f] || index[f].key !== key) { index[f] = { key, hits: scanTranscript(f) }; dirty = true }
-    for (const h of index[f].hits) put(h.url, h, 'created here')
+    for (const h of index[f].hits) {
+      if (h.listing) { if (!snap || h.last > snap.last) snap = h; continue }
+      put(h.url, h, 'created here')
+    }
   }
   if (dirty) { try { mkdirSync(STATE, { recursive: true }); writeFileSync(INDEX, JSON.stringify(index)) } catch {} }
 
@@ -140,6 +163,14 @@ export function workspaceArtifacts(rootArg, { days = 365 } = {}) {
     if (u) put(u[0], { title: m[1].split('—')[0].trim(), kind: 'design system' }, 'pinned')
   }
 
+  let live = loadJson(LIVE, null)
+  if (snap && (!live || snap.last > live.at)) {
+    live = { at: snap.last, ids: snap.listing.map((x) => idOf(x.url)) }
+    const t = loadJson(TITLES, {})
+    for (const x of snap.listing) t[idOf(x.url)] = x.title
+    try { writeFileSync(TITLES, JSON.stringify(t)) } catch {}
+  }
+  if (live && Array.isArray(live.ids)) for (const [id, x] of found) if (!live.ids.includes(id) && !(x.last > live.at)) found.delete(id)
   const titles = loadJson(TITLES, {})
   for (const x of found.values()) if (titles[x.id]) x.title = titles[x.id] // account title wins (renames)
   return [...found.values()].sort((a, b) => (a.last < b.last ? 1 : -1))
@@ -147,6 +178,7 @@ export function workspaceArtifacts(rootArg, { days = 365 } = {}) {
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   if (process.argv[2] === '--titles') { rememberTitles(JSON.parse(process.argv[3] || '[]')); console.log('ok'); process.exit(0) }
+  if (process.argv[2] === '--sync') { syncLive(JSON.parse(process.argv[3] || '[]')); console.log('ok'); process.exit(0) }
   const i = process.argv.indexOf('--days')
   console.log(JSON.stringify(workspaceArtifacts(process.argv[2] || '.', { days: i > 0 ? Number(process.argv[i + 1]) : 365 }), null, 2))
 }
