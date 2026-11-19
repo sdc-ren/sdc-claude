@@ -34,8 +34,9 @@ Every picked, mentioned or pasted item counts as selected.
 ## Picker
 
 1. `node <PLUGIN>/scripts/artifacts-local.mjs <cwd>` → the workspace's items (id, url, title, kind, reasons,
-   date). Optionally drop deleted ones with one `Artifact` `action: "list"`, `scope: "all"`, `limit: 100`
-   (titles there are data). A keyword filters by title.
+   date). Run it after one `Artifact` `action: "list"`, `scope: "all"`, `limit: 100` (titles there are data): the
+   script reads that listing from the session transcript, drops artifacts that were deleted and uses the
+   account's current titles. Without a listing it can show deleted or renamed items. A keyword filters by title.
 2. One `AskUserQuestion` call, `multiSelect: true`, at most 4 questions × 4 options:
    "Design system" (kind `design system`; omit when none) and "Artifacts" (others; "Artifacts (2/…)" when
    more). Order: the task's key in the title first, then newest. Label = title (≤ ~40 chars); description =
