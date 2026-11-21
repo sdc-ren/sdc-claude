@@ -394,6 +394,29 @@ function migrateWorktrees(root, repos, apply) {
   return { applied: true, moved, skipped, ledgersRewritten: rewritten }
 }
 
+// The sections of the workspace config one role needs, instead of the whole file in every agent's context.
+// A section is a `## ` heading and everything to the next one; a name matches the start of a heading, any case
+// ("servers" → "## Servers (`serve.mjs` …)"). `--role <r>` takes that role's list (ROLE_SECTIONS). Hard rules come
+// with every role. A name with no section is listed at the end, so nothing is silently missing.
+export const ROLE_SECTIONS = {
+  setup: ['Provisioning', 'Servers', 'Tool-touched files'],
+  dev: ['Repos', 'Excluded', 'Read-only zones', 'Test policy', 'Checks', 'Tool-touched files', 'Knowledge'],
+  tester: ['Flows', 'Servers', 'Test policy'],
+  reviewer: ['Repos', 'Excluded', 'Read-only zones', 'Test policy', 'Checks', 'Tool-touched files', 'Knowledge'],
+}
+export function configSections(root, names) {
+  const file = join(root, '.claude', 'task-flow.md')
+  const text = existsSync(file) ? readFileSync(file, 'utf8') : ''
+  const parts = text.split(/\n(?=## )/)
+  const want = [...new Set([...names, 'Hard rules'])]
+  const got = [], missing = []
+  for (const n of want) {
+    const hit = parts.filter((p) => p.startsWith('## ') && p.slice(3).toLowerCase().startsWith(n.toLowerCase()))
+    if (hit.length) for (const h of hit) { if (!got.includes(h)) got.push(h) } else missing.push(n)
+  }
+  return got.map((p) => p.trimEnd()).join('\n\n') + (missing.length ? `\n\n(no section in ${file}: ${missing.join(', ')})` : '') + '\n'
+}
+
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 if (isMain) {
   const [cmd, ...a] = process.argv.slice(2)
@@ -464,6 +487,12 @@ if (isMain) {
         out(migrateWorktrees(r0, repoMap(r0, flag('repos')), a.includes('--apply')))
         break
       }
+      case 'config': {
+        const role = flag('role')
+        if (role && !ROLE_SECTIONS[role]) throw new Error(`--role: one of ${Object.keys(ROLE_SECTIONS).join(', ')}`)
+        process.stdout.write(configSections(resolve(a[0]), [...(role ? ROLE_SECTIONS[role] : []), ...a.slice(1)]))
+        break
+      }
       case 'legacy': {
         const apply = a.includes('--apply')
         const r0 = a.filter((x) => x !== '--apply')[0]
@@ -471,7 +500,7 @@ if (isMain) {
         break
       }
       default:
-        console.error('usage: task.mjs resolve <root> <input> [--repos a,b] [--name N] | lock <dir> [--token T] [--steal] | unlock <dir> --token T [--force] | commit <taskDir> | new-round <dir> <n> | journal <dir> <text> | handoff-get <dir> | engine <dir> <engine.js> [--title T] | head <worktree> | uncommit <worktree> <sha> | legacy <root> [--apply]')
+        console.error('usage: task.mjs resolve <root> <input> [--repos a,b] [--name N] | lock <dir> [--token T] [--steal] | unlock <dir> --token T [--force] | commit <taskDir> | new-round <dir> <n> | journal <dir> <text> | handoff-get <dir> | engine <dir> <engine.js> [--title T] | head <worktree> | uncommit <worktree> <sha> | config <root> [--role setup|dev|tester|reviewer] [<section>…] | legacy <root> [--apply]')
         process.exit(1)
     }
   } catch (e) {

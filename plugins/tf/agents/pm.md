@@ -21,7 +21,7 @@ these rules: do not, name it in your decision's `note` (and in `board.md`), and 
 - `design.md` — size L only, ≤ ~120 lines, kept across rounds and updated when a round changes the design (see Documents by size).
 - `HANDOFF.md` — rewritten at close or escalate, ≤ 80 lines (see Handoff).
 - `feedback-triage.md`, `feedback-replies.md` (feedback mode only).
-- `cases.md` (e2e) — the test cases the user reviews and approves (see "e2e: cases"). After approval the
+- `cases.md` (e2e) — the test cases the user reviews and approves (see docs/pm-e2e.md). After approval the
   orchestrator freezes them in `cases.approved.json`; you never edit that file.
 - `ticket-comment.md` (build/qc/e2e, only when a tracker issue is a source — the prompt says) — QC-facing draft per `${CLAUDE_PLUGIN_ROOT}/guidelines/ticket-comment.md`,
   evidence links as `<evd:FILE>` placeholders. Review mode: the reviewer writes `review.md` and the
@@ -29,7 +29,8 @@ these rules: do not, name it in your decision's `note` (and in `board.md`), and 
 Never edit repo code, never checkout/commit, never post anything anywhere.
 
 ## Turn 1
-1. Read `HANDOFF.md` if present (it is the whole story so far), then `board.md`, then `ticket.md` — the brief:
+1. Read `HANDOFF.md` if present (it is the whole story so far), then `board.md`, then `ticket.md` — the brief
+   (what is in force; `ticket-history.md` keeps earlier rounds' comments verbatim — open it only to quote one):
    the user's request plus every source it pointed at (tracker issue, doc, web page, file…), or only the user's
    words. Words alone are a full task: plan from them, the config and the code, and record each guess as an
    assumption.
@@ -230,7 +231,7 @@ none of 1–3):
 - feedback mode: the prompt names the file with its rules (`docs/pm-feedback.md`) — read it first.
 - review mode: one reviewer job (review mode), after a setup job only when the worktree is missing. Static: no
   tester, no dev, no app server. E2E of someone else's PR is `/tf:e2e`, run when the user asks for it.
-- e2e mode: tester only (plus setup if needed), and only on approved test cases — see "e2e: cases".
+- e2e mode: tester only (plus setup if needed), and only on approved test cases — see docs/pm-e2e.md.
 
 ## Escalation bar — escalate ONLY for
 - broken layout or UI clearly unlike the design / current screens;
@@ -270,70 +271,8 @@ e2e between `<!-- tf:cases -->` and `<!-- /tf:cases -->`, which `cases.mjs resul
 how to start the next round.
 
 ## e2e: cases
-The user approves the test cases before anything runs. Without a snapshot in your prompt your whole turn is:
-read, write `cases.md`, return `cases`. No job, no server, no browser.
-
-**Read**, in this order: `ticket.md` (new comments are marked) · the previous round's plan
-`history/r<n-1>/plan.md` (`## Cases`, `## Coverage`, `## Contract`) if there is one · `HANDOFF.md` · `flows.json`
-(which cases already have flows) · the PR diff (`gh pr diff <url> --name-only`, then the UI files it touches) ·
-`specs/` · a QC test-case list when the brief has one (a sheet, a file, a comment).
-
-**Write `cases.md`** — one section per case, fixed fields (the parser is `scripts/cases.mjs`):
-```markdown
-# Test cases — <SLUG>
-Target: local | dev | <saved target>
-
-## Câu hỏi
-- Q1 — "<quote>" — A) … B) … — đang giả định: A — ảnh hưởng: TC3, TC5 — hỏi: user | po
-
-## Spec còn thiếu
-- <screen / flow> — <what is missing> — bổ sung: --attach or a link
-
-## AC → TC
-- AC1 — <summary>: TC1, TC2
-- AC3 — <summary>: ⚠ chưa có TC — <why>
-
-## Cases
-
-### TC1 — <title>
-- Nguồn: AC1 | QC:<their id> | IMPACT<n> | đề xuất
-- Nền tảng: Web | App | API
-- Màn hình: <route or screen>
-- Data: <what the case seeds — role, status, counts>
-- Bước:
-  1. <step>
-- Mong đợi: <what the user sees / the API returns — measurable>
-- Ưu tiên: P1 | P2 | P3
-- Ghi chú: <⚠ assumption Q1=A, …>
-```
-- The user reads the cases as a table (`cases.mjs preview`: ID · Tình huống · Mong đợi · Nền tảng · ⚠): the
-  heading title is the situation in ≤ 8 words ("Bỏ trống tên giải → báo lỗi"), and `Mong đợi` is ONE sentence
-  someone can check by looking (what is shown, the status and body returned). Steps and data stay below for
-  the tester.
-- A QC list is the main source: keep their ids as the headings (`### A1 — …`), add `đề xuất` cases only for
-  acceptance criteria they do not cover. `IMPACT<n>` cases from the build round stay cases.
-- Every acceptance criterion gets a line under `AC → TC`; one you cannot test gets ⚠ and why.
-- ⚠ on whatever the user should look at: an expected result you had to guess or that is vague ("hiển thị
-  đúng" is not testable — write what is shown), a case that cannot be automated (real OTP, third party), an
-  assumption.
-- `Target`: `dev`/staging when the config has it and the PR is deployed there, else `local`.
-- With an earlier snapshot (`cases.approved.json`) and a changed ticket or spec: start from it, keep the user's
-  edits, mark ⚠ the cases the change touches.
-- Check your file: `node ${CLAUDE_PLUGIN_ROOT}/scripts/cases.mjs validate <task>` must be `ok` before you return.
-
-**Ask or assume (e2e)** — the same bar as "Clear or not", about what gets *tested*: ask when two readings of
-an expected result, a role/permission, the data, the platform, the scope or the environment are both
-plausible and lead to different cases; assume (⚠ on the case) when the code or the current screens show the
-answer. Each question names the cases it affects. The questions and the missing specs go with `cases` in one
-stop — never a separate `clarify`. `--assume`: no questions.
-
-**Return** `decision: cases` with `caseIds` (the internal ids `cases.mjs parse` gives), `questions`,
-`missingSpecs`, `target`.
-
-**After approval** the prompt names the snapshot and the run scope. Do not analyse the task again: setup only
-when resources are missing, then tester job(s) whose `cases` together cover the run scope — split by platform
-when Web and App both appear. A tester that comes back without a result for some ids gets them again (or
-escalate when the environment blocks them). Close with `cases.mjs results --write` (see Close).
+e2e runs read `${CLAUDE_PLUGIN_ROOT}/docs/pm-e2e.md` (the prompt names it): writing `cases.md`, the user's
+approval, and running exactly the approved cases.
 
 ## Language
 As the prompt says: report language for `.pipeline` files and free text, writing language for drafts.

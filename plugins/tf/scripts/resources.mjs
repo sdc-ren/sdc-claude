@@ -435,7 +435,7 @@ function lastActivity(dir) {
 const running = (dir) => { try { return Date.now() - statSync(join(dir, '.lock')).mtimeMs < 5_400_000 } catch { return false } }
 // Text handoff files a later round needs (HANDOFF, journal, flows; old-layout folders: STATUS, spec). Evidence images,
 // job reports, history and logs are heavy and regenerable.
-const KEEP_WHEN_PR_OPEN = new Set(['HANDOFF.md', 'journal.md', 'flows', 'flows.json', 'plan.md', 'design.md', 'board.md', 'STATUS.md', 'spec.md', 'ticket.md', 'ticket-comment.md', 'resources.json', 'metrics.json'])
+const KEEP_WHEN_PR_OPEN = new Set(['HANDOFF.md', 'journal.md', 'flows', 'flows.json', 'plan.md', 'design.md', 'board.md', 'STATUS.md', 'spec.md', 'ticket.md', 'ticket-history.md', 'ticket-comment.md', 'resources.json', 'metrics.json'])
 // Archived (all PRs merged/closed) tasks: slim to the handoff set after TF_PRUNE_DAYS, delete after this many days,
 // so a QC report that arrives after the merge still finds HANDOFF.md and the flows.
 const ARCHIVE_DAYS = Number(process.env.TF_ARCHIVE_DAYS || 30)

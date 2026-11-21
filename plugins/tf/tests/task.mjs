@@ -57,3 +57,17 @@ test('commit: the HEAD of every task worktree, plus a fingerprint when there are
   writeFileSync(join(wt, 'a.txt'), 'changed again')
   assert.notEqual(cli('commit', dir).json.commit, dirty)
 })
+
+test('config prints only the sections a role needs, plus Hard rules, and names what is missing', () => {
+  const root = mkdtempSync(join(tmpdir(), 'tf-cfg-'))
+  mkdirSync(join(root, '.claude'))
+  writeFileSync(join(root, '.claude', 'task-flow.md'), '# cfg\n\n## Repos\n- be\n\n## Servers (`serve.mjs`)\nbe: npm start\n\n## Flows (e2e)\nlogin recipe\n\n## Hard rules\n- never X\n')
+  const r = spawnSync(process.execPath, [T, 'config', root, '--role', 'tester'], { encoding: 'utf8' })
+  assert.equal(r.status, 0)
+  assert.match(r.stdout, /^## Flows \(e2e\)\nlogin recipe\n\n## Servers/)
+  assert.match(r.stdout, /## Hard rules\n- never X/)
+  assert.doesNotMatch(r.stdout, /## Repos/)
+  assert.match(r.stdout, /no section in .*: Test policy/)
+  const one = spawnSync(process.execPath, [T, 'config', root, 'repos'], { encoding: 'utf8' }).stdout
+  assert.match(one, /^## Repos\n- be/)
+})

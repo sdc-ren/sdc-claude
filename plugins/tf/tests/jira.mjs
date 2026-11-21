@@ -66,3 +66,16 @@ test('bad key, bad site, leftover <evd:…> placeholders and bad ids are refused
   assert.match(c('RVD-1', '--file', join(dir, 'c.md'), ...SITE).stderr, /<evd:FILE> placeholders/)
   assert.match(c('RVD-1', '--file', join(dir, 'c.md'), ...SITE, '--reply-to', '12; rm').stderr, /--reply-to must be a comment id/)
 })
+
+test('--since folds comments earlier rounds worked from into one line each; an edited one stays in full', async () => {
+  const { issueHistory } = await import('../scripts/jira.mjs')
+  const issue = { key: 'RVD-1', fields: { summary: 's' }, renderedFields: {} }
+  const c = (id, body, updated) => ({ id, author: { displayName: 'QC' }, created: '2026-11-20T01:00:00.000+0700', ...(updated ? { updated } : {}), renderedBody: `<p>${body}</p>` })
+  const comments = [c('100', 'vòng 1 lỗi A'), c('101', 'vòng 1 lỗi B', '2026-11-21T02:00:00.000+0700'), c('102', 'vòng 2 lỗi C')]
+  const md = issueMarkdown(issue, comments, { since: '101' })
+  assert.match(md, /## Earlier comments \(1, full text in ticket-history\.md\)\n\n- 100 · QC · 2026-11-20 01:00 — vòng 1 lỗi A/)
+  assert.match(md, /## Comments since the last round \(2\)/)
+  assert.match(md, /### 101 · QC[\s\S]*vòng 1 lỗi B\n\(edited 2026-11-21 02:00\)/)
+  assert.match(issueHistory(issue, comments, '101'), /### 100 · QC · 2026-11-20 01:00\n\nvòng 1 lỗi A/)
+  assert.equal(issueHistory(issue, comments, ''), '')
+})

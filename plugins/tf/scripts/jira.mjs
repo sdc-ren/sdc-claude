@@ -7,6 +7,9 @@
 //        [--out <file.json>] [--md <file.md>]
 //     The issue (summary, status, type, priority, people, description, attachments, links) and every comment.
 //     Writes the raw JSON (default <taskDir>/tmp/jira-<KEY>.json) and, with --md, a readable markdown copy.
+//     --since <commentId> --history <file.md>: comments up to that id (the ones earlier rounds already worked
+//     from) go to the history file in full; the markdown keeps one line per earlier comment and every newer
+//     one in full — later rounds read what is new, not the whole thread again.
 //     Prints one short JSON line: key, status, comment count, last comment id, the files written.
 //
 //   node jira.mjs comment <taskDir> <KEY> --file <ticket-comment.md> --site … [--auth jira] [--playwright …]
@@ -120,7 +123,7 @@ const adfText = (n) => {
   return kids.join(n.type === 'tableRow' ? ' | ' : '\n')
 }
 
-export function issueMarkdown(issue, comments) {
+export function issueMarkdown(issue, comments, { since = '' } = {}) {
   const f = issue.fields || {}
   const r = issue.renderedFields || {}
   const who = (p) => (p && p.displayName) || '-'
@@ -130,9 +133,25 @@ export function issueMarkdown(issue, comments) {
     ...((f.issuelinks || []).length ? [`Links: ${f.issuelinks.map((l) => { const o = l.outwardIssue || l.inwardIssue || {}; return `${(l.type || {})[l.outwardIssue ? 'outward' : 'inward'] || ''} ${o.key || ''}`.trim() }).join(' · ')}`] : []),
     '', '## Description', '', htmlText(r.description) || '(empty)']
   if ((f.attachment || []).length) out.push('', '## Attachments', '', ...f.attachment.map((a) => `- ${a.filename} (${a.mimeType}, ${Math.round((a.size || 0) / 1024)} KB, ${a.id})`))
-  out.push('', `## Comments (${comments.length})`)
-  for (const c of comments) out.push('', `### ${c.id} · ${who(c.author)} · ${String(c.created || '').slice(0, 16).replace('T', ' ')}${c.parentId ? ` · reply to ${c.parentId}` : ''}`, '', htmlText(c.renderedBody) || '(empty)')
+  const head = (c) => `${c.id} · ${who(c.author)} · ${String(c.created || '').slice(0, 16).replace('T', ' ')}${c.parentId ? ` · reply to ${c.parentId}` : ''}`
+  const full = (c) => ['', `### ${head(c)}`, '', htmlText(c.renderedBody) || '(empty)']
+  // An edited comment counts as new: QC edits their report instead of adding one.
+  const old = since ? comments.filter((c) => Number(c.id) <= Number(since) && (!c.updated || c.updated === c.created)) : []
+  const fresh = comments.filter((c) => !old.includes(c))
+  if (old.length) {
+    out.push('', `## Earlier comments (${old.length}, full text in ticket-history.md)`, '',
+      ...old.map((c) => `- ${head(c)} — ${htmlText(c.renderedBody).replace(/\s+/g, ' ').slice(0, 110)}`))
+  }
+  out.push('', `## Comments${old.length ? ' since the last round' : ''} (${fresh.length})`)
+  for (const c of fresh) out.push(...full(c), ...(c.updated && c.updated !== c.created ? [`(edited ${String(c.updated).slice(0, 16).replace('T', ' ')})`] : []))
   return out.join('\n') + '\n'
+}
+// The comments issueMarkdown folds away with the same `since`, verbatim ('' when none).
+export function issueHistory(issue, comments, since) {
+  const who = (p) => (p && p.displayName) || '-'
+  const old = since ? comments.filter((c) => Number(c.id) <= Number(since) && (!c.updated || c.updated === c.created)) : []
+  if (!old.length) return ''
+  return [`# ${issue.key} — earlier comments (verbatim)`, ...old.flatMap((c) => ['', `### ${c.id} · ${who(c.author)} · ${String(c.created || '').slice(0, 16).replace('T', ' ')}${c.parentId ? ` · reply to ${c.parentId}` : ''}`, '', htmlText(c.renderedBody) || '(empty)'])].join('\n') + '\n'
 }
 
 // ── Browser ─────────────────────────────────────────────────────────────────
@@ -189,7 +208,7 @@ async function main() {
   o.root = rootOfTask(dir)
   o.slug = basename(dir)
   if (o.playwright) o.playwright = resolve(o.playwright)
-  for (const k of ['replyTo', 'expectLast']) if (o[k] && !ID.test(o[k])) die(`--${k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)} must be a comment id`)
+  for (const k of ['replyTo', 'expectLast', 'since']) if (o[k] && !ID.test(o[k])) die(`--${k.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)} must be a comment id`)
   for (const m of o.mentions) if (!/^[\w:-]{6,128}$/.test(m.id) || !m.name) die('--mention takes <accountId>=<display name>')
 
   if (cmd === 'read') {
@@ -207,9 +226,16 @@ async function main() {
     mkdirSync(dirname(out), { recursive: true })
     writeFileSync(out, JSON.stringify(got, null, 1))
     let md = ''
-    if (o.md) { md = resolve(o.md); mkdirSync(dirname(md), { recursive: true }); writeFileSync(md, issueMarkdown(got.issue, got.comments)) }
+    let history = ''
+    if (o.md) {
+      md = resolve(o.md)
+      mkdirSync(dirname(md), { recursive: true })
+      writeFileSync(md, issueMarkdown(got.issue, got.comments, { since: o.since || '' }))
+      const h = issueHistory(got.issue, got.comments, o.since || '')
+      if (h && o.history) { history = resolve(o.history); writeFileSync(history, h) }
+    }
     const last = got.comments[got.comments.length - 1]
-    console.log(JSON.stringify({ key: o.key, status: ((got.issue.fields || {}).status || {}).name || '', comments: got.comments.length, lastCommentId: last ? last.id : '', out, ...(md ? { md } : {}) }))
+    console.log(JSON.stringify({ key: o.key, status: ((got.issue.fields || {}).status || {}).name || '', comments: got.comments.length, lastCommentId: last ? last.id : '', out, ...(md ? { md } : {}), ...(history ? { history } : {}) }))
     return
   }
 

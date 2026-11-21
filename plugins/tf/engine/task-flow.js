@@ -267,7 +267,7 @@ function e2eResults() {
 
 function checkDispatch(d) {
   if (mode === 'feedback' && flags.check) return '--check is triage only: write feedback-triage.md and return close, no jobs'
-  if (mode === 'e2e' && !snapshot) return 'e2e runs only approved test cases: write cases.md (pm.md "e2e: cases") and return decision=cases — no job runs before the user approves them'
+  if (mode === 'e2e' && !snapshot) return 'e2e runs only approved test cases: write cases.md (docs/pm-e2e.md) and return decision=cases — no job runs before the user approves them'
   const jobs = d.jobs || []
   if (!jobs.length) return 'decision=dispatch needs at least one job'
   if (jobs.length > MAX_JOBS) return `at most ${MAX_JOBS} jobs per dispatch (got ${jobs.length}) — dispatch the first groups now, the rest next turn`
@@ -377,12 +377,14 @@ function checkClose(d) {
 const AP = typeof A.agentPrefix === 'string' ? A.agentPrefix : 'tf:'
 const AGENT = { dev: `${AP}dev`, lead: `${AP}lead`, tester: `${AP}tester`, reviewer: `${AP}reviewer` }
 const worktreeOf = (repo) => worktrees[repo] || (A.worktreePaths && A.worktreePaths[repo]) || '(see HANDOFF.md / setup report)'
+// Jobs read the config sections of their role, not the whole file (the PM reads it whole).
+const configLine = (role) => `Workspace config for your role: node ${S}/task.mjs config ${root} --role ${role} (add a section name to get one more) — read that, not the whole ${cfg}.\n`
 const serversLine = `App servers: node ${S}/serve.mjs start ${root} ${slug} (reuses running ones; status/restart/run per its header) — never start or kill them by hand.\n`
 const reportLine = (id, role, repo) =>
   `Write your report to ${dir}/jobs/${id}-${role}-${repo}.md (heredoc) and append one line: node ${S}/task.mjs journal ${dir} "${id} ${role} ${repo}: <one-line result>". ` +
   `Return the structured report; reportFile = that path.`
 function jobPrompt(j) {
-  return `Job ${j.id} · role ${j.role} · repo ${j.repo}\n${context}\n\n` +
+  return `Job ${j.id} · role ${j.role} · repo ${j.repo}\n${context}\n` + configLine(j.role) + `\n` +
     `Brief: ${j.brief}\nRead first: ${(j.reads || []).join(', ') || 'plan.md section for your repo'}\nDone when: ${j.doneWhen}\n` +
     (j.repo !== 'all' ? `Worktree: ${worktreeOf(j.repo)} · existing PR: ${prs[j.repo] || 'none'}\n` : '') +
     (j.role === 'setup'
@@ -463,7 +465,7 @@ async function uncommitted(j, model, report) {
 }
 async function runDev(j) {
   const model = MODELS.includes(j.model) ? j.model : 'sonnet'
-  const head = `Job ${j.id} · role dev lead · repo ${j.repo}\n${context}\n\n` +
+  const head = `Job ${j.id} · role dev lead · repo ${j.repo}\n${context}\n` + configLine('dev') + `\n` +
     `Brief: ${j.brief}\nRead first: ${(j.reads || []).join(', ') || 'plan.md section for your repo'}\nDone when: ${j.doneWhen}\n` +
     `Worktree: ${worktreeOf(j.repo)} · existing PR: ${prs[j.repo] || 'none'}\n` + serversLine + headLine(j.repo)
   const teamFile = `${dir}/jobs/${j.id}-team-${j.repo}.md`
@@ -492,7 +494,7 @@ async function runDev(j) {
   const members = plan.members.map((m, i) => ({ ...m, id: `${j.id}${'abc'[i]}` }))
   log(`${j.id} lead:${j.repo} → ${members.map((m) => `${m.id} ${m.title}`).join(' · ')}`)
   const reports = await parallel(members.map((m) => () => run(
-    `Job ${m.id} · role dev (member of ${j.id}) · repo ${j.repo}\n${context}\n\n` +
+    `Job ${m.id} · role dev (member of ${j.id}) · repo ${j.repo}\n${context}\n` + configLine('dev') + `\n` +
       `Your part: ${m.title}\nTasks: ${m.tasks}\nRead first: ${teamFile}, plan.md section for your repo\n` +
       `Worktree: ${worktreeOf(j.repo)}\n` +
       `SHARED WORKTREE: ${members.filter((x) => x !== m).map((x) => x.id).join(', ')} edit this repo at the same time. Your files (edit nothing else): ${m.files.join(', ')}. ` +
@@ -613,8 +615,8 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
         (mode === 'e2e'
           ? (snapshot
             ? `The user approved the test cases (${snapshot}). Do NOT analyse the task again: dispatch setup only if this task's resources are missing, then tester job(s) whose "cases" cover the run scope (${runScope.join(', ')}). ` +
-              `At close run node ${S}/cases.mjs results ${dir} --write and use what it decides (pm.md "e2e: cases").\n`
-            : `E2E test cases first (pm.md "e2e: cases"): write ${dir}/cases.md and return decision=cases with caseIds, questions (each naming the cases it affects), missingSpecs and target. Dispatch nothing — the user reviews and approves the cases before any job runs.` +
+              `At close run node ${S}/cases.mjs results ${dir} --write and use what it decides (${S}/../docs/pm-e2e.md).\n`
+            : `E2E test cases first (${S}/../docs/pm-e2e.md): write ${dir}/cases.md and return decision=cases with caseIds, questions (each naming the cases it affects), missingSpecs and target. Dispatch nothing — the user reviews and approves the cases before any job runs.` +
               (flags.assume ? ' The user passed --assume: no questions — assume and mark the case ⚠; the cases are approved as you write them.' : clarifyRound ? ` The user answered earlier questions (ticket.md "## Clarifications") — never ask those again${clarifyRound >= MAX_CLARIFY ? '; no more questions' : ''}.` : '') +
               (editRound ? ` The user edited the cases ${editRound} time(s): keep their edits, change only what the new answers or specs require.` : '') + '\n')
           : flags.assume

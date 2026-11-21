@@ -16,6 +16,8 @@
 //   --timeout  seconds per case before it is killed (default 180 Web/API, 360 Android); the result says the
 //              step it was in (`[tf-step]` lines of the flow kit).
 //   --verbose  print every field of each result (default: case, status, first error line, evidence files).
+//   --list     one line per flow (case · platform · last result · on this commit/flow or not · seconds · error)
+//              instead of reading flows.json; nothing runs.
 //   --commit   what code ran (default: `task.mjs commit`, the HEAD of every worktree of the task); stored per case
 //              so cases.mjs knows when a result no longer counts.
 //   Nothing to run (empty selection) is an error (exit 2): an empty run is never reported as green.
@@ -48,6 +50,7 @@ for (let i = 1; i < argv.length; i++) {
   if (a === '--failed') opts.failed = true
   else if (a === '--changed') opts.changed = true
   else if (a === '--verbose') opts.verbose = true
+  else if (a === '--list') opts.list = true
   else if (a === '--env') { const [k, ...v] = argv[++i].split('='); opts.env[k] = v.join('=') }
   else if (a.startsWith('--')) opts[a.slice(2)] = argv[++i]
 }
@@ -145,6 +148,16 @@ function flowHash(f) {
   return h.digest('hex').slice(0, 16)
 }
 const hashes = Object.fromEntries(pick.map((f) => [caseOf(f), flowHash(f)]))
+if (opts.list) {
+  const rows = pick.map((f) => {
+    const c = caseOf(f), m = manifest.cases[c] || {}
+    const fresh = m.lastResult === 'PASS' && m.commit === commit && (m.lastTarget || 'local') === target && m.flowHash === hashes[c]
+    const plat = m.platform || (/androidFlow/.test(readFileSync(join(flowsDir, f), 'utf8')) ? 'android' : 'web')
+    return `${c} · ${plat} · ${m.lastResult || 'never run'}${m.lastResult ? ` (${m.lastTarget || 'local'})` : ''} · ${fresh ? 'up to date' : m.lastResult ? 'stale' : '-'} · ${m.durationMs ? Math.round(m.durationMs / 1000) + 's' : '-'}${m.lastResult && m.lastResult !== 'PASS' && m.error ? ` · ${String(m.error).split('\n')[0].slice(0, 120)}` : ''}`
+  })
+  console.log(`${rows.length} flows · commit ${String(commit).slice(0, 12)} · target ${target}\n${rows.join('\n')}`)
+  process.exit(0)
+}
 if (opts.changed) {
   const same = (f) => { const m = manifest.cases[caseOf(f)] || {}; return m.lastResult === 'PASS' && m.commit === commit && (m.lastTarget || 'local') === target && m.flowHash === hashes[caseOf(f)] }
   const skipped = pick.filter(same).map(caseOf)

@@ -588,6 +588,8 @@ node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --jobs 3                # 
 node <plugin>/scripts/flow-peek.mjs .pipeline/PROJ-123 /some/screen           # what is on a screen, with locators
 node <plugin>/scripts/flow-peek.mjs .pipeline/PROJ-123 - --android emulator-5560 # what the emulator shows, as selectors
 node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --changed               # only cases not green on this commit + flow
+node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --list                  # one line per flow: last result, up to date or stale
+node <plugin>/scripts/task.mjs config . --role tester                         # only the config sections a role needs
 node <plugin>/scripts/jira.mjs read .pipeline/PROJ-123 PROJ-123 --site https://acme.atlassian.net --md ticket.md  # the issue + comments
 ```
 
@@ -676,6 +678,7 @@ testing, gates and PR packaging; haiku for setup and tiny edits, retried once on
 
 [docs/design.md](docs/design.md) — roles, hard rules, files, retention, metrics.
 [docs/orchestrator.md](docs/orchestrator.md) — what a `/tf:*` command does step by step.
+[docs/orchestrator-e2e.md](docs/orchestrator-e2e.md) and [docs/pm-e2e.md](docs/pm-e2e.md) — the e2e parts, read only by e2e runs.
 [CHANGELOG.md](CHANGELOG.md) — what changed in each version.
 
 ## License

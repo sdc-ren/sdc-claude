@@ -226,3 +226,15 @@ test('describeAndroid turns a uiautomator dump into the selectors androidFlow ta
   assert.match(out, /- \{ desc: "Đóng" \}  <View> clickable/)
   assert.doesNotMatch(out, /FrameLayout/, 'nodes with nothing to address them by are left out')
 })
+
+test('--list: one line per flow instead of flows.json, nothing runs', () => {
+  const { dir } = task()
+  flow(dir, 'A'); flow(dir, 'B', { status: 'FAIL' })
+  run([dir, '--commit', 'c1'])
+  const r = spawnSync(process.execPath, [RUN, dir, '--list', '--commit', 'c1'], { encoding: 'utf8' })
+  assert.equal(r.status, 0)
+  const lines = r.stdout.trim().split('\n')
+  assert.match(lines[0], /^2 flows · commit c1 · target local$/)
+  assert.match(lines[1], /^A · web · PASS \(local\) · up to date · /)
+  assert.match(lines[2], /^B · web · FAIL \(local\) · stale · .* · expect failed: x$/)
+})

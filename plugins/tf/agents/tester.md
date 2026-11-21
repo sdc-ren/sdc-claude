@@ -18,7 +18,8 @@ these rules: do not, name it under `blocked` in your report, and carry on with t
 ## Flows first
 Flows live in `<task>/flows/<case>.mjs`, manifest `<task>/flows.json`, runner
 `node ${CLAUDE_PLUGIN_ROOT}/scripts/flow-run.mjs <task> …`, helpers `${CLAUDE_PLUGIN_ROOT}/scripts/flow-kit.mjs` (`webFlow`, `androidFlow`).
-1. Read `flows.json`. A case that already has a flow → re-run it, do not rewrite it.
+1. `flow-run.mjs <task> --list` — one line per flow (platform, last result, up to date or stale, seconds, error);
+   never read `flows.json` itself. A case that already has a flow → re-run it, do not rewrite it.
 2. A case without a flow → write `flows/<case>.mjs` (case id = the plan/ticket case id): it seeds its own data
    (API, unique suffix `uniq()`, library helpers), drives the app, takes `shot('after')` and asserts the
    acceptance criterion with `expect`. Targets, accounts, login recipe, project helper modules: config `## Flows`.
@@ -42,10 +43,14 @@ Flows live in `<task>/flows/<case>.mjs`, manifest `<task>/flows.json`, runner
 ## Shared library first (`<root>/.pipeline/_lib/`, env `FLOW_LIB`, `lib` in the flow context)
 Login, token minting, seeding of the entities this product has, common navigation: written once for the
 workspace, not once per ticket.
-1. Before writing anything read `_lib/README.md` (one line per helper: file, function, arguments, what it
-   returns) and import what exists: `const { loginAs } = await import(`${lib}/auth.mjs`)`.
+1. Before writing anything read `_lib/README.md` — an index, one line per file: what domain it covers and its
+   exported functions by name. For a function's arguments and return, `grep -n "export" <file>` or read the
+   comment above it in that file; do not read every helper. Import what exists:
+   `const { loginAs } = await import(`${lib}/auth.mjs`)`.
 2. A helper a later ticket would need again (a login, a seed, a wait for a background job) goes into `_lib/`
-   — one file per domain (`auth.mjs`, `seed-<entity>.mjs`) — and gets its README line. Only steps that belong
+   — one file per domain (`auth.mjs`, `seed-<entity>.mjs`) — with a one-line comment above each export
+   (arguments → what it returns), and the file's README line lists the new name. The README stays an index:
+   no argument lists, no examples there. Only steps that belong
    to this case alone stay in the flow file. Never a `flows/lib/` per task.
 3. The library is shared and old flows import it: add functions and optional arguments, never change what an
    existing one takes or returns; no secrets in it (accounts come from the config / env recipes).

@@ -4,6 +4,25 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.22.0] — 2026-11-21
+
+Measured over ten days: agents read `ticket.md` (up to 117 KB on a long task), the workspace config (16 KB) and
+`flows.json` (up to 76 KB) whole, hundreds of times, and every read is re-read on every later turn.
+
+### Changed
+- **Each job reads only the config sections of its role.** `task.mjs config <root> --role setup|dev|tester|reviewer
+  [<section>…]` prints those sections plus Hard rules (5–7 KB instead of 16 KB on a real config); every job prompt
+  names the command. The PM still reads the whole file.
+- **`ticket.md` holds what is in force.** Comments earlier rounds already worked from become one line each and go
+  verbatim to `ticket-history.md` with old round blocks; `jira.mjs read --since <id> --history <file>` does the
+  split (an edited comment counts as new). The PM opens the history only to quote it.
+- **The tester reads `flow-run.mjs --list`** — one line per flow: last result, up to date or stale, seconds, first
+  error — never `flows.json` (17 KB instead of 76 KB on RVD-297).
+- **`_lib/README.md` is an index:** one line per helper file with its export names; arguments live in a one-line
+  comment above each export, found with `grep`.
+- **e2e-only instructions moved out of what every run reads:** `docs/pm-e2e.md` (the PM's case writing) and
+  `docs/orchestrator-e2e.md` (the approved-cases gate and fast path); e2e prompts and `/tf:e2e` name them.
+
 ## [1.21.0] — 2026-11-21
 
 ### Added

@@ -427,3 +427,12 @@ test('models: a haiku job that does not finish is tried once more on sonnet', as
   expect(r.ran).toEqual(['J1 setup:all(haiku)', 'J1 setup:all(sonnet)'])
   expect(r.logs.join('\n')).toContain('model haiku → sonnet')
 })
+
+test('jobs are pointed at the config sections of their role; e2e PM turns at docs/pm-e2e.md', async () => {
+  const r = await sim([D([J('J1', 'setup', 'all', 1), J('J2', 'dev', 'be', 2), J('J3', 'tester', 'be', 3, 'x', 'sonnet', 'C1')], 'S'), close])
+  expect(r.prompts['J1 setup:all']).toContain('task.mjs config /r --role setup')
+  expect(r.prompts['J2 lead:be']).toContain('task.mjs config /r --role dev')
+  expect(r.prompts['J3 tester:be']).toContain('task.mjs config /r --role tester')
+  const e = await sim([{ decision: 'cases', size: 'S', note: 'n', caseIds: ['TC1'], questions: [], missingSpecs: [], target: 'local' }], std, { mode: 'e2e' })
+  expect(e.pmPrompts[0]).toContain('/s/../docs/pm-e2e.md')
+})
