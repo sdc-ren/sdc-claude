@@ -166,7 +166,7 @@ test('a failed case keeps its marks; a marked copy is drawn when an engine is av
   assert.equal(r.code, 1)
   const c = manifest(dir).cases.F1
   assert.deepEqual(c.marks, [{ label: 'Nút bị khoá', expected: 'bật', actual: 'khoá', step: 'x' }])
-  const { annotate } = await import(join(S, 'annotate.mjs'))
+  const { annotate } = await import('../scripts/annotate.mjs')
   const probe = join(dir, 'probe.png'); writeFileSync(probe, Buffer.from(pngB64(), 'base64'))
   const engine = (await annotate(probe, [{ box: [1, 1, 5, 5], label: 'x' }], { crop: false })).engine
   if (!engine) return // no Chromium and no ffmpeg on this machine: nothing to draw with

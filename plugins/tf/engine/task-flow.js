@@ -387,7 +387,7 @@ function jobPrompt(j) {
     (j.role === 'setup'
       ? `You provision runtime resources for this task exactly as the workspace config "Provisioning" section says. Reuse everything the task already holds ` +
         `(node ${S}/resources.mjs list ${root}); worktrees go exactly to the paths listed above (<root>/.worktrees/<SLUG>/<repo dir>) — never another folder name. ` +
-        `For dependencies try node ${S}/fastdeps.mjs first (see config). Register every resource with node ${S}/resources.mjs add. ` +
+        `For dependencies try node ${S}/fastdeps.mjs first (see config). Register every resource with node ${S}/resources.mjs add (exit 3 = another task holds that id: take the next free one). ` +
         (mode === 'review' || mode === 'e2e'
           ? `Mode ${mode}: check out the code under test (the PR head, \`git fetch origin pull/<n>/head\`, or its branch) DETACHED in the task worktree — never create a branch, never commit. `
           : '') +

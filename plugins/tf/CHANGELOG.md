@@ -4,6 +4,19 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.18.1] — 2026-11-21
+
+### Fixed
+- **Two tasks can no longer hold the same resource.** `resources.mjs add` checks every other task of the
+  workspace under a lock and refuses an id already held (exit 3, `held: cache 2 is held by task …`), so two setup
+  jobs running at once cannot both take the same Redis db, port, database or emulator. Server names (`be`, `fe`)
+  stay per task. Seen in the wild: one Redis db shared by two live tasks.
+
+### Changed
+- **`/tf:status` is one short table.** One row per task — PRs merged, what it holds, worktree disk, whether
+  `/tf:clean` frees it now — plus totals and a ⚠ line for an id two tasks hold. Paths and release commands are
+  left to `resources.mjs list` (new: `list --table`).
+
 ## [1.18.0] — 2026-11-18
 
 ### Added

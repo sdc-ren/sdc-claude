@@ -33,8 +33,8 @@ const env = { ...process.env, ...((manifest.targets || {})[target] || {}), ...op
 if (opts.playwright) env.PLAYWRIGHT_FROM = resolve(opts.playwright)
 Object.assign(process.env, env)
 
-const { describePage } = await import(join(HERE, 'flow-kit.mjs'))
-const { openBrowser, closeBrowser } = await import(join(HERE, 'browser.mjs'))
+const { describePage } = await import('./flow-kit.mjs')
+const { openBrowser, closeBrowser } = await import('./browser.mjs')
 const [w, h] = String(env.VIEWPORT || '1440x900').split('x').map(Number)
 const b = await openBrowser({ root, slug: env.TF_SLUG, playwrightFrom: env.PLAYWRIGHT_FROM, contextOptions: { viewport: { width: w, height: h }, baseURL: env.BASE_URL || undefined } })
 let code = 0

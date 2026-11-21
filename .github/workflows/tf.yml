@@ -45,3 +45,5 @@ jobs:
         run: node --test plugins/tf/tests/flow-run.mjs plugins/tf/tests/annotate.mjs
       - name: Task lock and commit fingerprint
         run: node --test plugins/tf/tests/task.mjs
+      - name: Resource ledger (one holder per id, status table)
+        run: node --test plugins/tf/tests/resources.mjs
