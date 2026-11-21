@@ -174,3 +174,55 @@ test('a failed case keeps its marks; a marked copy is drawn when an engine is av
   assert.equal(c.marked[0].caption, 'Nút bị khoá')
   assert.ok(c.marked.every((x) => existsSync(join(dir, 'evd', x.file)) || existsSync(join(dir, 'evd', x.file.replace(/\.webp$/, '.png')))))
 })
+
+test('--changed re-runs only what is not already green on this commit, target and flow', () => {
+  const { root, dir } = task()
+  flow(dir, 'A'); flow(dir, 'B', { status: 'FAIL' })
+  mkdirSync(join(root, '.pipeline', '_lib'), { recursive: true })
+  writeFileSync(join(root, '.pipeline', '_lib', 'seed.mjs'), 'export const v = 1\n')
+  writeFileSync(join(dir, 'flows', 'C.mjs'), readFileSync(join(dir, 'flows', 'A.mjs'), 'utf8') + '\n// await import(`${lib}/seed.mjs`)\n')
+  run([dir, '--commit', 'c1'])
+  let r = run([dir, '--changed', '--commit', 'c1'])
+  assert.deepEqual(r.json.results.map((x) => x.case), ['B'], 'only the failing case runs again')
+  assert.deepEqual(r.json.skipped, ['A', 'C'])
+  flow(dir, 'B')
+  run([dir, '--cases', 'B', '--commit', 'c1'])
+  r = run([dir, '--changed', '--commit', 'c1'])
+  assert.equal(r.code, 0); assert.equal(r.json.upToDate, true); assert.equal(r.json.ran, 0)
+  writeFileSync(join(root, '.pipeline', '_lib', 'seed.mjs'), 'export const v = 2\n')
+  r = run([dir, '--changed', '--commit', 'c1'])
+  assert.deepEqual(r.json.results.map((x) => x.case), ['C'], 'a changed library file makes its flows stale')
+  r = run([dir, '--changed', '--commit', 'c2'])
+  assert.equal(r.json.ran, 3, 'new code: everything runs')
+})
+
+test('a case that hangs is stopped at its timeout and says which step it was in', () => {
+  const { dir } = task()
+  writeFileSync(join(dir, 'flows', 'H.mjs'), "process.stdout.write('\\n[tf-step] open the wizard\\n'); setTimeout(() => {}, 60_000)\n")
+  const r = run([dir, '--cases', 'H', '--timeout', '1'])
+  assert.equal(r.code, 1)
+  assert.equal(r.json.results[0].status, 'BLOCKED')
+  assert.match(r.json.results[0].error, /timed out after 1s in step "open the wizard"/)
+})
+
+test('default output is brief; --verbose keeps every field', () => {
+  const { dir } = task()
+  flow(dir, 'A')
+  const brief = run([dir, '--cases', 'A']).json.results[0]
+  assert.deepEqual(Object.keys(brief), ['case', 'status'])
+  const full = run([dir, '--cases', 'A', '--verbose']).json.results[0]
+  assert.ok('shots' in full)
+})
+
+test('describeAndroid turns a uiautomator dump into the selectors androidFlow takes', async () => {
+  const { describeAndroid } = await import(join(S, 'flow-kit.mjs'))
+  const xml = `<hierarchy><node index="0" text="" resource-id="" class="android.widget.FrameLayout" content-desc="" clickable="false" bounds="[0,0][1080,2400]"/>
+<node text="Tiếp theo" resource-id="vn.app:id/next_btn" class="android.widget.Button" content-desc="" clickable="true" bounds="[40,2200][1040,2340]"/>
+<node text="Vua phá lưới" resource-id="" class="android.widget.TextView" content-desc="" clickable="false" bounds="[40,600][500,660]"/>
+<node text="" resource-id="" class="android.view.View" content-desc="Đóng" clickable="true" bounds="[960,80][1040,160]"/></hierarchy>`
+  const out = describeAndroid(xml)
+  assert.match(out, /- \{ id: 'next_btn' \}  <Button> text="Tiếp theo" clickable @40,2200 1000×140/)
+  assert.match(out, /- \{ text: "Vua phá lưới" \}  <TextView> @40,600 460×60/)
+  assert.match(out, /- \{ desc: "Đóng" \}  <View> clickable/)
+  assert.doesNotMatch(out, /FrameLayout/, 'nodes with nothing to address them by are left out')
+})

@@ -29,6 +29,11 @@ Flows live in `<task>/flows/<case>.mjs`, manifest `<task>/flows.json`, runner
 4. Run: `flow-run.mjs <task> --target local [--cases …|--failed] [--jobs 3]` — `--jobs 3` runs three cases at
    a time (Web/API; keep 1 for Android and for cases that share one account or a single background worker).
    Fix-round briefs → `--failed` plus the smoke case the PM names, if any.
+   The final check before you report: the same command plus `--changed` — a case that already PASSed on this
+   commit, target and flow is not run again (`skipped`, or `upToDate` when nothing changed). Never re-run the
+   whole suite only to confirm cases that just passed.
+   Each case stops at its timeout (180 s Web/API, 360 s Android); the result names the step it hung in. A timeout
+   is a finding to fix (a wait that never ends, a screen that never comes), not a reason to raise `--timeout`.
 5. Pick the cheapest flow that covers a case: API > Web > App. A criterion about data or rules is asserted
    through the API (seconds); a Web flow only for what is about the screen itself; the emulator and an APK
    build only when App code changed or the behaviour is App-only. Other repos run at their PR branches as
@@ -89,6 +94,11 @@ is not a bug. Seed data with `uniq()` names so two jobs never fight over one rec
 
 ## Look before you write (UI steps)
 Never write selectors from memory or from the source code alone.
+- Android: `node ${CLAUDE_PLUGIN_ROOT}/scripts/flow-peek.mjs <task> - --android <serial> [--steps <file.mjs>]`
+  prints the screen the emulator shows (after the steps) as `{ id }` / `{ text }` / `{ desc }` selectors with
+  bounds. A failed Android step leaves `evd/<case>-fail-<step>.ui.txt` (`page` in the result), same format.
+  Do not explore the app with `adb shell input tap` + screencap + reading the image: one peek replaces that
+  loop. Use raw adb only for what peek cannot do (and say why in the report).
 - `node ${CLAUDE_PLUGIN_ROOT}/scripts/flow-peek.mjs <task> <path> [--steps <file.mjs>] [--wait <selector>]`
   opens the screen on the target and prints what is really there with the locators to use — test ids, form
   labels and placeholders, role + name — plus a screenshot. `--steps` runs a small module first (log in with
@@ -101,6 +111,11 @@ Never write selectors from memory or from the source code alone.
 
 ## Writing a flow without losing time
 - While a flow is being written, run only that case (`--cases <id>`), never the whole suite per edit.
+- Long commands: `run_in_background` and wait for the notification; never a hand-written `until`/`sleep` loop
+  that waits more than 60 s. Ask the runner, not the clock.
+- Your context is re-read every turn: do not `cat` a file over ~20 KB (a tracker JSON, a page dump, a big
+  log) — `grep`/`head`/`sed -n` the part you need. `flow-run` prints one short line per case; add `--verbose`
+  only when you need the extra fields.
 - A step fails → look at the real response first (the failing request with `curl`, the verdict file, the
   failure screenshot), then edit once. Edit → full re-run → edit again is the slowest thing you do.
 

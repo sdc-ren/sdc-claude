@@ -55,7 +55,8 @@ their reports is not enough:
 1. Read each report: deviations, `blocked` items, lines they need in a file they do not own.
 2. Do what was left for you (shared files, blocked items) and fix the seams where the parts meet — a member
    that guessed an interface differently, a missing import or export, a type that no longer matches.
-3. Run the repo formatter on the changed files, then the whole-repo typecheck or build, then the job's
+3. Run the repo formatter on the changed files, then the whole-repo typecheck or build (to a log, read its tail —
+   dev.md "Keep long output out of your context"), then the job's
    `done-when` checks, then the existing tests (dev.md "Micro-test", config `## Checks`). Fix what fails, whoever wrote it. A member that failed or did half: finish its part
    yourself when it is small, else report `blocked` with exactly what is missing.
 4. One report for the whole job (`jobs/<id>-dev-<repo>.md`): micro-task → files → done-when result, who did

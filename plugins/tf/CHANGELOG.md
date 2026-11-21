@@ -4,6 +4,30 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.19.0] — 2026-11-21
+
+Measured on 167 tester jobs: about 70% of tester time went into fixing flow scripts and re-running them, and into
+re-running every case once more at the end; an Android re-run averaged 114 s. This release cuts those loops.
+
+### Added
+- **Look at an Android screen before writing its steps.** `flow-peek.mjs <task> - --android <serial> [--steps …]`
+  prints what the emulator shows as the selectors `androidFlow` takes (`{ id }`, `{ text }`, `{ desc }`, bounds,
+  clickable) — instead of `adb input tap` + screencap + reading the image by hand.
+- **A failed Android step leaves the screen as it was:** `evd/<case>-fail-<step>.ui.txt`, same format, returned as
+  `page` like the Web `.page.txt`.
+- **`flow-run.mjs --changed`:** skips a case that already PASSed on this commit, this target and this flow
+  (`flowHash` = the flow file plus the `_lib` files it imports). The tester's final check uses it; nothing left
+  to run returns `upToDate`.
+
+### Changed
+- **Each case has its own ceiling:** 180 s Web/API, 360 s Android (was 600 s for every case); the result names the
+  step it hung in (`[tf-step]` lines from the flow kit). `--timeout` still overrides.
+- **`flow-run` prints one short entry per case** (case, status, first error line, page dump, evidence);
+  `--verbose` gives every field.
+- **Long output stays out of the agents' context:** dev and lead run typecheck/build/lint/tests to a log and read
+  its tail; the tester never `cat`s a file over ~20 KB, waits on background commands instead of `until`/`sleep`
+  loops, and never re-runs the suite only to confirm cases that just passed.
+
 ## [1.18.1] — 2026-11-21
 
 ### Fixed

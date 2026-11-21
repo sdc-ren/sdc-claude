@@ -20,7 +20,9 @@
 // ANDROID_SERIAL, ADB, VIEWPORT (e.g. 1440x900), HEADED=1, TRACE=1, STEP_TIMEOUT_MS, LOADING_SELECTOR, TF_ROOT, TF_SLUG,
 // FLOW_LIB (the workspace's shared helpers, <root>/.pipeline/_lib — `await import(`${process.env.FLOW_LIB}/auth.mjs`)`).
 // A web step that fails also saves <case>-fail-<step>.page.txt: what was on the page (roles, names, test ids)
-// with ready-to-use locators — read it before editing the flow instead of guessing and re-running.
+// with ready-to-use locators — read it before editing the flow instead of guessing and re-running. An Android
+// step saves <case>-fail-<step>.ui.txt the same way (resource ids, texts, descs, bounds from uiautomator).
+// Each step prints `[tf-step] <name>` when it starts, so a run killed by its timeout says where it was.
 // Pointing at the bug (evidence QC can read without the flow): expect(cond, msg, { at, label, expected, actual })
 // marks the element `at` (a Playwright locator or selector on Web, a find() selector on Android) when it fails;
 // mark(at, label) adds another marked element to the next shot; shot(name, { caption, crop }) gives the image a
@@ -109,6 +111,7 @@ function stepper(v, onFail) {
     const s = { name, ok: true, ms: 0 }
     const t = Date.now()
     v.steps.push(s)
+    try { process.stdout.write(`\n[tf-step] ${String(name).replace(/\s+/g, ' ').slice(0, 120)}\n`) } catch {}
     try { return await fn() } catch (e) {
       s.ok = false
       s.error = String(e && e.message || e).slice(0, 500)
@@ -145,6 +148,32 @@ export async function describePage(page, { max = 9000 } = {}) {
   try { tree = await page.locator('body').ariaSnapshot() } catch { tree = '(aria snapshot not available in this Playwright version)' }
   out.push('', "## Accessibility tree → getByRole('<role>', { name: '<name>' })", tree.length > max ? `${tree.slice(0, max)}\n… (cut at ${max} chars)` : tree)
   return out.join('\n')
+}
+
+// uiautomator XML → the nodes a flow can address: resource id, text, content-desc, bounds, clickable.
+export function androidNodes(xml) {
+  return [...String(xml).matchAll(/<node [^>]*>/g)].map((m) => {
+    const a = (n) => (m[0].match(new RegExp(`${n}="([^"]*)"`)) || [])[1] || ''
+    const b2 = a('bounds').match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/)
+    return { id: a('resource-id'), text: a('text'), desc: a('content-desc'), cls: a('class').split('.').pop(), clickable: a('clickable') === 'true', scrollable: a('scrollable') === 'true', bounds: b2 ? b2.slice(1).map(Number) : null }
+  })
+}
+// What is on an Android screen right now, as the selectors androidFlow takes ({ id }, { text }, { desc }) —
+// the same job describePage does for the web. Nodes with nothing to address them by are left out.
+export function describeAndroid(xml, { max = 9000 } = {}) {
+  const ns = androidNodes(xml).filter((n) => n.bounds && (n.id || n.text || n.desc))
+  const short = (id) => id.replace(/^[\w.]+:id\//, '')
+  const q = (s) => JSON.stringify(s.replace(/\s+/g, ' ').trim().slice(0, 70))
+  const line = (n) => {
+    const sel = n.id ? `{ id: '${short(n.id)}' }` : n.text ? `{ text: ${q(n.text)} }` : `{ desc: ${q(n.desc)} }`
+    const [x1, y1, x2, y2] = n.bounds
+    return `- ${sel}  <${n.cls || 'View'}>${n.text && n.id ? ` text=${q(n.text)}` : ''}${n.desc && (n.id || n.text) ? ` desc=${q(n.desc)}` : ''}${n.clickable ? ' clickable' : ''}${n.scrollable ? ' scrollable' : ''} @${x1},${y1} ${x2 - x1}×${y2 - y1}`
+  }
+  const ids = ns.filter((n) => n.id).length
+  const out = ['## Android screen → tap({ id }) / tap({ text }) / tap({ desc })',
+    ...(ids ? [] : ['(no resource ids on this screen — use text/desc; tell the dev which element needs a key)']), ...ns.map(line)]
+  const txt = out.join('\n')
+  return txt.length > max ? `${txt.slice(0, max)}\n… (cut at ${max} chars)` : txt
 }
 
 export async function webFlow(caseId, fn, opts = {}) {
@@ -232,21 +261,15 @@ export async function webFlow(caseId, fn, opts = {}) {
   }
 }
 
-export async function androidFlow(caseId, fn) {
-  const k = base(caseId, 'android')
-  const serial = env.ANDROID_SERIAL
-  const ADB = env.ADB || 'adb'
+// The adb helpers androidFlow gives a flow, on their own (flow-peek uses them to look at a screen).
+export function androidKit(serial, ADB = env.ADB || 'adb') {
   const adb = (...args) => execFileSync(ADB, ['-s', serial, ...args], { stdio: 'pipe', timeout: 60_000, maxBuffer: 64 * 1024 * 1024 })
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
   const dump = () => {
     adb('shell', 'uiautomator', 'dump', '/sdcard/tf-ui.xml')
     return adb('exec-out', 'cat', '/sdcard/tf-ui.xml').toString()
   }
-  const nodes = (xml) => [...xml.matchAll(/<node [^>]*>/g)].map((m) => {
-    const a = (n) => (m[0].match(new RegExp(`${n}="([^"]*)"`)) || [])[1] || ''
-    const b2 = a('bounds').match(/\[(\d+),(\d+)\]\[(\d+),(\d+)\]/)
-    return { id: a('resource-id'), text: a('text'), desc: a('content-desc'), bounds: b2 ? b2.slice(1).map(Number) : null }
-  })
+  const nodes = androidNodes
   const match = (n, sel) => (sel.id && (n.id === sel.id || n.id.endsWith(`/${sel.id}`)))
     || (sel.text && n.text.includes(sel.text)) || (sel.desc && n.desc.includes(sel.desc))
   const find = (sel) => nodes(dump()).find((n) => n.bounds && match(n, sel)) || null
@@ -264,6 +287,14 @@ export async function androidFlow(caseId, fn) {
   }
   const type = async (text) => { adb('shell', 'input', 'text', String(text).replace(/ /g, '%s')); await sleep(300) }
   const key = async (code) => { adb('shell', 'input', 'keyevent', String(code)); await sleep(300) }
+  return { adb, dump, nodes, find, waitFor, tap, type, key, sleep }
+}
+
+export async function androidFlow(caseId, fn) {
+  const k = base(caseId, 'android')
+  const serial = env.ANDROID_SERIAL
+  const ADB = env.ADB || 'adb'
+  const { adb, dump, find, waitFor, tap, type, key, sleep } = androidKit(serial, ADB)
   // Screen pixels of a node (uiautomator bounds are already in screencap pixels).
   const markOf = async (sel) => {
     const n = sel && sel.bounds ? sel : find(sel)
@@ -285,8 +316,11 @@ export async function androidFlow(caseId, fn) {
     if (!serial) k.blocked('ANDROID_SERIAL not set — start the task emulator first')
     const step = stepper(k.v, async (name, err) => {
       failShot = true
+      const tag = `fail-${name.replace(/[^\w-]+/g, '_').slice(0, 40)}`
       await failMark(k, markOf, err, name)
-      await shot(`fail-${name.replace(/[^\w-]+/g, '_').slice(0, 40)}`)
+      await shot(tag)
+      // The screen as it was when the step failed (ids, texts, descs, bounds): fix the step from it, no re-run.
+      try { const file = `${k.v.case}-${tag}.ui.txt`; writeFileSync(join(EVD, file), describeAndroid(dump())); k.v.page = file } catch {}
     })
     try {
       await fn({ adb, dump, find, waitFor, tap, type, key, shot, mark, step, sleep, api: k.api, uniq: k.uniq, expect: k.expect, blocked: k.blocked, env })

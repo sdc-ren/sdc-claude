@@ -586,9 +586,14 @@ node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --cases TC1 --target dev #
 node <plugin>/scripts/cases.mjs status .pipeline/PROJ-123                      # approved cases: flow fresh/stale/missing, result valid?
 node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --jobs 3                # three cases at a time
 node <plugin>/scripts/flow-peek.mjs .pipeline/PROJ-123 /some/screen           # what is on a screen, with locators
+node <plugin>/scripts/flow-peek.mjs .pipeline/PROJ-123 - --android emulator-5560 # what the emulator shows, as selectors
+node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --changed               # only cases not green on this commit + flow
 ```
 
-- Waits for the app, not the clock: `waitApi`, `ready`, `gotoReady`; a 15 s ceiling per step, never a delay.
+- Waits for the app, not the clock: `waitApi`, `ready`, `gotoReady`; a 15 s ceiling per step, never a delay, and
+  a ceiling per case (180 s Web/API, 360 s Android) — a hung case is stopped and the result names its step.
+- A failed step leaves what was on the screen: `<case>-fail-<step>.page.txt` (Web) or `.ui.txt` (Android), with
+  the locators to use, so the flow is fixed from it instead of re-run.
 - Evidence: `<case>-after.webp` (+ `before` for visual changes), failure screenshot automatically,
   Playwright trace only with `TRACE=1`. `expect(cond, label, { at, expected, actual })` and `mark(at, label)` make
   the runner draw a red box and label on the element (`annotate.mjs`, Chromium; ffmpeg draws boxes only). A visual case passes only when before and after differ where the

@@ -58,6 +58,11 @@ when it exists; never check out the base in the task worktree). Yours → fix th
 it pins behaviour the task changes on purpose. Not yours → list it as `pre-existing` with the base result.
 Paste the real output (trimmed) into the report.
 
+**Keep long output out of your context** (every turn re-reads it): a typecheck, build, lint or test run goes to a
+log and you read its end — `<cmd> > <task>/logs/<job>-<tool>.log 2>&1; echo "exit $?"; tail -40 <task>/logs/<job>-<tool>.log`
+— then `grep` the log for the errors of one file when you need more. Never let a full test or build run print
+into the conversation.
+
 ## Report (`jobs/<id>-dev-<repo>.md`)
 Micro-task → files → done-when result · deviations from the plan and why · anything the tester should
 look at hardest · formatter/typecheck output. Return `verdict: NONE`, `filesChanged`, and `status`
