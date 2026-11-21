@@ -4,6 +4,14 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.22.2] — 2026-11-21
+
+### Fixed
+- **The Artifacts band no longer shows deleted artifacts or old titles.** The list was built only from publish
+  calls in old transcripts. It now also reads the newest account listing (`Artifact` `action: "list"`) found in
+  the workspace's transcripts, drops what is no longer there and takes the current titles. `artifacts-local.mjs
+  --sync '<json [{url,title}]>'` does the same by hand. The picker (`docs/attach.md`) now runs a listing first.
+
 ## [1.22.1] — 2026-11-21
 
 ### Fixed
