@@ -4,6 +4,20 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.22.1] — 2026-11-21
+
+### Fixed
+- **The issue key is the scope of every commit and PR title, and a PR title is English.** On Rồng Việt, 52 of 400
+  backend commits put the key at the end (`feat(goalkeeper-award): … (RVD-306)`), one PR put it in brackets
+  (`fix(goalkeeper): [RVD-306] …`), and many PR titles were Vietnamese copies of commit summaries. Commits were
+  made per area of the plan, the area became the scope, and later packaging copied that style from `git log`.
+  - `guidelines/git.md`: the key is always the scope, also with several commits per PR; a table of wrong vs
+    right; PR titles are written in English for the PR; a repo convention counts only when written down.
+  - The tool guard refuses `git commit -m` and `gh pr create|edit --title` that break these rules, and
+    `gh pr create --fill` (it copies a commit summary).
+  - `scripts/naming.mjs check` for messages the guard cannot read (`git commit -F`, a title in a variable); the
+    PACKAGE reviewer runs it before committing and opening the PR.
+
 ## [1.22.0] — 2026-11-21
 
 Measured over ten days: agents read `ticket.md` (up to 117 KB on a long task), the workspace config (16 KB) and

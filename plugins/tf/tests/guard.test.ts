@@ -1,6 +1,6 @@
 import { expect, test } from 'claude-code/testing'
 
-import { parseJob, refuse, refuseAll } from '../hooks/guard'
+import { checkTitle, parseJob, refuse, refuseAll } from '../hooks/guard'
 
 const WT = '/r/.worktrees/T-1/backend'
 const dev = (extra = '') => `Job J2 · role dev lead · repo be\nTask T-1 · mode build · round 1\n\nBrief: x\nWorktree: ${WT} · existing PR: none\n${extra}`
@@ -92,8 +92,34 @@ test('every tf agent, the PM included, is held to the rules for all agents', () 
     for (const cmd of ['gh pr comment 12 --body hi', 'gh issue comment 3 -b x', 'node /s/pr-feedback.mjs post /r/.pipeline/T-1', 'node "/s/pr-feedback.mjs" review /d https://github.com/o/r/pull/1', 'node /s/jira.mjs comment /r/.pipeline/T-1 RVD-1 --file c.md --site https://x.atlassian.net --confirm'])
       expect(refuseAll(job, 'Bash', { command: cmd })).toContain('never posts')
     // What the work needs still passes.
-    for (const cmd of ['git push -u origin feat/x', 'git push origin HEAD', 'gh pr create --base develop --title x --body-file b.md', 'gh pr edit 12 --body-file b.md', 'gh pr view 12 --json state', 'gh pr diff 12', 'gh pr ready 12', 'node /s/pr-feedback.mjs fetch /r/.pipeline/T-1 https://github.com/o/r/pull/1', 'node /s/browser.mjs auth jira --url https://x.atlassian.net', 'node /s/jira.mjs comment /r/.pipeline/T-1 RVD-1 --file c.md --site https://x.atlassian.net', 'node /s/jira.mjs read /r/.pipeline/T-1 RVD-1 --site https://x.atlassian.net', 'git -C /w grep -n "feature" origin/develop', 'ls ~/.claude/task-flow'])
+    for (const cmd of ['git push -u origin feat/x', 'git push origin HEAD', 'gh pr create --base develop --title "feat: add booking screen" --body-file b.md', 'gh pr edit 12 --body-file b.md', 'gh pr view 12 --json state', 'gh pr diff 12', 'gh pr ready 12', 'node /s/pr-feedback.mjs fetch /r/.pipeline/T-1 https://github.com/o/r/pull/1', 'node /s/browser.mjs auth jira --url https://x.atlassian.net', 'node /s/jira.mjs comment /r/.pipeline/T-1 RVD-1 --file c.md --site https://x.atlassian.net', 'node /s/jira.mjs read /r/.pipeline/T-1 RVD-1 --site https://x.atlassian.net', 'git -C /w grep -n "feature" origin/develop', 'ls ~/.claude/task-flow'])
       expect(refuseAll(job, 'Bash', { command: cmd })).toBe('')
     expect(refuseAll(job, 'Read', { file_path: '/r/.pipeline/T-1/ticket.md' })).toBe('')
   }
+})
+
+test('commits and PR titles follow git.md: the issue key is the scope, a PR title is English', () => {
+  const pack = parseJob('Job J9 · role reviewer · repo be\nTask RVD-306 · mode build · round 5\n\nBrief: PACKAGE\n', 'tf:reviewer')!
+  expect(pack.key).toBe('RVD-306')
+  const no = (cmd: string) => expect(refuseAll(pack, 'Bash', { command: cmd })).toContain('guidelines/git.md')
+  const yes = (cmd: string) => expect(refuseAll(pack, 'Bash', { command: cmd })).toBe('')
+  // Seen on Rồng Việt PRs.
+  no('git -C /w commit -m "feat(goalkeeper-award): bỏ mặc định preset Huế (RVD-306)"')
+  no(`gh pr create --base develop --title 'fix(goalkeeper): [RVD-306] hide redundant config CTA' --body-file b.md`)
+  no('gh pr create --title "feat(RVD-306): cấu hình xét giải thủ môn theo từng giải" --body-file b.md')
+  no('gh pr edit 12 --title "[RVD-306] hide config CTA"')
+  no('gh pr create --fill --base develop')
+  no(`git commit -m "$(cat <<'EOF'\nfeat(tournament): add groups (RVD-306)\n\nbody\nEOF\n)"`)
+  // Right, and what cannot be read from the command (a file, a variable) is left to naming.mjs.
+  yes('git -C /w commit -m "feat(RVD-306): goalkeeper-award — bỏ mặc định preset Huế"')
+  yes(`git commit -m "$(cat <<'EOF'\nfix(RVD-306): hide redundant config CTA\n\nbody\nEOF\n)"`)
+  yes('gh pr create --base develop --title "fix(RVD-306): hide redundant goalkeeper config CTA" --body-file b.md')
+  yes('git commit -F /r/.pipeline/RVD-306/tmp/msg.txt')
+  yes('gh pr create --title "$TITLE" --body-file b.md')
+  yes('gh pr edit 12 --body-file b.md')
+  // No key: any lowercase scope or none.
+  const plain = parseJob('Job J9 · role reviewer · repo be\nTask booking-screen-1a2b · mode build · round 1\n\nBrief: PACKAGE\n', 'tf:reviewer')!
+  expect(plain.key).toBe('')
+  expect(refuseAll(plain, 'Bash', { command: 'gh pr create --title "feat(auth): add OAuth2 login"' })).toBe('')
+  expect(checkTitle('feat(Auth): add login', 'pr')).toContain('scope "Auth" is not lowercase kebab-case')
 })

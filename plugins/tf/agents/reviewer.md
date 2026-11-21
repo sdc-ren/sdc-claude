@@ -83,7 +83,11 @@ introduced by this diff). Ids `QP<n> [P1]: file:line — problem — fix`, stabl
   since the gate (`git status`, diff stat) before packaging. When the prompt says `NO GATE RAN` (small-task
   lane) you are the gate too: run the whole checklist above first and package only on a clean result —
   otherwise return `NEEDS-WORK`/`BLOCK` with the `QP` points and no git write. Then commit in the plan's groups (`git add <exact paths>`, never `-A` or `.`; message per `${CLAUDE_PLUGIN_ROOT}/guidelines/git.md`
-  unless the repo differs; no agent attribution), push, and:
+  unless the repo's WRITTEN convention differs — never copy the style of `git log`; no agent attribution). The task's
+  issue key (the task slug when it is one) is the scope of every commit and of the PR title; the PR title is English,
+  written for the PR, never a copied commit summary. Check each message and the title first:
+  `node ${CLAUDE_PLUGIN_ROOT}/scripts/naming.mjs check --kind commit|pr --key <KEY> (--file <msg> | "<line>")`.
+  Then push, and:
   - an open PR exists for this repo → push to its branch and refresh the body with `gh pr edit`;
   - otherwise, or the old PR is merged → `gh pr create` against the plan's base, **ready — never
     `--draft`** unless the brief says the user passed `--draft`. Body per
