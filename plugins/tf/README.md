@@ -215,7 +215,8 @@ E2E only, no code changes. You approve the test cases before anything runs:
    writes `.pipeline/<TICKET>/cases.md`: one section per test case (platform, screen, data, steps, expected),
    which acceptance criterion each covers, ⚠ on guesses and vague expectations, open questions and missing
    specs. A QC test-case list, when the ticket has one, is the main source and keeps QC's ids.
-2. The run stops there. You answer the questions, attach missing specs, edit `cases.md` and approve.
+2. The run stops there and shows the cases as one table — ID · situation · expected result · platform · ⚠ —
+   with the counts and the questions. You answer, attach missing specs, edit `cases.md` and approve.
 3. Exactly the approved cases run. Saved flows that still match a case re-run without any agent; the tester
    writes or fixes only the rest. A later `/tf:e2e` with nothing changed re-runs in minutes with no model.
 4. Each failed case has a screenshot that points at the bug (red box, red label, close-up), and the ticket
@@ -334,7 +335,8 @@ Every form shows a **dry run first** and changes nothing until you say yes.
 | `--legacy` | Fold old suffixed task folders (`PROJ-123-e2e`, `-qc`, `-r2`…) into `.pipeline/PROJ-123/history/legacy/` |
 | *(nothing)* | Clean the workspace: free and archive every task whose PRs are all merged or closed (and idle ones past `TF_PRUNE_DAYS`), promote their passing flows to `_regression/`. Also says what `--migrate` and `--legacy` would do |
 
-Nothing is ever posted to the tracker or GitHub as a comment without your approval of the exact text.
+Nothing is ever posted to the tracker or GitHub as a comment without your approval of the exact text. On Jira,
+tf reads and posts with `scripts/jira.mjs` (through your signed-in browser session); agents cannot post.
 tf never merges, approves, force-pushes, or enables auto-merge.
 
 ## Attaching artifacts and design systems
@@ -460,6 +462,8 @@ for each, is in [docs/design.md](docs/design.md#hard-rules).
 | XS/S: the tester runs only the cases the change touches. XS: one repo, no `FLOWS` job, no dev team. No `FLOWS` job in a fix round | A one-line fix does not pay for the whole saved suite |
 | The same kind of job on a repo unfinished twice in a row → the run stops with both reasons | A permission or environment block is yours to fix; a third try changes nothing |
 | PRs are ready (draft only with `--draft`); limits on turns, jobs and fix attempts | A PR means "done and verified"; loops that do not converge escalate to you |
+| Commits and PR titles are `<type>(<KEY>): …` with the issue key as the scope, and a PR title is English — a wrong `git commit -m` or `--title` is refused at the tool call ([guidelines/git.md](guidelines/git.md)) | One naming style in every repo, whatever the history looks like |
+| A cache index, port, DB or emulator is held by one task at a time | Two tasks never write the same cache or database |
 
 ### When tf stops for you
 
