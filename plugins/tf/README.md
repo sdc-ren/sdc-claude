@@ -102,7 +102,7 @@ post one.
 |---|---|---|
 | `--attach` | build · qc · review · e2e · demo | Before the PM starts, show a checkbox list of this workspace's artifacts and design systems; ticked items are read into `specs/` and used by the PM, devs and testers |
 | `--lang <code>` | build · qc · feedback · review · e2e | Report language for this run (`vi`, `en`, …); overrides the workspace config |
-| `--approve` | build · qc | Stop after the PM writes the plan and wait for your approval (a size L task stops there anyway) |
+| `--approve` | build · qc | Stop after the PM writes the plan and wait for your approval (a size L task stops there anyway). You see a short summary written for you — goal, requirements in plain words, one line per repo, what is left out, risks — not the developer's task list |
 | `--assume` | build · qc · review · e2e | Run unattended: no questions about an unclear task and no design approval on a size L task — the PM assumes and lists what it assumed |
 | `--check` | feedback | Only fetch and triage the review points — no code, nothing posted |
 | `--draft` | build · qc | Allow a draft PR. Without it every PR is opened ready, and agents never choose draft |
@@ -215,7 +215,8 @@ E2E only, no code changes. You approve the test cases before anything runs:
    writes `.pipeline/<TICKET>/cases.md`: one section per test case (platform, screen, data, steps, expected),
    which acceptance criterion each covers, ⚠ on guesses and vague expectations, open questions and missing
    specs. A QC test-case list, when the ticket has one, is the main source and keeps QC's ids.
-2. The run stops there. You answer the questions, attach missing specs, edit `cases.md` and approve.
+2. The run stops there and shows the cases as one table — ID · situation · expected result · platform · ⚠ —
+   with the counts and the questions. You answer, attach missing specs, edit `cases.md` and approve.
 3. Exactly the approved cases run. Saved flows that still match a case re-run without any agent; the tester
    writes or fixes only the rest. A later `/tf:e2e` with nothing changed re-runs in minutes with no model.
 4. Each failed case has a screenshot that points at the bug (red box, red label, close-up), and the ticket
@@ -307,8 +308,9 @@ you can find it in Zalo.
 /tf:status [--doctor] [--metrics [slug]]
 ```
 
-What every task of the workspace holds — worktrees, databases, cache dbs, ports, PRs — and what cleanup would
-free right now.
+One table, one row per task: its PRs (how many merged), what it holds (worktrees, databases, cache dbs,
+ports), the disk its worktrees take, and whether `/tf:clean` frees it now — then the totals, and a ⚠ line when two
+tasks hold the same id.
 
 | Option | Effect |
 |---|---|
@@ -333,7 +335,8 @@ Every form shows a **dry run first** and changes nothing until you say yes.
 | `--legacy` | Fold old suffixed task folders (`PROJ-123-e2e`, `-qc`, `-r2`…) into `.pipeline/PROJ-123/history/legacy/` |
 | *(nothing)* | Clean the workspace: free and archive every task whose PRs are all merged or closed (and idle ones past `TF_PRUNE_DAYS`), promote their passing flows to `_regression/`. Also says what `--migrate` and `--legacy` would do |
 
-Nothing is ever posted to the tracker or GitHub as a comment without your approval of the exact text.
+Nothing is ever posted to the tracker or GitHub as a comment without your approval of the exact text. On Jira,
+tf reads and posts with `scripts/jira.mjs` (through your signed-in browser session); agents cannot post.
 tf never merges, approves, force-pushes, or enables auto-merge.
 
 ## Attaching artifacts and design systems
@@ -459,6 +462,8 @@ for each, is in [docs/design.md](docs/design.md#hard-rules).
 | XS/S: the tester runs only the cases the change touches. XS: one repo, no `FLOWS` job, no dev team. No `FLOWS` job in a fix round | A one-line fix does not pay for the whole saved suite |
 | The same kind of job on a repo unfinished twice in a row → the run stops with both reasons | A permission or environment block is yours to fix; a third try changes nothing |
 | PRs are ready (draft only with `--draft`); limits on turns, jobs and fix attempts | A PR means "done and verified"; loops that do not converge escalate to you |
+| Commits and PR titles are `<type>(<KEY>): …` with the issue key as the scope, and a PR title is English — a wrong `git commit -m` or `--title` is refused at the tool call ([guidelines/git.md](guidelines/git.md)) | One naming style in every repo, whatever the history looks like |
+| A cache index, port, DB or emulator is held by one task at a time | Two tasks never write the same cache or database |
 
 ### When tf stops for you
 
@@ -585,9 +590,17 @@ node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --cases TC1 --target dev #
 node <plugin>/scripts/cases.mjs status .pipeline/PROJ-123                      # approved cases: flow fresh/stale/missing, result valid?
 node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --jobs 3                # three cases at a time
 node <plugin>/scripts/flow-peek.mjs .pipeline/PROJ-123 /some/screen           # what is on a screen, with locators
+node <plugin>/scripts/flow-peek.mjs .pipeline/PROJ-123 - --android emulator-5560 # what the emulator shows, as selectors
+node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --changed               # only cases not green on this commit + flow
+node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --list                  # one line per flow: last result, up to date or stale
+node <plugin>/scripts/task.mjs config . --role tester                         # only the config sections a role needs
+node <plugin>/scripts/jira.mjs read .pipeline/PROJ-123 PROJ-123 --site https://acme.atlassian.net --md ticket.md  # the issue + comments
 ```
 
-- Waits for the app, not the clock: `waitApi`, `ready`, `gotoReady`; a 15 s ceiling per step, never a delay.
+- Waits for the app, not the clock: `waitApi`, `ready`, `gotoReady`; a 15 s ceiling per step, never a delay, and
+  a ceiling per case (180 s Web/API, 360 s Android) — a hung case is stopped and the result names its step.
+- A failed step leaves what was on the screen: `<case>-fail-<step>.page.txt` (Web) or `.ui.txt` (Android), with
+  the locators to use, so the flow is fixed from it instead of re-run.
 - Evidence: `<case>-after.webp` (+ `before` for visual changes), failure screenshot automatically,
   Playwright trace only with `TRACE=1`. `expect(cond, label, { at, expected, actual })` and `mark(at, label)` make
   the runner draw a red box and label on the element (`annotate.mjs`, Chromium; ffmpeg draws boxes only). A visual case passes only when before and after differ where the
@@ -660,13 +673,16 @@ git repos. A single-repo project lists just one.
 comment, e2e). A repo's own conventions (its CLAUDE.md, CONTRIBUTING, commitlint) win.
 
 **What does it cost?** Fewer agents than a fixed pipeline: a small task runs five (the PM twice, a dev, a
-tester, a reviewer), a large one a lead per repo with gates and testers. The PM uses opus for planning and
-drops to sonnet for small tasks after the first turn. `/tf:status --metrics` shows what each run really cost.
+tester, a reviewer), a large one a lead per repo with gates and testers. Each job gets the model its work
+needs: opus for the PM's planning turn, risky logic and turns that judge a failure; sonnet for ordinary dev,
+testing, gates and PR packaging; haiku for setup and tiny edits, retried once on sonnet if it cannot finish.
+`/tf:status --metrics` shows what each run really cost.
 
 ## More
 
 [docs/design.md](docs/design.md) — roles, hard rules, files, retention, metrics.
 [docs/orchestrator.md](docs/orchestrator.md) — what a `/tf:*` command does step by step.
+[docs/orchestrator-e2e.md](docs/orchestrator-e2e.md) and [docs/pm-e2e.md](docs/pm-e2e.md) — the e2e parts, read only by e2e runs.
 [CHANGELOG.md](CHANGELOG.md) — what changed in each version.
 
 ## License

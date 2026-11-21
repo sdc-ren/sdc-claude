@@ -86,6 +86,7 @@ const DISPATCH = {
           role: { type: 'string', enum: ['setup', 'dev', 'tester', 'reviewer'] },
           repo: { type: 'string', description: 'config repo key, or "all" for setup/tester across repos' },
           model: { type: 'string', enum: MODELS },
+          modelWhy: { type: 'string', description: 'Only when you pick a model above the default for the role (pm.md "Models"): one line why. A setup job runs on haiku without it.' },
           effort: { type: 'string', enum: ['low', 'medium', 'high'] },
           group: { type: 'integer', minimum: 1, description: 'same group runs in parallel; groups run in order' },
           brief: { type: 'string', description: 'What to do, concretely. Point at plan.md sections instead of repeating them.' },
@@ -266,7 +267,7 @@ function e2eResults() {
 
 function checkDispatch(d) {
   if (mode === 'feedback' && flags.check) return '--check is triage only: write feedback-triage.md and return close, no jobs'
-  if (mode === 'e2e' && !snapshot) return 'e2e runs only approved test cases: write cases.md (pm.md "e2e: cases") and return decision=cases — no job runs before the user approves them'
+  if (mode === 'e2e' && !snapshot) return 'e2e runs only approved test cases: write cases.md (docs/pm-e2e.md) and return decision=cases — no job runs before the user approves them'
   const jobs = d.jobs || []
   if (!jobs.length) return 'decision=dispatch needs at least one job'
   if (jobs.length > MAX_JOBS) return `at most ${MAX_JOBS} jobs per dispatch (got ${jobs.length}) — dispatch the first groups now, the rest next turn`
@@ -376,18 +377,20 @@ function checkClose(d) {
 const AP = typeof A.agentPrefix === 'string' ? A.agentPrefix : 'tf:'
 const AGENT = { dev: `${AP}dev`, lead: `${AP}lead`, tester: `${AP}tester`, reviewer: `${AP}reviewer` }
 const worktreeOf = (repo) => worktrees[repo] || (A.worktreePaths && A.worktreePaths[repo]) || '(see HANDOFF.md / setup report)'
+// Jobs read the config sections of their role, not the whole file (the PM reads it whole).
+const configLine = (role) => `Workspace config for your role: node ${S}/task.mjs config ${root} --role ${role} (add a section name to get one more) — read that, not the whole ${cfg}.\n`
 const serversLine = `App servers: node ${S}/serve.mjs start ${root} ${slug} (reuses running ones; status/restart/run per its header) — never start or kill them by hand.\n`
 const reportLine = (id, role, repo) =>
   `Write your report to ${dir}/jobs/${id}-${role}-${repo}.md (heredoc) and append one line: node ${S}/task.mjs journal ${dir} "${id} ${role} ${repo}: <one-line result>". ` +
   `Return the structured report; reportFile = that path.`
 function jobPrompt(j) {
-  return `Job ${j.id} · role ${j.role} · repo ${j.repo}\n${context}\n\n` +
+  return `Job ${j.id} · role ${j.role} · repo ${j.repo}\n${context}\n` + configLine(j.role) + `\n` +
     `Brief: ${j.brief}\nRead first: ${(j.reads || []).join(', ') || 'plan.md section for your repo'}\nDone when: ${j.doneWhen}\n` +
     (j.repo !== 'all' ? `Worktree: ${worktreeOf(j.repo)} · existing PR: ${prs[j.repo] || 'none'}\n` : '') +
     (j.role === 'setup'
       ? `You provision runtime resources for this task exactly as the workspace config "Provisioning" section says. Reuse everything the task already holds ` +
         `(node ${S}/resources.mjs list ${root}); worktrees go exactly to the paths listed above (<root>/.worktrees/<SLUG>/<repo dir>) — never another folder name. ` +
-        `For dependencies try node ${S}/fastdeps.mjs first (see config). Register every resource with node ${S}/resources.mjs add. ` +
+        `For dependencies try node ${S}/fastdeps.mjs first (see config). Register every resource with node ${S}/resources.mjs add (exit 3 = another task holds that id: take the next free one). ` +
         (mode === 'review' || mode === 'e2e'
           ? `Mode ${mode}: check out the code under test (the PR head, \`git fetch origin pull/<n>/head\`, or its branch) DETACHED in the task worktree — never create a branch, never commit. `
           : '') +
@@ -462,7 +465,7 @@ async function uncommitted(j, model, report) {
 }
 async function runDev(j) {
   const model = MODELS.includes(j.model) ? j.model : 'sonnet'
-  const head = `Job ${j.id} · role dev lead · repo ${j.repo}\n${context}\n\n` +
+  const head = `Job ${j.id} · role dev lead · repo ${j.repo}\n${context}\n` + configLine('dev') + `\n` +
     `Brief: ${j.brief}\nRead first: ${(j.reads || []).join(', ') || 'plan.md section for your repo'}\nDone when: ${j.doneWhen}\n` +
     `Worktree: ${worktreeOf(j.repo)} · existing PR: ${prs[j.repo] || 'none'}\n` + serversLine + headLine(j.repo)
   const teamFile = `${dir}/jobs/${j.id}-team-${j.repo}.md`
@@ -491,7 +494,7 @@ async function runDev(j) {
   const members = plan.members.map((m, i) => ({ ...m, id: `${j.id}${'abc'[i]}` }))
   log(`${j.id} lead:${j.repo} → ${members.map((m) => `${m.id} ${m.title}`).join(' · ')}`)
   const reports = await parallel(members.map((m) => () => run(
-    `Job ${m.id} · role dev (member of ${j.id}) · repo ${j.repo}\n${context}\n\n` +
+    `Job ${m.id} · role dev (member of ${j.id}) · repo ${j.repo}\n${context}\n` + configLine('dev') + `\n` +
       `Your part: ${m.title}\nTasks: ${m.tasks}\nRead first: ${teamFile}, plan.md section for your repo\n` +
       `Worktree: ${worktreeOf(j.repo)}\n` +
       `SHARED WORKTREE: ${members.filter((x) => x !== m).map((x) => x.id).join(', ')} edit this repo at the same time. Your files (edit nothing else): ${m.files.join(', ')}. ` +
@@ -516,11 +519,28 @@ function leadModel(repo) {
   const ms = [...lastByRepo.values()]
   return ms.length ? MODELS[Math.max(...ms.map((m) => MODELS.indexOf(m)))] : ''
 }
+// The model a non-dev job runs on. Setup is scripts (worktree, DB, emulator, APK): haiku unless the PM says why
+// not. A PACKAGE job writes the PR body people read: never below sonnet. A gate never runs below the lead it
+// judges (leadModel, in runJob).
+const rank = (m) => MODELS.indexOf(m)
+function jobModel(j) {
+  if (j.role === 'setup' && !j.modelWhy) return 'haiku'
+  if (j.role === 'reviewer' && isPackage(j) && rank(modelOf(j)) < rank('sonnet')) return 'sonnet'
+  return modelOf(j)
+}
+// A haiku job that could not finish gets one more try on sonnet, from where it stopped — cheaper than a PM turn
+// spent on a job the small model could not do.
+const retryable = (rep) => !rep || rep.status !== 'done'
 async function runJob(j, turn) {
   let report
-  if (j.role === 'dev') report = await runDev(j)
-  else {
-    let model = modelOf(j)
+  if (j.role === 'dev') {
+    report = await runDev(j)
+    if (modelOf(j) === 'haiku' && retryable(report)) {
+      log(`${j.id} dev ${j.repo}: model haiku → sonnet (haiku ${report ? report.status : 'returned nothing'})`)
+      report = await runDev({ ...j, model: 'sonnet', brief: `${j.brief}\nA first attempt on a smaller model stopped (${report ? report.status + ': ' + String(report.summary || '').slice(0, 200) : 'no answer'}). Continue from the worktree as it is now.` })
+    }
+  } else {
+    let model = jobModel(j)
     if (j.role === 'reviewer' && (!isPackage(j) || j._noGate) && CODE_MODES.includes(mode)) {
       const lm = leadModel(j.repo)
       if (lm && lm !== model) { log(`${j.id} gate ${j.repo}: model ${model} → ${lm} (the dev lead's)`); model = lm }
@@ -529,6 +549,10 @@ async function runJob(j, turn) {
     if (AGENT[j.role]) o.agentType = AGENT[j.role]
     if (j.effort) o.effort = j.effort
     report = await run(jobPrompt(j), o)
+    if (model === 'haiku' && retryable(report)) {
+      log(`${j.id} ${j.role} ${j.repo}: model haiku → sonnet (haiku ${report ? report.status : 'returned nothing'})`)
+      report = await run(jobPrompt(j) + `\nA first attempt on a smaller model stopped (${report ? report.status + ': ' + String(report.summary || '').slice(0, 200) : 'no answer'}). Continue from where it left things.\n`, { ...o, model: 'sonnet' })
+    }
   }
   const rec = { job: j, report, turn, seq: j._seq }
   ledger.push(rec)
@@ -575,7 +599,11 @@ const RULES = CODE_MODES.includes(mode)
   : ''
 // e2e with approved cases: nothing is left to judge but the dispatch and the reports — sonnet; writing the
 // cases (no snapshot yet) stays on opus.
-const pmModel = (turn) => (snapshot ? (violation ? 'opus' : 'sonnet') : turn === 1 || violation || !['XS', 'S'].includes(size) ? 'opus' : 'sonnet')
+// After turn 1 a PM turn that only reads green reports and dispatches the next group runs on sonnet, whatever
+// the size; one that must judge — a FAIL, a block, a NEEDS-WORK, plan-check points, a stuck job, a rejected
+// decision — runs on opus.
+const judging = () => !!(violation || planNotes || stuck || last.some((r) => !r.report || r.report.status !== 'done' || ['FAIL', 'NEEDS-WORK', 'BLOCK'].includes(r.report.verdict) || (r.report.blocked || []).length))
+const pmModel = (turn) => (snapshot ? (violation ? 'opus' : 'sonnet') : turn === 1 || judging() ? 'opus' : 'sonnet')
 for (let turn = 1; turn <= MAX_TURNS; turn++) {
   if (budgetLow()) return { status: 'handoff', slug, round, mode, note: 'token budget low — relaunch with the same args; the PM resumes from board.md' }
   phase('PM')
@@ -587,8 +615,8 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
         (mode === 'e2e'
           ? (snapshot
             ? `The user approved the test cases (${snapshot}). Do NOT analyse the task again: dispatch setup only if this task's resources are missing, then tester job(s) whose "cases" cover the run scope (${runScope.join(', ')}). ` +
-              `At close run node ${S}/cases.mjs results ${dir} --write and use what it decides (pm.md "e2e: cases").\n`
-            : `E2E test cases first (pm.md "e2e: cases"): write ${dir}/cases.md and return decision=cases with caseIds, questions (each naming the cases it affects), missingSpecs and target. Dispatch nothing — the user reviews and approves the cases before any job runs.` +
+              `At close run node ${S}/cases.mjs results ${dir} --write and use what it decides (${S}/../docs/pm-e2e.md).\n`
+            : `E2E test cases first (${S}/../docs/pm-e2e.md): write ${dir}/cases.md and return decision=cases with caseIds, questions (each naming the cases it affects), missingSpecs and target. Dispatch nothing — the user reviews and approves the cases before any job runs.` +
               (flags.assume ? ' The user passed --assume: no questions — assume and mark the case ⚠; the cases are approved as you write them.' : clarifyRound ? ` The user answered earlier questions (ticket.md "## Clarifications") — never ask those again${clarifyRound >= MAX_CLARIFY ? '; no more questions' : ''}.` : '') +
               (editRound ? ` The user edited the cases ${editRound} time(s): keep their edits, change only what the new answers or specs require.` : '') + '\n')
           : flags.assume

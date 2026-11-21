@@ -241,15 +241,16 @@ test('status: flow fresh/stale/missing, result valid/invalid by rev, target and 
   assert.equal(JSON.parse(cli('status', dir).out).approved, true)
 })
 
-test('preview is a table plus one line of counts', () => {
+test('preview is a table of situation and expected result, then counts and flows', () => {
   const { dir } = task(CASES.replace('### TC2: Danh', '### QC 2: Danh'))
   flowFile(dir, 'TC1')
   const r = cli('preview', dir)
   assert.equal(r.code, 0)
   const lines = r.out.trim().split('\n')
-  assert.equal(lines[0], '| ID | Tên | Nền tảng | Flow | ⚠ |')
-  assert.equal(lines[2], '| TC1 | Nhân viên xem đơn PENDING | Web | stale |  |')
-  assert.equal(lines[3], '| QC 2 (QC-2) | Danh sách trên app | App | missing | ⚠ |')
+  assert.equal(lines[0], '| ID | Tình huống | Mong đợi | Nền tảng | ⚠ |')
+  assert.match(lines[2], /^\| TC1 \| Nhân viên xem đơn PENDING \| .+ \| Web \|  \|$/)
+  assert.match(lines[3], /^\| QC 2 \(QC-2\) \| Danh sách trên app \| .+ \| App \| ⚠ \|$/)
+  assert.ok(lines.includes('flow: 1 stale · 1 missing'))
   assert.ok(lines.includes('- AC1: coverage names TC2, which is not a case')) // errors follow the counts
   assert.match(lines.find((l) => l.startsWith('2 TC')), /^2 TC · 1 AC chưa có TC · 1 ⚠ · 1 câu hỏi · 1 spec còn thiếu · target: local$/)
   assert.match(preview(dir), /Nhân viên/)

@@ -9,7 +9,7 @@
 //   approve    validate, then write cases.approved.json (the snapshot) — exit 1 and nothing written when invalid
 //   status     snapshot vs cases.md / requirements; per case flow fresh|stale|missing, result valid|invalid|none
 //   scope      JSON array of internal ids without a valid result (--out writes it for flow-run.mjs --cases-file)
-//   preview    plain text for chat: table ID · Tên · Nền tảng · Flow · ⚠ and one line of counts
+//   preview    plain text for chat: table ID · Tình huống · Mong đợi · Nền tảng · ⚠, a line of counts, a line of flows
 //   results    verdict per snapshot case (verified | verified-bugs | incomplete); --write copies comment images to
 //              evd/comment/, writes results.json, ticket-comment.md and the HANDOFF.md cases block
 //
@@ -331,17 +331,21 @@ export function scope(taskDir, { commit, out } = {}) {
 
 // ── preview ──────────────────────────────────────────────────────────────────
 const cell = (s) => String(s ?? '').replace(/\|/g, '\\|').replace(/\r?\n/g, '<br>')
+const clip = (s, n) => (s.length > n ? `${s.slice(0, n - 1).trimEnd()}…` : s)
 export function preview(taskDir) {
   const p = parse(taskDir)
   const v = validateParsed(p, { targets: knownTargets(taskDir) })
   const flows = flowsOf(taskDir)
+  const flowOf = {}
   const rows = p.cases.map((c) => {
     const s = caseState(taskDir, c, flows.cases[c.id], p.target, undefined)
+    flowOf[s.flow] = (flowOf[s.flow] || 0) + 1
     const id = c.id === c.sourceId ? c.sourceId : `${c.sourceId} (${c.id})`
-    return `| ${cell(id)} | ${cell(c.title)} | ${cell(c.platform)} | ${s.flow} | ${c.flagged ? '⚠' : ''} |`
+    return `| ${cell(id)} | ${cell(c.title)} | ${cell(clip(squash(c.expected), 140))} | ${cell(c.platform)} | ${c.flagged ? '⚠' : ''} |`
   })
-  const lines = ['| ID | Tên | Nền tảng | Flow | ⚠ |', '|---|---|---|---|---|', ...rows, '',
-    `${v.counts.cases} TC · ${v.counts.uncovered} AC chưa có TC · ${v.counts.flagged} ⚠ · ${p.questions.length} câu hỏi · ${p.missingSpecs.length} spec còn thiếu · target: ${p.target || '(trống)'}`]
+  const lines = ['| ID | Tình huống | Mong đợi | Nền tảng | ⚠ |', '|---|---|---|---|---|', ...rows, '',
+    `${v.counts.cases} TC · ${v.counts.uncovered} AC chưa có TC · ${v.counts.flagged} ⚠ · ${p.questions.length} câu hỏi · ${p.missingSpecs.length} spec còn thiếu · target: ${p.target || '(trống)'}`,
+    `flow: ${Object.entries(flowOf).map(([k, n]) => `${n} ${k}`).join(' · ') || '-'}`]
   if (v.errors.length) lines.push('', 'Lỗi:', ...v.errors.map((e) => `- ${e}`))
   return lines.join('\n') + '\n'
 }

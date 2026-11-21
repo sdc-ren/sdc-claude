@@ -32,7 +32,7 @@ names. That makes resume free — relaunch, the PM reads the board and continues
 | `tf:dev` | member of a lead's team: its own files and micro-tasks; reports to the lead | commits, edits another member's files |
 | `tf:tester` | e2e flows (`flows/`), evidence, verdicts | edits repo code |
 | `tf:reviewer` | plan check; static gate (scope, contract, quality, tamper, read-only zones); commit + push + PR; review-mode report | edits code, merges |
-| `setup` | provisioning per workspace config (generic agent, sonnet) | touches other tasks' resources |
+| `setup` | provisioning per workspace config (generic agent, haiku; sonnet when the PM gives `modelWhy` or haiku could not finish) | touches other tasks' resources |
 
 The roster is a menu. The PM uses the fewest roles that satisfy the hard rules.
 
@@ -67,7 +67,7 @@ them in its prompt on turn 1 and after a rejection, generated from the same cons
    a gate next to a running tester throws the test run away (RVD-293 round 3: ~16 min). In code modes a
    tester that did not PASS skips them too, so a `PACKAGE` job dispatched after it never pushes failing code.
 5. A gate runs on the model of the dev lead it judges (the repo's last dev job); the executor sets it.
-   `PACKAGE` jobs keep the PM's model.
+   `PACKAGE` jobs keep the PM's model but never run below sonnet (they write the PR body).
 6. Several testers in one group: each gets its own scratch folder (`<task>/tmp/<job>/`); only the first may
    edit the shared flow library, the others read it and park new helpers in `flows/_new/`.
 
@@ -138,23 +138,34 @@ and every agent reads them.
 | M | 2 repos or API change | plan check; one lead per repo in parallel ∥ tester FLOWS → gates → tester(s) → PACKAGE |
 | L | new feature, migration, money, permissions | M + `design.md` approved by the user first + opus where risky |
 
-Model per job: haiku < sonnet < opus. Default sonnet; opus only for risky logic or judgement. The PM runs on
-opus for turn 1; after that XS/S tasks run it on sonnet, M/L stay on opus, and any guard violation puts the
-next PM turn back on opus.
+Model per job, by the kind of work (the table in `agents/pm.md`; the executor enforces the rows marked there):
+
+| Work | Model |
+|---|---|
+| PM turn 1 (sizing, plan, design), writing `cases.md` | opus |
+| PM turn that must judge: a FAIL, blocked, NEEDS-WORK, plan-check points, a rejected decision | opus |
+| PM turn that only reads green reports and dispatches the next group (any size) | sonnet |
+| dev: risky logic (money, auth, permissions, concurrency, migrations) | opus, with `modelWhy` |
+| dev: ordinary work · tester · gate (or its lead's model) · PACKAGE (floor) | sonnet |
+| setup · XS copy/style edits · uncommit | haiku |
+
+A haiku job that does not finish (`blocked`, `failed`, no answer) is run once more on sonnet, from where it
+stopped. A guard violation puts the next PM turn on opus.
 
 ## Files (one folder per ticket)
 
 ```
 .pipeline/<SLUG>/
-  ticket.md        the brief: request + every source verbatim       read by PM
+  ticket.md        the brief in force: request, source, clarifications, comments since the last round   read by PM
+  ticket-history.md  earlier rounds' comments and round blocks, verbatim   opened only to quote
   HANDOFF.md       ≤ 80 lines, rewritten by PM at close             read FIRST every round
   plan.md          current round: requirements, (M) design, micro-tasks, contract, cases (PM)   jobs read their section
   design.md        size L only: data, neighbours, interfaces, decisions, flow, risks (PM); kept across rounds
   board.md         PM ledger: dispatches, results, assumptions, open issues
   journal.md       append-only, 1–3 lines per job (each agent)      grep only
   jobs/J<n>-<role>-<repo>.md   brief + report (the job's agent)     PM
-  flows/*.mjs + flows.json     e2e flows + manifest (tester)        tester, next rounds
-  ../_lib/*.mjs + README.md    shared flow helpers of the workspace (testers)   every task's flows
+  flows/*.mjs + flows.json     e2e flows + manifest (tester; read through `flow-run --list`)   tester, next rounds
+  ../_lib/*.mjs + README.md    shared flow helpers (README = index, one line per file)   every task's flows
   evd/             WebP/txt evidence (tester)                       session uploads
   ticket-comment.md / review.md   drafts (PM / reviewer)            user approves before posting
   history/r<N>/    plan, board, jobs of finished rounds             on demand
@@ -189,8 +200,12 @@ adds:
 - **Evidence points at the bug.** `expect(..., { at })` / `mark()` record the element; `annotate.mjs` draws a red
   box and label (and a close-up) before WebP conversion — no model looks at an image.
 - **Look before writing.** `flow-peek.mjs` opens a screen and prints the real test ids, labels and role + name
-  locators; a failed web step saves the same description of the page it failed on, so a selector is fixed
-  from what is there, not by re-running.
+  locators (`--android <serial>`: the emulator's resource ids, texts and descs); a failed step saves the same
+  description of the screen it failed on (`.page.txt` Web, `.ui.txt` Android), so a selector is fixed from what
+  is there, not by re-running.
+- **Re-run only what changed.** A result is stored with its commit, target and `flowHash` (the flow plus the
+  `_lib` files it imports); `flow-run --changed` skips cases already green on all three. Each case has a
+  ceiling (180 s Web/API, 360 s Android) and a timed-out result names the step it hung in.
 
 ## Retention
 
@@ -205,11 +220,15 @@ rules that matter most are also refused at the tool call, for every tf agent (`h
 | read, list, copy or edit `~/.claude/task-flow/auth` | the saved logins are used by the scripts, not handed to a model |
 | `gh pr merge`, `gh pr review`, the merge API | a PR stops at its link |
 | `git push --force`, `-f`, `+ref` | pushed history is never rewritten |
-| `gh pr comment`, `gh issue comment`, `pr-feedback.mjs post/reply/comment/review/resolve` | the orchestrator posts, after the user approved the text |
+| `gh pr comment`, `gh issue comment`, `pr-feedback.mjs post/reply/comment/review/resolve`, `jira.mjs comment --confirm` | the orchestrator posts, after the user approved the text |
+| a `git commit -m` or `gh pr create\|edit --title` that breaks `guidelines/git.md` (the issue key not as scope, a `[KEY]`, a non-English PR title), `gh pr create --fill` | titles stay consistent; what the guard cannot read is checked with `naming.mjs check` |
 
 These are string checks in memory (microseconds per tool call). They narrow what a misled agent can do; they
 are not a sandbox — a command can be disguised — so the PM also runs with a fixed tool list, the ledger does
 not carry commands, and a canvas's code runs in its own process.
+
+A kind + id (a cache index, a port, a DB, an emulator) is held by one task at a time: `resources.mjs add`
+claims under a workspace lock and refuses an id another task holds (exit 3); server names stay per task.
 
 The ledger (`.pipeline/<slug>/resources.json`) says what a task holds, not how to free it: for worktrees,
 ports, servers, browsers and emulators tf builds the action from the id and ignores any command stored with

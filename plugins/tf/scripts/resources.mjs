@@ -4,6 +4,7 @@
 // never guesses and never touches another session's resources.
 //
 //   add <root> <slug> --kind K --id ID --release CMD [--stop CMD] [--when run-end|pr-merged]
+//                                               exit 3 when another task of the workspace holds that kind + id
 //   drop <root> <slug> --kind K --id ID         remove an entry without running anything
 //   prs <root> <slug> <pr-url>...               PRs whose merge frees the task
 //   taken <root> <kind>                         ids of <kind> held by any task (one per line)
@@ -17,6 +18,8 @@
 //                                               files); delete old _archive entries and stray clean worktrees
 //   promote <root> <slug>                       copy the task's passing flows into .pipeline/_regression/ (reap does it on merge)
 //   list [<root>...]                            print what every task holds (the only resource ledger)
+//   list --table [<root>...]                    one line per task for a person: PRs, what it holds, disk, whether
+//                                               /tf:clean frees it now; flags an id two tasks hold at once
 //   register-root <root>                        add a workspace to the list `reap` uses when no root is given
 //   restore-touched <root> <worktree>           put back the files tools rewrite on their own (config
 //                                               "## Tool-touched files"); done automatically before a worktree is freed
@@ -28,7 +31,7 @@
 
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, rmSync, appendFileSync, renameSync, statSync, copyFileSync, chmodSync } from 'node:fs'
 import { execFileSync, execSync } from 'node:child_process'
-import { dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { SH, androidSdk, cwdOf, killTree, pidsOnPort, sdkTool, stateDir, under } from './platform.mjs'
 
@@ -178,11 +181,43 @@ function free(e, root, slug, { stop = false, unlisted = false, known }) {
   return run(cmd, root) ? '' : 'release failed'
 }
 
+// Kinds whose id names something inside the task (a server name like "be"): every task has its own, so two
+// tasks holding the same id is normal. Every other kind (a cache index, a DB, a port, a path, a serial) is one
+// thing on the machine: held by one task at a time.
+const TASK_SCOPED = new Set(['server'])
+export class HeldError extends Error {
+  constructor(kind, id, by) { super(`${kind} ${id} is held by task ${by} — pick another one (resources.mjs taken <root> ${kind})`); this.kind = kind; this.id = id; this.by = by }
+}
+// One claim at a time per workspace: check-then-write is atomic, so two setup jobs never take the same id.
+// The lock is a directory (mkdir is atomic everywhere); one older than 30 s is a crashed claimer's.
+const pause = (ms) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+function claiming(root, fn) {
+  const dir = join(root, '.pipeline')
+  mkdirSync(dir, { recursive: true })
+  const lock = join(dir, '.resources.lock')
+  for (let i = 0; ; i++) {
+    try { mkdirSync(lock); break } catch (e) {
+      if (e.code !== 'EEXIST') throw e
+      try { if (Date.now() - statSync(lock).mtimeMs > 30_000) { rmSync(lock, { recursive: true, force: true }); continue } } catch {}
+      if (i > 200) throw new Error(`resources lock ${lock} is busy`)
+      pause(50)
+    }
+  }
+  try { return fn() } finally { rmSync(lock, { recursive: true, force: true }) }
+}
+export function holder(root, kind, id, except = '') {
+  if (TASK_SCOPED.has(kind)) return ''
+  return tasks(root).find((s) => s !== except && load(root, s).entries.some((e) => e.kind === kind && String(e.id) === String(id))) || ''
+}
 export function add(root, slug, entry) {
-  const d = load(root, slug)
-  d.entries = d.entries.filter((e) => !(e.kind === entry.kind && e.id === entry.id))
-  d.entries.push({ when: 'pr-merged', ...entry, since: stamp() })
-  save(root, slug, d)
+  claiming(root, () => {
+    const by = holder(root, entry.kind, entry.id, slug)
+    if (by) throw new HeldError(entry.kind, entry.id, by)
+    const d = load(root, slug)
+    d.entries = d.entries.filter((e) => !(e.kind === entry.kind && e.id === entry.id))
+    d.entries.push({ when: 'pr-merged', ...entry, since: stamp() })
+    save(root, slug, d)
+  })
 }
 export function drop(root, slug, kind, id) {
   const d = load(root, slug)
@@ -322,25 +357,64 @@ export function promoteFlows(root, slug) {
   return n
 }
 
+// Whether reap would free a task now, and why not. `d.prs` is filled from the worktree branches when the task
+// never registered its PRs (saved unless dryRun).
+function reapable(root, slug, d, dryRun) {
+  if (running(join(root, '.pipeline', slug))) return { ok: false, why: 'run in progress', states: [] }
+  if (!d.prs.length) {
+    const found = prsFromWorktrees(d)
+    if (!found.length) return { ok: false, why: 'no PR', states: [] } // in progress, escalated, or a detached verify run — release by hand
+    d.prs = found
+    if (!dryRun) save(root, slug, d)
+  }
+  const states = d.prs.map(prState)
+  const open = states.filter((s) => s !== 'MERGED' && s !== 'CLOSED').length
+  return { ok: !open, why: open ? `${open} PR open` : '', states }
+}
 export function reap(rootList, dryRun = false) {
   for (const root of rootList) {
     for (const slug of tasks(root)) {
-      if (running(join(root, '.pipeline', slug))) continue // a run is in progress
       const d = load(root, slug)
-      if (!d.prs.length) {
-        const found = prsFromWorktrees(d)
-        if (!found.length) continue // no PR yet (in progress, escalated, or a detached verify run — release by hand)
-        d.prs = found
-        if (!dryRun) save(root, slug, d)
-      }
-      const states = d.prs.map(prState)
-      if (!states.every((s) => s === 'MERGED' || s === 'CLOSED')) continue
+      const { ok, states } = reapable(root, slug, d, dryRun)
+      if (!ok) continue
       if (dryRun) { console.log(`would reap ${slug}:${d.entries.length ? '' : ' nothing held'}`); const known = recipes(root); for (const e of d.entries) console.log(`   ${e.kind} ${e.id} → ${plan(e, root, known)}`); continue }
       say(`reap ${slug}: PRs ${states.join(',')}`)
       try { promoteFlows(root, slug) } catch (e) { say(`promote ${slug} failed: ${e.message}`) }
       if (releaseAll(root, slug)) archive(root, slug)
     }
   }
+}
+
+// One line per task, for a person: what it holds, its PRs, whether /tf:clean frees it now, and the disk its
+// worktrees take. No commands, no paths — `list` prints those.
+const diskKB = (path) => { const out = String(tool('du', ['-sk', path]) || ''); return Number((out.match(/^(\d+)/) || [])[1]) || 0 }
+const gb = (kb) => (kb >= 1024 * 1024 ? `${(kb / 1024 / 1024).toFixed(1)} GB` : `${Math.round(kb / 1024)} MB`)
+export function table(rootList) {
+  const rows = []
+  for (const root of rootList) {
+    for (const slug of tasks(root)) {
+      const d = load(root, slug)
+      const kinds = {}
+      for (const e of d.entries) (kinds[e.kind] ||= []).push(e.kind === 'worktree' ? '' : String(e.id))
+      const holds = Object.entries(kinds).map(([k, ids]) => (k === 'worktree' ? `${ids.length} worktree` : `${k} ${ids.join(',')}`)).join(' · ') || '-'
+      const kb = d.entries.filter((e) => e.kind === 'worktree' && existsSync(e.id)).reduce((s, e) => s + diskKB(e.id), 0)
+      const r = reapable(root, slug, d, true)
+      const merged = r.states.filter((s) => s === 'MERGED').length
+      const prs = r.states.length ? `${merged}/${r.states.length} merged` : '-'
+      const kept = d.entries.filter((e) => e.error).map((e) => `${e.kind === 'worktree' ? basename(e.id) : e.kind}: ${e.error === true ? 'release failed' : e.error}`)
+      const clean = !d.entries.length ? 'nothing held' : r.ok ? (kept.length ? `yes, except ${kept.join('; ')}` : 'yes') : `no — ${r.why}`
+      rows.push({ slug, prs, holds, disk: kb ? gb(kb) : '-', kb, clean, ok: r.ok })
+    }
+  }
+  const cell = (s) => String(s).replace(/\|/g, '\\|')
+  const lines = ['| Task | PRs | Holds | Disk | /tf:clean frees it |', '|---|---|---|---|---|',
+    ...rows.map((x) => `| ${cell(x.slug)} | ${x.prs} | ${cell(x.holds)} | ${x.disk} | ${cell(x.clean)} |`)]
+  const free = rows.filter((x) => x.ok)
+  lines.push('', `${rows.length} tasks · ${free.length} freed by /tf:clean now (${gb(free.reduce((s, x) => s + x.kb, 0))}) · worktrees in total ${gb(rows.reduce((s, x) => s + x.kb, 0))}`)
+  const dups = {}
+  for (const root of rootList) for (const slug of tasks(root)) for (const e of load(root, slug).entries) if (!TASK_SCOPED.has(e.kind)) (dups[`${e.kind} ${e.id}`] ||= []).push(slug)
+  for (const [k, by] of Object.entries(dups)) if (by.length > 1) lines.push(`⚠ ${k} is held by ${by.join(' and ')} at the same time`)
+  return lines.join('\n') + '\n'
 }
 
 // Last activity of a task folder: newest file, ignoring the ledger itself and logs (both are touched by tooling).
@@ -361,7 +435,7 @@ function lastActivity(dir) {
 const running = (dir) => { try { return Date.now() - statSync(join(dir, '.lock')).mtimeMs < 5_400_000 } catch { return false } }
 // Text handoff files a later round needs (HANDOFF, journal, flows; old-layout folders: STATUS, spec). Evidence images,
 // job reports, history and logs are heavy and regenerable.
-const KEEP_WHEN_PR_OPEN = new Set(['HANDOFF.md', 'journal.md', 'flows', 'flows.json', 'plan.md', 'design.md', 'board.md', 'STATUS.md', 'spec.md', 'ticket.md', 'ticket-comment.md', 'resources.json', 'metrics.json'])
+const KEEP_WHEN_PR_OPEN = new Set(['HANDOFF.md', 'journal.md', 'flows', 'flows.json', 'plan.md', 'design.md', 'board.md', 'STATUS.md', 'spec.md', 'ticket.md', 'ticket-history.md', 'ticket-comment.md', 'resources.json', 'metrics.json'])
 // Archived (all PRs merged/closed) tasks: slim to the handoff set after TF_PRUNE_DAYS, delete after this many days,
 // so a QC report that arrives after the merge still finds HANDOFF.md and the flows.
 const ARCHIVE_DAYS = Number(process.env.TF_ARCHIVE_DAYS || 30)
@@ -454,7 +528,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     case 'add':
       if (!flags.kind || !flags.id) throw new Error('add needs --kind --id')
       if (!BUILTIN[flags.kind] && !flags.release) throw new Error(`add --kind ${flags.kind} needs --release: the command of the config's Provisioning table for that kind`)
-      add(root, slug, { kind: flags.kind, id: flags.id, ...(flags.release && { release: flags.release }), ...(flags.stop && { stop: flags.stop }), when: flags.when || 'pr-merged' })
+      try {
+        add(root, slug, { kind: flags.kind, id: flags.id, ...(flags.release && { release: flags.release }), ...(flags.stop && { stop: flags.stop }), when: flags.when || 'pr-merged' })
+      } catch (e) {
+        if (!(e instanceof HeldError)) throw e
+        console.error(`held: ${e.message}`)
+        process.exitCode = 3
+      }
       break
     case 'drop': drop(root, slug, flags.kind, flags.id); break
     case 'prs': { const d = load(root, slug); d.prs = [...new Set([...d.prs, ...pos.slice(2)])]; save(root, slug, d); break }
@@ -479,6 +559,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     }
     case 'archive': process.exitCode = archive(root, slug) ? 0 : 1; break
     case 'list':
+      if (process.argv.includes('--table')) { process.stdout.write(table(roots(process.argv.slice(3).filter((a) => a !== '--table')))); break }
       for (const r of roots(pos)) for (const s of tasks(r)) {
         const d = load(r, s)
         console.log(`${r} · ${s} · PRs: ${d.prs.join(' ') || '-'}`)

@@ -4,13 +4,124 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
-## [1.18.1] — 2026-11-19
+## [1.22.2] — 2026-11-21
 
 ### Fixed
 - **The Artifacts band no longer shows deleted artifacts or old titles.** The list was built only from publish
   calls in old transcripts. It now also reads the newest account listing (`Artifact` `action: "list"`) found in
   the workspace's transcripts, drops what is no longer there and takes the current titles. `artifacts-local.mjs
   --sync '<json [{url,title}]>'` does the same by hand. The picker (`docs/attach.md`) now runs a listing first.
+
+## [1.22.1] — 2026-11-21
+
+### Fixed
+- **The issue key is the scope of every commit and PR title, and a PR title is English.** On Rồng Việt, 52 of 400
+  backend commits put the key at the end (`feat(goalkeeper-award): … (RVD-306)`), one PR put it in brackets
+  (`fix(goalkeeper): [RVD-306] …`), and many PR titles were Vietnamese copies of commit summaries. Commits were
+  made per area of the plan, the area became the scope, and later packaging copied that style from `git log`.
+  - `guidelines/git.md`: the key is always the scope, also with several commits per PR; a table of wrong vs
+    right; PR titles are written in English for the PR; a repo convention counts only when written down.
+  - The tool guard refuses `git commit -m` and `gh pr create|edit --title` that break these rules, and
+    `gh pr create --fill` (it copies a commit summary).
+  - `scripts/naming.mjs check` for messages the guard cannot read (`git commit -F`, a title in a variable); the
+    PACKAGE reviewer runs it before committing and opening the PR.
+
+## [1.22.0] — 2026-11-21
+
+Measured over ten days: agents read `ticket.md` (up to 117 KB on a long task), the workspace config (16 KB) and
+`flows.json` (up to 76 KB) whole, hundreds of times, and every read is re-read on every later turn.
+
+### Changed
+- **Each job reads only the config sections of its role.** `task.mjs config <root> --role setup|dev|tester|reviewer
+  [<section>…]` prints those sections plus Hard rules (5–7 KB instead of 16 KB on a real config); every job prompt
+  names the command. The PM still reads the whole file.
+- **`ticket.md` holds what is in force.** Comments earlier rounds already worked from become one line each and go
+  verbatim to `ticket-history.md` with old round blocks; `jira.mjs read --since <id> --history <file>` does the
+  split (an edited comment counts as new). The PM opens the history only to quote it.
+- **The tester reads `flow-run.mjs --list`** — one line per flow: last result, up to date or stale, seconds, first
+  error — never `flows.json` (17 KB instead of 76 KB on RVD-297).
+- **`_lib/README.md` is an index:** one line per helper file with its export names; arguments live in a one-line
+  comment above each export, found with `grep`.
+- **e2e-only instructions moved out of what every run reads:** `docs/pm-e2e.md` (the PM's case writing) and
+  `docs/orchestrator-e2e.md` (the approved-cases gate and fast path); e2e prompts and `/tf:e2e` name them.
+
+## [1.21.0] — 2026-11-21
+
+### Added
+- **`scripts/jira.mjs`: one way to read and post on Jira.** Twenty scratch `jira-read` / `jira-post` scripts were
+  found in task folders, each written and debugged anew. `read` fetches the issue and every comment through the
+  signed-in browser session (in the Jira page, as Atlassian requires) and writes the JSON plus, with `--md`, a
+  readable copy about a seventh of its size. `comment` turns the markdown draft (tables, bold, links, lists,
+  headings) into a Jira comment, with `--reply-to`, `--mention <accountId>=<name>` and `--expect-last` (stops
+  when QC wrote something new); without `--confirm` it only shows what would be posted.
+
+### Security
+- The tool guard refuses `jira.mjs comment … --confirm` from every tf agent: posting stays the orchestrator's,
+  after the user approved the exact text. Key, site origin and comment ids are checked before a browser opens;
+  a draft with `<evd:…>` placeholders left is refused.
+
+## [1.20.0] — 2026-11-21
+
+Measured: the PM ran on opus in 205 of 250 turns, haiku almost never ran, and half of all agent time went into
+rounds sent back by QC or reviewers. This release routes models by the kind of work and writes for people only
+where people read.
+
+### Changed
+- **Models by the kind of work.** After its first turn the PM runs on sonnet whenever the last reports are green
+  and it only dispatches the next group, whatever the size; it goes back to opus for a turn that must judge
+  (FAIL, blocked, NEEDS-WORK, plan-check points, a rejected decision). Setup jobs run on haiku unless the PM
+  gives `modelWhy`. A PACKAGE job never runs below sonnet (it writes the PR body). A haiku job that does not
+  finish is tried once more on sonnet, from where it stopped. `pm.md` has the table.
+- **`--approve` shows a summary written for the person approving** (`## Tóm tắt duyệt` at the top of plan.md:
+  goal, requirements in plain words, one line per repo, not in this task, risks and questions — ≤ 15 lines, no
+  paths), not the micro-task list.
+- **The e2e test-case table shows what to expect:** `cases.mjs preview` is `ID · Tình huống · Mong đợi · Nền tảng
+  · ⚠`, flows move to one counts line. Case titles are the situation in ≤ 8 words, `Mong đợi` one checkable
+  sentence.
+- **Agent-only text is terse.** Briefs, board, journal and job reports are `key: value` lines; prose is kept for
+  what people read (approval summary, scope, cases, questions, ticket comment, PR body, review replies).
+
+### Added
+- **A prototype is checked before the PR.** When the task has one and UI changed, the tester shoots each changed
+  screen beside it and lists the differences; the gate raises P2 when that comparison is missing (not a block —
+  the prototype may be out of date).
+
+## [1.19.0] — 2026-11-21
+
+Measured on 167 tester jobs: about 70% of tester time went into fixing flow scripts and re-running them, and into
+re-running every case once more at the end; an Android re-run averaged 114 s. This release cuts those loops.
+
+### Added
+- **Look at an Android screen before writing its steps.** `flow-peek.mjs <task> - --android <serial> [--steps …]`
+  prints what the emulator shows as the selectors `androidFlow` takes (`{ id }`, `{ text }`, `{ desc }`, bounds,
+  clickable) — instead of `adb input tap` + screencap + reading the image by hand.
+- **A failed Android step leaves the screen as it was:** `evd/<case>-fail-<step>.ui.txt`, same format, returned as
+  `page` like the Web `.page.txt`.
+- **`flow-run.mjs --changed`:** skips a case that already PASSed on this commit, this target and this flow
+  (`flowHash` = the flow file plus the `_lib` files it imports). The tester's final check uses it; nothing left
+  to run returns `upToDate`.
+
+### Changed
+- **Each case has its own ceiling:** 180 s Web/API, 360 s Android (was 600 s for every case); the result names the
+  step it hung in (`[tf-step]` lines from the flow kit). `--timeout` still overrides.
+- **`flow-run` prints one short entry per case** (case, status, first error line, page dump, evidence);
+  `--verbose` gives every field.
+- **Long output stays out of the agents' context:** dev and lead run typecheck/build/lint/tests to a log and read
+  its tail; the tester never `cat`s a file over ~20 KB, waits on background commands instead of `until`/`sleep`
+  loops, and never re-runs the suite only to confirm cases that just passed.
+
+## [1.18.1] — 2026-11-21
+
+### Fixed
+- **Two tasks can no longer hold the same resource.** `resources.mjs add` checks every other task of the
+  workspace under a lock and refuses an id already held (exit 3, `held: cache 2 is held by task …`), so two setup
+  jobs running at once cannot both take the same Redis db, port, database or emulator. Server names (`be`, `fe`)
+  stay per task. Seen in the wild: one Redis db shared by two live tasks.
+
+### Changed
+- **`/tf:status` is one short table.** One row per task — PRs merged, what it holds, worktree disk, whether
+  `/tf:clean` frees it now — plus totals and a ⚠ line for an id two tasks hold. Paths and release commands are
+  left to `resources.mjs list` (new: `list --table`).
 
 ## [1.18.0] — 2026-11-18
 

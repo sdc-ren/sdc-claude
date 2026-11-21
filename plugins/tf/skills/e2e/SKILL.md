@@ -7,8 +7,8 @@ disable-model-invocation: true
 
 Plugin root `<PLUGIN>` = `${CLAUDE_PLUGIN_ROOT}`.
 
-Read `${CLAUDE_PLUGIN_ROOT}/docs/orchestrator.md` and follow it exactly, with:
-- mode: **e2e** — section 2e of orchestrator.md decides between the test-case gate, the fast path and a tester run
+Read `${CLAUDE_PLUGIN_ROOT}/docs/orchestrator.md` and `${CLAUDE_PLUGIN_ROOT}/docs/orchestrator-e2e.md` and follow them exactly, with:
+- mode: **e2e** — section 2e (orchestrator-e2e.md) decides between the test-case gate, the fast path and a tester run
 - input and flags: `$ARGUMENTS` (`--assume`: approve the PM's cases without asking; `--target`: the target to run on)
 
 `--regression` instead of a ticket: no workflow — run the workspace regression suite (flows promoted from
