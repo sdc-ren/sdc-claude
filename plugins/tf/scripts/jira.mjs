@@ -137,7 +137,7 @@ export function issueMarkdown(issue, comments) {
 
 // ── Browser ─────────────────────────────────────────────────────────────────
 async function inJira(o, fn) {
-  const { openBrowser, closeBrowser } = await import(join(HERE, 'browser.mjs'))
+  const { openBrowser, closeBrowser } = await import('./browser.mjs')
   const b = await openBrowser({ root: o.root, slug: o.slug, playwrightFrom: o.playwright, auth: o.auth })
   try {
     const page = await b.context.newPage()
