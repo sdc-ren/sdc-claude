@@ -166,7 +166,7 @@ test('a failed case keeps its marks; a marked copy is drawn when an engine is av
   assert.equal(r.code, 1)
   const c = manifest(dir).cases.F1
   assert.deepEqual(c.marks, [{ label: 'Nút bị khoá', expected: 'bật', actual: 'khoá', step: 'x' }])
-  const { annotate } = await import(join(S, 'annotate.mjs'))
+  const { annotate } = await import('../scripts/annotate.mjs')
   const probe = join(dir, 'probe.png'); writeFileSync(probe, Buffer.from(pngB64(), 'base64'))
   const engine = (await annotate(probe, [{ box: [1, 1, 5, 5], label: 'x' }], { crop: false })).engine
   if (!engine) return // no Chromium and no ffmpeg on this machine: nothing to draw with
@@ -215,7 +215,7 @@ test('default output is brief; --verbose keeps every field', () => {
 })
 
 test('describeAndroid turns a uiautomator dump into the selectors androidFlow takes', async () => {
-  const { describeAndroid } = await import(join(S, 'flow-kit.mjs'))
+  const { describeAndroid } = await import('../scripts/flow-kit.mjs')
   const xml = `<hierarchy><node index="0" text="" resource-id="" class="android.widget.FrameLayout" content-desc="" clickable="false" bounds="[0,0][1080,2400]"/>
 <node text="Tiếp theo" resource-id="vn.app:id/next_btn" class="android.widget.Button" content-desc="" clickable="true" bounds="[40,2200][1040,2340]"/>
 <node text="Vua phá lưới" resource-id="" class="android.widget.TextView" content-desc="" clickable="false" bounds="[40,600][500,660]"/>

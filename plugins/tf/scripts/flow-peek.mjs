@@ -54,7 +54,7 @@ if (opts.android !== undefined) {
   const serial = opts.android && opts.android !== '-' ? opts.android : env.ANDROID_SERIAL
   if (!/^[\w.:-]+$/.test(String(serial || ''))) { console.error('peek failed: no emulator serial — --android <serial> or ANDROID_SERIAL (emulator.mjs start prints it)'); process.exit(2) }
   if (where !== '-') { console.error('peek failed: Android looks at the screen the emulator shows — pass "-" and navigate with --steps'); process.exit(2) }
-  const { androidKit, describeAndroid } = await import(join(HERE, 'flow-kit.mjs'))
+  const { androidKit, describeAndroid } = await import('./flow-kit.mjs')
   const kit = androidKit(serial)
   let code = 0
   try {
@@ -76,8 +76,8 @@ if (opts.android !== undefined) {
   process.exit(code)
 }
 
-const { describePage } = await import(join(HERE, 'flow-kit.mjs'))
-const { openBrowser, closeBrowser } = await import(join(HERE, 'browser.mjs'))
+const { describePage } = await import('./flow-kit.mjs')
+const { openBrowser, closeBrowser } = await import('./browser.mjs')
 const [w, h] = String(env.VIEWPORT || '1440x900').split('x').map(Number)
 const b = await openBrowser({ root, slug: env.TF_SLUG, playwrightFrom: env.PLAYWRIGHT_FROM, contextOptions: { viewport: { width: w, height: h }, baseURL: env.BASE_URL || undefined } })
 let code = 0
