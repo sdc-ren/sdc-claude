@@ -89,10 +89,10 @@ test('every tf agent, the PM included, is held to the rules for all agents', () 
       expect(refuseAll(job, 'Bash', { command: cmd })).toContain('never merges')
     for (const cmd of ['git push --force origin HEAD', 'git -C /w push -f', 'git push origin HEAD --force-with-lease', 'git push origin +HEAD:main'])
       expect(refuseAll(job, 'Bash', { command: cmd })).toContain('never force-pushes')
-    for (const cmd of ['gh pr comment 12 --body hi', 'gh issue comment 3 -b x', 'node /s/pr-feedback.mjs post /r/.pipeline/T-1', 'node "/s/pr-feedback.mjs" review /d https://github.com/o/r/pull/1'])
+    for (const cmd of ['gh pr comment 12 --body hi', 'gh issue comment 3 -b x', 'node /s/pr-feedback.mjs post /r/.pipeline/T-1', 'node "/s/pr-feedback.mjs" review /d https://github.com/o/r/pull/1', 'node /s/jira.mjs comment /r/.pipeline/T-1 RVD-1 --file c.md --site https://x.atlassian.net --confirm'])
       expect(refuseAll(job, 'Bash', { command: cmd })).toContain('never posts')
     // What the work needs still passes.
-    for (const cmd of ['git push -u origin feat/x', 'git push origin HEAD', 'gh pr create --base develop --title x --body-file b.md', 'gh pr edit 12 --body-file b.md', 'gh pr view 12 --json state', 'gh pr diff 12', 'gh pr ready 12', 'node /s/pr-feedback.mjs fetch /r/.pipeline/T-1 https://github.com/o/r/pull/1', 'node /s/browser.mjs auth jira --url https://x.atlassian.net', 'git -C /w grep -n "feature" origin/develop', 'ls ~/.claude/task-flow'])
+    for (const cmd of ['git push -u origin feat/x', 'git push origin HEAD', 'gh pr create --base develop --title x --body-file b.md', 'gh pr edit 12 --body-file b.md', 'gh pr view 12 --json state', 'gh pr diff 12', 'gh pr ready 12', 'node /s/pr-feedback.mjs fetch /r/.pipeline/T-1 https://github.com/o/r/pull/1', 'node /s/browser.mjs auth jira --url https://x.atlassian.net', 'node /s/jira.mjs comment /r/.pipeline/T-1 RVD-1 --file c.md --site https://x.atlassian.net', 'node /s/jira.mjs read /r/.pipeline/T-1 RVD-1 --site https://x.atlassian.net', 'git -C /w grep -n "feature" origin/develop', 'ls ~/.claude/task-flow'])
       expect(refuseAll(job, 'Bash', { command: cmd })).toBe('')
     expect(refuseAll(job, 'Read', { file_path: '/r/.pipeline/T-1/ticket.md' })).toBe('')
   }

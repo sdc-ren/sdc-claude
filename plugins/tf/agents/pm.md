@@ -218,6 +218,9 @@ none of 1–3):
   The app servers stay up for the whole run (`serve.mjs`, config `## Servers`): with resources already
   held, no setup job is needed just to start them — the first dev/tester job's `serve.mjs start` does it.
 - Briefs are short and point at `plan.md#<repo>` / cases instead of repeating them. Give `reads`.
+- Jira (the config's tracker line names the site and the saved session): read with `node ${CLAUDE_PLUGIN_ROOT}/scripts/jira.mjs
+  read <task> <KEY> --site <origin> [--playwright <package.json>] --md <task>/tmp/jira-<KEY>.md` and read the
+  markdown, not the JSON. Never write a scratch script to read or post on Jira; posting is the orchestrator's.
 - Everything only agents read — briefs, `board.md`, `journal.md`, `note`, job reports — is terse key–value
   (`J4 tester be: PASS 6/6 · C3 slow 40s`), no prose, no restating the plan. Write for people only where
   people read: `## Tóm tắt duyệt`, `scope`, `cases.md`, questions, ticket comment, PR body, review replies.

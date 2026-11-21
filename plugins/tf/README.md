@@ -588,6 +588,7 @@ node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --jobs 3                # 
 node <plugin>/scripts/flow-peek.mjs .pipeline/PROJ-123 /some/screen           # what is on a screen, with locators
 node <plugin>/scripts/flow-peek.mjs .pipeline/PROJ-123 - --android emulator-5560 # what the emulator shows, as selectors
 node <plugin>/scripts/flow-run.mjs .pipeline/PROJ-123 --changed               # only cases not green on this commit + flow
+node <plugin>/scripts/jira.mjs read .pipeline/PROJ-123 PROJ-123 --site https://acme.atlassian.net --md ticket.md  # the issue + comments
 ```
 
 - Waits for the app, not the clock: `waitApi`, `ready`, `gotoReady`; a 15 s ceiling per step, never a delay, and

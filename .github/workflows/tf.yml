@@ -47,3 +47,5 @@ jobs:
         run: node --test plugins/tf/tests/task.mjs
       - name: Resource ledger (one holder per id, status table)
         run: node --test plugins/tf/tests/resources.mjs
+      - name: Jira (markdown to comment, dry run, checks)
+        run: node --test plugins/tf/tests/jira.mjs

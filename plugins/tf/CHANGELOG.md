@@ -4,6 +4,21 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.21.0] — 2026-11-21
+
+### Added
+- **`scripts/jira.mjs`: one way to read and post on Jira.** Twenty scratch `jira-read` / `jira-post` scripts were
+  found in task folders, each written and debugged anew. `read` fetches the issue and every comment through the
+  signed-in browser session (in the Jira page, as Atlassian requires) and writes the JSON plus, with `--md`, a
+  readable copy about a seventh of its size. `comment` turns the markdown draft (tables, bold, links, lists,
+  headings) into a Jira comment, with `--reply-to`, `--mention <accountId>=<name>` and `--expect-last` (stops
+  when QC wrote something new); without `--confirm` it only shows what would be posted.
+
+### Security
+- The tool guard refuses `jira.mjs comment … --confirm` from every tf agent: posting stays the orchestrator's,
+  after the user approved the exact text. Key, site origin and comment ids are checked before a browser opens;
+  a draft with `<evd:…>` placeholders left is refused.
+
 ## [1.20.0] — 2026-11-21
 
 Measured: the PM ran on opus in 205 of 250 turns, haiku almost never ran, and half of all agent time went into

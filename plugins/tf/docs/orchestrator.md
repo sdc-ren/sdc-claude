@@ -216,7 +216,11 @@ slowest jobs with their slowest command when a job took over 10 minutes.
 - Never touch the shared main checkouts — work happens in the task worktrees.
 - One task = one `.pipeline/<SLUG>/` folder and one `.worktrees/<SLUG>/` folder (one subfolder per repo, named like the repo folder), for every mode and round.
 - Browsers and emulators: only ones this task started (`browser.mjs`, `emulator.mjs`). You read and
-  post on the tracker through `browser.mjs` too.
+  post on the tracker through `browser.mjs` too. Jira: `node $S/jira.mjs read <dir> <KEY> --site <origin>
+  [--playwright …] --md <dir>/tmp/jira-<KEY>.md` to read; to post, `node $S/jira.mjs comment <dir> <KEY> --file
+  <draft> --site <origin> [--reply-to <QC comment id>] [--mention <accountId>=<name>] --expect-last <the last
+  comment id you showed the user>` prints what would be posted; after the user approved that text, the same
+  command with `--confirm`. Never a scratch script for Jira.
 - Nothing is posted (tracker comment, PR comment) without the user's approval of the exact text. No tracker
   source → there is nothing to post a ticket comment to; the Report carries the summary instead.
 - Report outcomes plainly; no filler.
