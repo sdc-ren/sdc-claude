@@ -7,9 +7,9 @@ disable-model-invocation: true
 
 Input: `$ARGUMENTS`. `<cwd>` is the workspace root (the folder that holds `.claude/task-flow.md`).
 
-1. `node ${CLAUDE_PLUGIN_ROOT}/scripts/resources.mjs list` and
-   `node ${CLAUDE_PLUGIN_ROOT}/scripts/resources.mjs reap --dry-run <cwd>`: one short table per task — what it holds,
-   its PRs, what `/tf:clean` would free now.
+1. `node ${CLAUDE_PLUGIN_ROOT}/scripts/resources.mjs list --table <cwd>` — show the table as it prints (one row per
+   task: PRs, what it holds, disk, whether `/tf:clean` frees it now) and its last lines (totals, ⚠ an id two tasks
+   hold at once). Do not add paths or commands; `resources.mjs list <cwd>` has them when the user asks for one task.
 2. With `--doctor` (or when the user asks whether the setup works):
    `node ${CLAUDE_PLUGIN_ROOT}/scripts/doctor.mjs <cwd>` — what passed, what failed, how to fix each failure.
 3. With `--metrics`: `node ${CLAUDE_PLUGIN_ROOT}/scripts/metrics.mjs <cwd> --all` (one line per run of the last

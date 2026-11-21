@@ -307,8 +307,9 @@ you can find it in Zalo.
 /tf:status [--doctor] [--metrics [slug]]
 ```
 
-What every task of the workspace holds — worktrees, databases, cache dbs, ports, PRs — and what cleanup would
-free right now.
+One table, one row per task: its PRs (how many merged), what it holds (worktrees, databases, cache dbs,
+ports), the disk its worktrees take, and whether `/tf:clean` frees it now — then the totals, and a ⚠ line when two
+tasks hold the same id.
 
 | Option | Effect |
 |---|---|
