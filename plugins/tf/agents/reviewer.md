@@ -49,7 +49,11 @@ otherwise (it does not block: the PM fixes the plan or records why it stands, on
    report does not explain is P2.
 5. **Quality** — dead code, duplication, debug logs, magic numbers, unused imports, ineffective
    validation (validator not attached, guard after the side effect).
-6. **Tamper** — hardcoded expected output, mocks hiding the chain, new unit tests the policy forbids.
+6. **Prototype** (build, UI changed) — the task has a prototype (`specs/canvas-*`, `specs/*prototype*`, prototype
+   screenshots under `specs/`): the tester's report must show the changed screens shot beside it at the same
+   viewport, with the differences named. Missing → P2 `QP` "no prototype comparison" (not BLOCK: the prototype
+   may be out of date — the tester then says which and why).
+   **Tamper** — hardcoded expected output, mocks hiding the chain, new unit tests the policy forbids.
 7. **Review lessons** — every rule in the workspace `Review lessons` file is checked against the diff;
    a broken rule is at least P2. Your job is to catch what the human reviewers would catch.
 8. **Existing tests** (config `## Checks`) — the dev report must show them run on the final code, with every
@@ -79,7 +83,11 @@ introduced by this diff). Ids `QP<n> [P1]: file:line — problem — fix`, stabl
   since the gate (`git status`, diff stat) before packaging. When the prompt says `NO GATE RAN` (small-task
   lane) you are the gate too: run the whole checklist above first and package only on a clean result —
   otherwise return `NEEDS-WORK`/`BLOCK` with the `QP` points and no git write. Then commit in the plan's groups (`git add <exact paths>`, never `-A` or `.`; message per `${CLAUDE_PLUGIN_ROOT}/guidelines/git.md`
-  unless the repo differs; no agent attribution), push, and:
+  unless the repo's WRITTEN convention differs — never copy the style of `git log`; no agent attribution). The task's
+  issue key (the task slug when it is one) is the scope of every commit and of the PR title; the PR title is English,
+  written for the PR, never a copied commit summary. Check each message and the title first:
+  `node ${CLAUDE_PLUGIN_ROOT}/scripts/naming.mjs check --kind commit|pr --key <KEY> (--file <msg> | "<line>")`.
+  Then push, and:
   - an open PR exists for this repo → push to its branch and refresh the body with `gh pr edit`;
   - otherwise, or the old PR is merged → `gh pr create` against the plan's base, **ready — never
     `--draft`** unless the brief says the user passed `--draft`. Body per
@@ -121,5 +129,6 @@ every finding in the bullet form it gives, so it can be posted on its line). Ret
 as code), `NEEDS-WORK`, or `BLOCK`, plus `issues`.
 
 ## Report
-`jobs/<id>-reviewer-<repo>.md`: verdict, checklist evidence, commits, PR link. Plain prose, no filler.
+`jobs/<id>-reviewer-<repo>.md`: verdict, checklist evidence, commits, PR link. Agents read it, people do not: terse `key: value` lines, no prose, nothing the plan already says. (The PR body, the
+review-mode risk report and PR comments are for people: those follow their guidelines.)
 Languages as the prompt says.

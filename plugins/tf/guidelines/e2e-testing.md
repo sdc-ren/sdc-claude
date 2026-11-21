@@ -46,6 +46,10 @@ fragile selectors silently.
 - Wait for the app, never the clock: auto-waiting actions, polling assertions, the API response that
   carries the data (`waitApi`), the screen's ready element plus loading indicators gone (`ready`,
   `gotoReady`). No fixed sleeps, no `networkidle` (slow and unreliable on SPAs). Android: `waitFor`.
+- Android: look at a screen with `flow-peek.mjs <task> - --android <serial>` before writing its steps; a failed
+  step leaves `<case>-fail-<step>.ui.txt` (selectors + bounds), like `.page.txt` on the web.
+- A whole case has a ceiling too (flow-run: 180 s Web/API, 360 s Android); when it is hit, the result names
+  the step it hung in.
 - The timeout (≈15 s) is a ceiling, not a delay: a ready screen continues at once; only a stuck step
   waits it out and fails. A slow step is a finding, not a reason to raise the timeout.
 - No retries to make a flow green. A flaky flow is fixed (selector, wait, data) or reported as flaky.

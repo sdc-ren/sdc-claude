@@ -36,8 +36,9 @@ async function sim(pm, answer = std, extra = {}) {
   const logs = []
   const prompts = {}
   const pmPrompts = []
+  const pmModels = []
   const agent = async (prompt, o) => {
-    if (/^PM t/.test(o.label)) { pmPrompts.push(prompt); return pm[turn++] }
+    if (/^PM t/.test(o.label)) { pmPrompts.push(prompt); pmModels.push(o.model); return pm[turn++] }
     ran.push(`${o.label}(${o.model})`)
     prompts[o.label] = prompt
     return answer(o.label, prompt)
@@ -46,7 +47,7 @@ async function sim(pm, answer = std, extra = {}) {
   const parallel = (fns) => Promise.all(fns.map(f => f()))
   const budget = { total: 0, remaining: () => 1e9, spent: () => 0 }
   const out = await new AsyncFunction('args', 'agent', 'parallel', 'phase', 'log', 'budget', src)(args, agent, parallel, () => {}, (m) => logs.push(m), budget)
-  return { out, ran, logs, prompts, pmPrompts }
+  return { out, ran, logs, prompts, pmPrompts, pmModels }
 }
 
 const gates = (repos, g, n) => repos.map((r, i) => J(`J${n + i}`, 'reviewer', r, g))
@@ -401,4 +402,37 @@ test('decision=cases outside e2e, or after approval, is rejected', async () => {
   expect(b.pmPrompts[1]).toContain('decision=cases is for e2e only')
   const a = await sim([casesD(), escalate], std, SNAP)
   expect(a.pmPrompts[1]).toContain('already approved')
+})
+
+test('models: PM on sonnet for turns that only dispatch after green reports, opus when it must judge', async () => {
+  const flow = [D([J('J1', 'dev', 'be', 1), J('J2', 'reviewer', 'be', 2)]), D([J('J3', 'tester', 'be', 1)]), D([J('J4', 'reviewer', 'be', 1, 'PACKAGE')]), close]
+  const green = await sim(flow)
+  expect(green.pmModels).toEqual(['opus', 'sonnet', 'sonnet', 'sonnet']) // M task: was opus on every turn
+  const failing = await sim(flow, (label) => (label.includes('tester') ? ok('FAIL', { issues: ['IB1'] }) : std(label)))
+  expect(failing.pmModels[2]).toBe('opus') // the turn that reads the FAIL
+})
+
+test('models: setup runs on haiku unless the PM says why; PACKAGE never below sonnet', async () => {
+  const setup = (why) => ({ ...J('J1', 'setup', 'all', 1, 'x', 'sonnet'), ...(why ? { modelWhy: why } : {}) })
+  let r = await sim([D([setup(''), J('J2', 'dev', 'be', 2, 'x', 'haiku'), J('J3', 'reviewer', 'be', 3), J('J4', 'tester', 'be', 4), J('J5', 'reviewer', 'be', 5, 'PACKAGE', 'haiku')]), close])
+  expect(r.ran).toContain('J1 setup:all(haiku)')
+  expect(r.ran).toContain('J5 reviewer:be(sonnet)')
+  r = await sim([D([setup('chain node build needs judgement')]), close])
+  expect(r.ran).toContain('J1 setup:all(sonnet)')
+})
+
+test('models: a haiku job that does not finish is tried once more on sonnet', async () => {
+  const r = await sim([D([J('J1', 'setup', 'all', 1)], 'S'), close], (label, prompt) =>
+    label.startsWith('J1') && !/smaller model stopped/.test(prompt) ? { status: 'blocked', verdict: 'NONE', summary: 'port busy' } : std(label))
+  expect(r.ran).toEqual(['J1 setup:all(haiku)', 'J1 setup:all(sonnet)'])
+  expect(r.logs.join('\n')).toContain('model haiku → sonnet')
+})
+
+test('jobs are pointed at the config sections of their role; e2e PM turns at docs/pm-e2e.md', async () => {
+  const r = await sim([D([J('J1', 'setup', 'all', 1), J('J2', 'dev', 'be', 2), J('J3', 'tester', 'be', 3, 'x', 'sonnet', 'C1')], 'S'), close])
+  expect(r.prompts['J1 setup:all']).toContain('task.mjs config /r --role setup')
+  expect(r.prompts['J2 lead:be']).toContain('task.mjs config /r --role dev')
+  expect(r.prompts['J3 tester:be']).toContain('task.mjs config /r --role tester')
+  const e = await sim([{ decision: 'cases', size: 'S', note: 'n', caseIds: ['TC1'], questions: [], missingSpecs: [], target: 'local' }], std, { mode: 'e2e' })
+  expect(e.pmPrompts[0]).toContain('/s/../docs/pm-e2e.md')
 })

@@ -33,6 +33,7 @@ No row for a repo → its test script from the repo `CLAUDE.md` / package file w
 ## Sources (optional — any link works without a line here; a line says how to read a host that needs it)
 - <name>: <URL or host> — <tracker | docs | design | spec> — <how to read: connector, `browser.mjs auth <name> --url <URL> --playwright <package.json>`, or public fetch> [— keys: PROJ, OPS]
 - e.g. jira: https://acme.atlassian.net — tracker — `browser.mjs auth jira …` — keys: PROJ
+  (Jira is then read and posted with `scripts/jira.mjs … --site https://acme.atlassian.net --auth jira`.)
 - e.g. notion: notion.so — docs — Notion connector
 - Spec sources the PM may query: <NotebookLM notebook, docs paths>
 

@@ -2,13 +2,22 @@
 // task-flow e2e runner: runs the flows of a task and records results in flows.json.
 //
 //   node flow-run.mjs <taskDir> [--cases 21,22 | --cases-file ids.json] [--failed] [--target local|dev|<name>]
-//                     [--env K=V]… [--playwright <package.json>] [--timeout 600] [--jobs 3] [--commit <id>]
+//                     [--env K=V]… [--playwright <package.json>] [--timeout <s>] [--jobs 3] [--commit <id>]
+//                     [--changed] [--verbose]
 //
 //   --cases      internal case ids (flows/<id>.mjs). An id with no flow is an error (exit 2), never skipped.
 //   --cases-file a JSON array of internal ids (what `cases.mjs scope --out` writes).
 //   --target   uses flows.json targets.<name> as env (BASE_URL, API_URL, …); --env overrides. A --target that
 //              is not saved is an error (exit 2); see --ensure-target.
 //   --failed   only cases whose last result is not PASS.
+//   --changed  skip a case that already PASSed on this commit, this target and this flow (the flow file and the
+//              _lib files it imports, hashed as flowHash): the final check of a job re-runs only what changed.
+//              Nothing left to run is a result here (`upToDate`), not an error.
+//   --timeout  seconds per case before it is killed (default 180 Web/API, 360 Android); the result says the
+//              step it was in (`[tf-step]` lines of the flow kit).
+//   --verbose  print every field of each result (default: case, status, first error line, evidence files).
+//   --list     one line per flow (case · platform · last result · on this commit/flow or not · seconds · error)
+//              instead of reading flows.json; nothing runs.
 //   --commit   what code ran (default: `task.mjs commit`, the HEAD of every worktree of the task); stored per case
 //              so cases.mjs knows when a result no longer counts.
 //   Nothing to run (empty selection) is an error (exit 2): an empty run is never reported as green.
@@ -25,7 +34,7 @@
 
 import { existsSync, readFileSync, readdirSync, writeFileSync, mkdirSync } from 'node:fs'
 import { spawn, execFileSync } from 'node:child_process'
-import { randomBytes } from 'node:crypto'
+import { createHash, randomBytes } from 'node:crypto'
 import { rootOfTask } from './platform.mjs'
 import { commitOf } from './task.mjs'
 import { basename, dirname, join, resolve } from 'node:path'
@@ -39,6 +48,9 @@ const opts = { env: {} }
 for (let i = 1; i < argv.length; i++) {
   const a = argv[i]
   if (a === '--failed') opts.failed = true
+  else if (a === '--changed') opts.changed = true
+  else if (a === '--verbose') opts.verbose = true
+  else if (a === '--list') opts.list = true
   else if (a === '--env') { const [k, ...v] = argv[++i].split('='); opts.env[k] = v.join('=') }
   else if (a.startsWith('--')) opts[a.slice(2)] = argv[++i]
 }
@@ -122,13 +134,42 @@ if (requested) {
   pick = files.filter((f) => want.has(caseOf(f)))
 }
 if (opts.failed) pick = pick.filter((f) => (manifest.cases[caseOf(f)] || {}).lastResult !== 'PASS')
+const target = opts.target || 'local'
+const commit = opts.commit || commitOf(dir)
+// What a result was measured on: the flow file plus the workspace library files it imports.
+const libDir = join(rootOfTask(dir), '.pipeline', '_lib')
+function flowHash(f) {
+  const h = createHash('sha256')
+  let src = ''
+  try { src = readFileSync(join(flowsDir, f), 'utf8') } catch {}
+  h.update(src)
+  const libs = [...new Set([...src.matchAll(/(?:\$\{lib\}|_lib)\/([\w.-]+\.m?js)/g)].map((m) => m[1]))].sort()
+  for (const l of libs) { h.update(`\0${l}\0`); try { h.update(readFileSync(join(libDir, l))) } catch {} }
+  return h.digest('hex').slice(0, 16)
+}
+const hashes = Object.fromEntries(pick.map((f) => [caseOf(f), flowHash(f)]))
+if (opts.list) {
+  const rows = pick.map((f) => {
+    const c = caseOf(f), m = manifest.cases[c] || {}
+    const fresh = m.lastResult === 'PASS' && m.commit === commit && (m.lastTarget || 'local') === target && m.flowHash === hashes[c]
+    const plat = m.platform || (/androidFlow/.test(readFileSync(join(flowsDir, f), 'utf8')) ? 'android' : 'web')
+    return `${c} · ${plat} · ${m.lastResult || 'never run'}${m.lastResult ? ` (${m.lastTarget || 'local'})` : ''} · ${fresh ? 'up to date' : m.lastResult ? 'stale' : '-'} · ${m.durationMs ? Math.round(m.durationMs / 1000) + 's' : '-'}${m.lastResult && m.lastResult !== 'PASS' && m.error ? ` · ${String(m.error).split('\n')[0].slice(0, 120)}` : ''}`
+  })
+  console.log(`${rows.length} flows · commit ${String(commit).slice(0, 12)} · target ${target}\n${rows.join('\n')}`)
+  process.exit(0)
+}
+if (opts.changed) {
+  const same = (f) => { const m = manifest.cases[caseOf(f)] || {}; return m.lastResult === 'PASS' && m.commit === commit && (m.lastTarget || 'local') === target && m.flowHash === hashes[caseOf(f)] }
+  const skipped = pick.filter(same).map(caseOf)
+  pick = pick.filter((f) => !same(f))
+  if (!pick.length) { console.log(JSON.stringify({ target, commit, upToDate: true, ran: 0, skipped, note: 'every case already PASSed on this commit, target and flow' })); process.exit(0) }
+  if (skipped.length) opts._skipped = skipped
+}
 if (!pick.length) fail('nothing to run — an empty run is not a result', { requested: requested || [], failed: !!opts.failed })
 if (opts.target && !manifest.targets[opts.target] && !Object.keys(opts.env).length) fail(`target "${opts.target}" is not saved in flows.json — run --ensure-target ${opts.target} first`)
 
 const evd = join(dir, 'evd')
 mkdirSync(evd, { recursive: true })
-const target = opts.target || 'local'
-const commit = opts.commit || commitOf(dir)
 // Unique per invocation: a verdict left by an earlier run (even one in the same second) never counts.
 const runId = `${Math.floor(Date.now() / 1000).toString(36)}-${randomBytes(4).toString('hex')}`
 const childEnv = {
@@ -153,7 +194,14 @@ function runCase(f) {
     const keep = (b) => { outText = (outText + b).slice(-4000) }
     p.stdout.on('data', keep)
     p.stderr.on('data', keep)
-    const timer = setTimeout(() => { failure = `timed out after ${opts.timeout || 600}s`; p.kill('SIGKILL') }, Number(opts.timeout || 600) * 1000)
+    let src = ''
+    try { src = readFileSync(join(flowsDir, f), 'utf8') } catch {}
+    const limit = Number(opts.timeout) || (/androidFlow/.test(src) ? 360 : 180)
+    const timer = setTimeout(() => {
+      const at = [...outText.matchAll(/\[tf-step\] (.+)/g)].pop()
+      failure = `timed out after ${limit}s${at ? ` in step "${at[1].trim()}"` : ''}`
+      p.kill('SIGKILL')
+    }, limit * 1000)
     p.on('error', (e) => { failure = String(e.message) })
     p.on('close', (code, signal) => {
       clearTimeout(timer)
@@ -167,7 +215,7 @@ function runCase(f) {
       // Keep what other tools recorded about the case (caseRev from --mark-written); replace only the run result.
       const prev = { ...(manifest.cases[c] || {}) }
       for (const k of ['warnings', 'trace', 'page', 'marks', 'marked']) delete prev[k]
-      ran[c] = { ...prev, file: `flows/${f}`, platform: v.platform || (/androidFlow/.test(readFileSync(join(flowsDir, f), 'utf8')) ? 'android' : 'web'), lastResult: v.status, lastRunAt: new Date().toISOString(), lastTarget: target, commit, durationMs: v.durationMs, shots, error: v.error || '' }
+      ran[c] = { ...prev, file: `flows/${f}`, platform: v.platform || (/androidFlow/.test(readFileSync(join(flowsDir, f), 'utf8')) ? 'android' : 'web'), lastResult: v.status, lastRunAt: new Date().toISOString(), lastTarget: target, commit, flowHash: hashes[c], durationMs: v.durationMs, shots, error: v.error || '' }
       if (v.marks && v.marks.length) ran[c].marks = v.marks.map(({ label, expected, actual, step }) => ({ label, ...(expected !== undefined ? { expected } : {}), ...(actual !== undefined ? { actual } : {}), ...(step ? { step } : {}) }))
       verdicts[c] = v
       if (v.warnings && v.warnings.length) ran[c].warnings = v.warnings
@@ -231,5 +279,7 @@ for (const [c, r] of Object.entries(ran)) {
 }
 save()
 const count = (s) => results.filter((x) => x.status === s).length
-console.log(JSON.stringify({ target, commit, requested: requested || pick.map(caseOf), missing: [], ran: results.length, pass: count('PASS'), fail: count('FAIL'), blocked: count('BLOCKED'), results }, null, 2))
+// Default output is what the tester acts on; --verbose keeps every field (warnings, trace, marked files).
+const brief = (x) => ({ case: x.case, status: x.status, ...(x.status !== 'PASS' ? { error: x.error } : {}), ...(x.page ? { page: x.page } : {}), ...(x.status !== 'PASS' && (x.marked || x.shots).length ? { evd: (x.marked || x.shots).slice(0, 3) } : {}), ...(x.warnings ? { warnings: x.warnings.length } : {}) })
+console.log(JSON.stringify({ target, commit, requested: requested || pick.map(caseOf), missing: [], ran: results.length, pass: count('PASS'), fail: count('FAIL'), blocked: count('BLOCKED'), ...(opts._skipped ? { skipped: opts._skipped } : {}), results: opts.verbose ? results : results.map(brief) }, opts.verbose ? null : undefined, opts.verbose ? 2 : undefined))
 process.exit(results.every((x) => x.status === 'PASS') ? 0 : 1)

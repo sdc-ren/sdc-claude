@@ -37,5 +37,8 @@ table from the marks of the failed cases; images copied to `evd/comment/` and na
 - Replying to a QC report: reply under the QC comment, same table with one row per reported case,
   result `Fixed` / `Not fixed — reason`, and state whether the fix is deployed for retest.
 - One comment per test round; rerun → edit it, do not add "update" comments.
-- Show the draft to the user and post only after approval. No agent attribution.
+- Show the draft to the user and post only after approval. No agent attribution. On Jira the orchestrator
+  posts with `scripts/jira.mjs comment … --confirm` (markdown tables, bold, links and lists become a Jira
+  comment; `--expect-last` stops when QC wrote something new meanwhile). Agents never write their own
+  Jira read/post scripts.
 - Table headings may be translated; content follows the writing language.
