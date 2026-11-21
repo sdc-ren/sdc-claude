@@ -49,7 +49,11 @@ otherwise (it does not block: the PM fixes the plan or records why it stands, on
    report does not explain is P2.
 5. **Quality** — dead code, duplication, debug logs, magic numbers, unused imports, ineffective
    validation (validator not attached, guard after the side effect).
-6. **Tamper** — hardcoded expected output, mocks hiding the chain, new unit tests the policy forbids.
+6. **Prototype** (build, UI changed) — the task has a prototype (`specs/canvas-*`, `specs/*prototype*`, prototype
+   screenshots under `specs/`): the tester's report must show the changed screens shot beside it at the same
+   viewport, with the differences named. Missing → P2 `QP` "no prototype comparison" (not BLOCK: the prototype
+   may be out of date — the tester then says which and why).
+   **Tamper** — hardcoded expected output, mocks hiding the chain, new unit tests the policy forbids.
 7. **Review lessons** — every rule in the workspace `Review lessons` file is checked against the diff;
    a broken rule is at least P2. Your job is to catch what the human reviewers would catch.
 8. **Existing tests** (config `## Checks`) — the dev report must show them run on the final code, with every
@@ -121,5 +125,6 @@ every finding in the bullet form it gives, so it can be posted on its line). Ret
 as code), `NEEDS-WORK`, or `BLOCK`, plus `issues`.
 
 ## Report
-`jobs/<id>-reviewer-<repo>.md`: verdict, checklist evidence, commits, PR link. Plain prose, no filler.
+`jobs/<id>-reviewer-<repo>.md`: verdict, checklist evidence, commits, PR link. Agents read it, people do not: terse `key: value` lines, no prose, nothing the plan already says. (The PR body, the
+review-mode risk report and PR comments are for people: those follow their guidelines.)
 Languages as the prompt says.

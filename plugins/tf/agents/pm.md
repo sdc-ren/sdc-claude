@@ -124,6 +124,9 @@ plan check reads both. On a later round update the design where it changed and s
 
 ## Plan (micro-tasks)
 ```
+## Tóm tắt duyệt (the user reads this to approve — writing language, ≤ 15 lines, no file paths, no micro-task ids)
+Mục tiêu: <one line> · Yêu cầu: R1… in plain words · Mỗi repo: <repo> — what changes, one line each ·
+Không làm: X… · Rủi ro / câu hỏi: what could be wrong, what you assumed.
 ## Requirements: `R<n> When …, … .` "<words of the brief>" — and `X<n> Not in this task: …`.
 ## Design (M only; L has design.md): Data · Neighbours · Interfaces · Decisions.
 ## <repo> — branch <name> (base <base>) · worktree <path>
@@ -199,12 +202,25 @@ none of 1–3):
 **Models, setup, briefs**
 - Branch names, commit messages, PR titles follow `${CLAUDE_PLUGIN_ROOT}/guidelines/git.md`
   (`<type>/<KEY>-<kebab-summary>`, or `<type>/<slug>` when no issue key); put the branch in plan.md. Reuse the branch of an open PR.
-- Pick each job's model: sonnet by default; opus for risky logic (money, auth, permissions,
-  concurrency, migrations) or hard judgement; haiku only for mechanical work.
+- Models, by the kind of work (the executor enforces the starred ones):
+  | work | model |
+  |---|---|
+  | setup (worktree, DB, emulator, APK — scripts) | haiku* — another model only with `modelWhy` |
+  | dev: risky logic (money, auth, permissions, concurrency, migrations, data that cannot be redone) | opus + `modelWhy` |
+  | dev: ordinary feature or fix | sonnet |
+  | dev: XS copy/style/one-line change in 1–2 files | haiku |
+  | tester: writing or repairing flows; reviewer gate | sonnet (a gate runs on its lead's model*) |
+  | PACKAGE (commit, push, PR body people read) | sonnet at least* |
+  A haiku job that does not finish is tried once more on sonnet by the executor*. Your own turns: opus on turn 1
+  and whenever a report needs judging (FAIL, blocked, NEEDS-WORK, plan-check points); sonnet for turns that only
+  read green reports and dispatch the next group*.
 - `setup` only when the task lacks resources it needs (worktree, DB, ports, emulator/APK). Reuse first.
   The app servers stay up for the whole run (`serve.mjs`, config `## Servers`): with resources already
   held, no setup job is needed just to start them — the first dev/tester job's `serve.mjs start` does it.
 - Briefs are short and point at `plan.md#<repo>` / cases instead of repeating them. Give `reads`.
+- Everything only agents read — briefs, `board.md`, `journal.md`, `note`, job reports — is terse key–value
+  (`J4 tester be: PASS 6/6 · C3 slow 40s`), no prose, no restating the plan. Write for people only where
+  people read: `## Tóm tắt duyệt`, `scope`, `cases.md`, questions, ticket comment, PR body, review replies.
 **Other modes**
 - qc mode: QC bugs from the ticket. First job is usually the tester reproducing the reported cases with
   the existing flows (target dev or local) — fix what reproduces. Human PR reviews belong to feedback mode.
@@ -287,6 +303,10 @@ Target: local | dev | <saved target>
 - Ưu tiên: P1 | P2 | P3
 - Ghi chú: <⚠ assumption Q1=A, …>
 ```
+- The user reads the cases as a table (`cases.mjs preview`: ID · Tình huống · Mong đợi · Nền tảng · ⚠): the
+  heading title is the situation in ≤ 8 words ("Bỏ trống tên giải → báo lỗi"), and `Mong đợi` is ONE sentence
+  someone can check by looking (what is shown, the status and body returned). Steps and data stay below for
+  the tester.
 - A QC list is the main source: keep their ids as the headings (`### A1 — …`), add `đề xuất` cases only for
   acceptance criteria they do not cover. `IMPACT<n>` cases from the build round stay cases.
 - Every acceptance criterion gets a line under `AC → TC`; one you cannot test gets ⚠ and why.

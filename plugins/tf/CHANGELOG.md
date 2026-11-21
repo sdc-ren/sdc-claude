@@ -4,6 +4,32 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.20.0] — 2026-11-21
+
+Measured: the PM ran on opus in 205 of 250 turns, haiku almost never ran, and half of all agent time went into
+rounds sent back by QC or reviewers. This release routes models by the kind of work and writes for people only
+where people read.
+
+### Changed
+- **Models by the kind of work.** After its first turn the PM runs on sonnet whenever the last reports are green
+  and it only dispatches the next group, whatever the size; it goes back to opus for a turn that must judge
+  (FAIL, blocked, NEEDS-WORK, plan-check points, a rejected decision). Setup jobs run on haiku unless the PM
+  gives `modelWhy`. A PACKAGE job never runs below sonnet (it writes the PR body). A haiku job that does not
+  finish is tried once more on sonnet, from where it stopped. `pm.md` has the table.
+- **`--approve` shows a summary written for the person approving** (`## Tóm tắt duyệt` at the top of plan.md:
+  goal, requirements in plain words, one line per repo, not in this task, risks and questions — ≤ 15 lines, no
+  paths), not the micro-task list.
+- **The e2e test-case table shows what to expect:** `cases.mjs preview` is `ID · Tình huống · Mong đợi · Nền tảng
+  · ⚠`, flows move to one counts line. Case titles are the situation in ≤ 8 words, `Mong đợi` one checkable
+  sentence.
+- **Agent-only text is terse.** Briefs, board, journal and job reports are `key: value` lines; prose is kept for
+  what people read (approval summary, scope, cases, questions, ticket comment, PR body, review replies).
+
+### Added
+- **A prototype is checked before the PR.** When the task has one and UI changed, the tester shoots each changed
+  screen beside it and lists the differences; the gate raises P2 when that comparison is missing (not a block —
+  the prototype may be out of date).
+
 ## [1.19.0] — 2026-11-21
 
 Measured on 167 tester jobs: about 70% of tester time went into fixing flow scripts and re-running them, and into

@@ -87,6 +87,13 @@ A case about how something looks (position, alignment, size, colour, a broken la
    centres), not only that a class is present.
 Read the user's screenshot or words again before you report: the element you measured is the one they show.
 
+**A prototype is a spec.** When the task has one (`specs/canvas-*`, `specs/*prototype*`, prototype screenshots
+under `specs/`) and the build changed UI: shoot every changed screen at the prototype's viewport, put each next
+to the prototype's screen (`shot('<screen>-vs-proto', { caption })`), and list the differences — layout,
+copy, states — under `prototype:` in the report. A difference the plan did not accept is an `IB`; a prototype
+that is clearly older than the ticket is `spec-gap` with what differs. This is the round QC would otherwise
+send back.
+
 ## Other jobs run beside you
 Temp files, seed scripts and downloads go to the scratch folder the prompt gives. Never delete or clean
 anything your job did not create — a `rm -rf` of a shared temp folder shows up as another tester's FAIL that
@@ -178,7 +185,8 @@ the runner draws a red box and a red label on the failure shot (and a close-up w
 - Several wrong places on one screen: `await mark(<at>, 'label')` for each, then `shot('<name>', { caption, crop })`.
 - When the bug is a difference between two screens (Web vs App, detail vs result page), shoot both with a
   caption each — the comment shows them side by side in one row.
-Report `jobs/<id>-tester-<repo>.md`: one row per
+Report `jobs/<id>-tester-<repo>.md` (agents read it — terse, no prose; the case rows and bug labels are the
+part QC reads): one row per
 case, starting with the case id, `case | PASS` / `case | Failed — BUG: <impact for QC>` / `case | Not tested — <reason>` + evidence
 files, then issues. Return `verdict: PASS` only when every case in scope passed; otherwise `FAIL`
 (or `status: blocked` when the environment stopped you).

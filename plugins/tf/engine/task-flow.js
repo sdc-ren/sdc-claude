@@ -86,6 +86,7 @@ const DISPATCH = {
           role: { type: 'string', enum: ['setup', 'dev', 'tester', 'reviewer'] },
           repo: { type: 'string', description: 'config repo key, or "all" for setup/tester across repos' },
           model: { type: 'string', enum: MODELS },
+          modelWhy: { type: 'string', description: 'Only when you pick a model above the default for the role (pm.md "Models"): one line why. A setup job runs on haiku without it.' },
           effort: { type: 'string', enum: ['low', 'medium', 'high'] },
           group: { type: 'integer', minimum: 1, description: 'same group runs in parallel; groups run in order' },
           brief: { type: 'string', description: 'What to do, concretely. Point at plan.md sections instead of repeating them.' },
@@ -516,11 +517,28 @@ function leadModel(repo) {
   const ms = [...lastByRepo.values()]
   return ms.length ? MODELS[Math.max(...ms.map((m) => MODELS.indexOf(m)))] : ''
 }
+// The model a non-dev job runs on. Setup is scripts (worktree, DB, emulator, APK): haiku unless the PM says why
+// not. A PACKAGE job writes the PR body people read: never below sonnet. A gate never runs below the lead it
+// judges (leadModel, in runJob).
+const rank = (m) => MODELS.indexOf(m)
+function jobModel(j) {
+  if (j.role === 'setup' && !j.modelWhy) return 'haiku'
+  if (j.role === 'reviewer' && isPackage(j) && rank(modelOf(j)) < rank('sonnet')) return 'sonnet'
+  return modelOf(j)
+}
+// A haiku job that could not finish gets one more try on sonnet, from where it stopped — cheaper than a PM turn
+// spent on a job the small model could not do.
+const retryable = (rep) => !rep || rep.status !== 'done'
 async function runJob(j, turn) {
   let report
-  if (j.role === 'dev') report = await runDev(j)
-  else {
-    let model = modelOf(j)
+  if (j.role === 'dev') {
+    report = await runDev(j)
+    if (modelOf(j) === 'haiku' && retryable(report)) {
+      log(`${j.id} dev ${j.repo}: model haiku → sonnet (haiku ${report ? report.status : 'returned nothing'})`)
+      report = await runDev({ ...j, model: 'sonnet', brief: `${j.brief}\nA first attempt on a smaller model stopped (${report ? report.status + ': ' + String(report.summary || '').slice(0, 200) : 'no answer'}). Continue from the worktree as it is now.` })
+    }
+  } else {
+    let model = jobModel(j)
     if (j.role === 'reviewer' && (!isPackage(j) || j._noGate) && CODE_MODES.includes(mode)) {
       const lm = leadModel(j.repo)
       if (lm && lm !== model) { log(`${j.id} gate ${j.repo}: model ${model} → ${lm} (the dev lead's)`); model = lm }
@@ -529,6 +547,10 @@ async function runJob(j, turn) {
     if (AGENT[j.role]) o.agentType = AGENT[j.role]
     if (j.effort) o.effort = j.effort
     report = await run(jobPrompt(j), o)
+    if (model === 'haiku' && retryable(report)) {
+      log(`${j.id} ${j.role} ${j.repo}: model haiku → sonnet (haiku ${report ? report.status : 'returned nothing'})`)
+      report = await run(jobPrompt(j) + `\nA first attempt on a smaller model stopped (${report ? report.status + ': ' + String(report.summary || '').slice(0, 200) : 'no answer'}). Continue from where it left things.\n`, { ...o, model: 'sonnet' })
+    }
   }
   const rec = { job: j, report, turn, seq: j._seq }
   ledger.push(rec)
@@ -575,7 +597,11 @@ const RULES = CODE_MODES.includes(mode)
   : ''
 // e2e with approved cases: nothing is left to judge but the dispatch and the reports — sonnet; writing the
 // cases (no snapshot yet) stays on opus.
-const pmModel = (turn) => (snapshot ? (violation ? 'opus' : 'sonnet') : turn === 1 || violation || !['XS', 'S'].includes(size) ? 'opus' : 'sonnet')
+// After turn 1 a PM turn that only reads green reports and dispatches the next group runs on sonnet, whatever
+// the size; one that must judge — a FAIL, a block, a NEEDS-WORK, plan-check points, a stuck job, a rejected
+// decision — runs on opus.
+const judging = () => !!(violation || planNotes || stuck || last.some((r) => !r.report || r.report.status !== 'done' || ['FAIL', 'NEEDS-WORK', 'BLOCK'].includes(r.report.verdict) || (r.report.blocked || []).length))
+const pmModel = (turn) => (snapshot ? (violation ? 'opus' : 'sonnet') : turn === 1 || judging() ? 'opus' : 'sonnet')
 for (let turn = 1; turn <= MAX_TURNS; turn++) {
   if (budgetLow()) return { status: 'handoff', slug, round, mode, note: 'token budget low — relaunch with the same args; the PM resumes from board.md' }
   phase('PM')

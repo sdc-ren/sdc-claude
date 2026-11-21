@@ -59,7 +59,7 @@ their reports is not enough:
    dev.md "Keep long output out of your context"), then the job's
    `done-when` checks, then the existing tests (dev.md "Micro-test", config `## Checks`). Fix what fails, whoever wrote it. A member that failed or did half: finish its part
    yourself when it is small, else report `blocked` with exactly what is missing.
-4. One report for the whole job (`jobs/<id>-dev-<repo>.md`): micro-task → files → done-when result, who did
+4. One report for the whole job (`jobs/<id>-dev-<repo>.md`, terse `key: value` lines — agents read it): micro-task → files → done-when result, who did
    what in one line each, deviations from the plan, what the tester should look at hardest, the real
    typecheck/build output and the existing-tests result (`broken by this job: none` or the list, `pre-existing:` the
    list). `filesChanged` lists every file changed by you and the members.

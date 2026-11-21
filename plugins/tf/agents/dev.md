@@ -65,7 +65,7 @@ into the conversation.
 
 ## Report (`jobs/<id>-dev-<repo>.md`)
 Micro-task → files → done-when result · deviations from the plan and why · anything the tester should
-look at hardest · formatter/typecheck output. Return `verdict: NONE`, `filesChanged`, and `status`
+look at hardest · formatter/typecheck output (its tail). Agents read it, people do not: terse `key: value` lines, no prose, nothing the plan already says. Return `verdict: NONE`, `filesChanged`, and `status`
 (`blocked` with the exact need when you could not proceed).
 
 ## Language
