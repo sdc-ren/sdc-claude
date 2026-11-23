@@ -72,6 +72,9 @@ workspace, not once per ticket.
   skip.
 - Environment stops a case (no emulator, a service down): `Not tested — <what is missing>`, `status: blocked`
   — that is "not verified", never a bug.
+- **Rate-limited** (`rateLimited: true` in the runner's result, HTTP 429): do not touch the flow. Raise the
+  limiter's max in the task server's env (config `## Servers`; the result names the request), `serve.mjs restart
+  <server>`, run the case again. Say in the report which limit you hit, so the config gets it for good.
 
 ## Your cases (the brief or a `Cases:` line names them)
 Write and run only those; the other flows in `flows.json` belong to another tester or another round. If the change clearly breaks a case that is not listed, say so

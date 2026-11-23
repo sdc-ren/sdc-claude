@@ -4,6 +4,17 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.22.3] — 2026-11-23
+
+### Fixed
+- **A case stopped by the app's rate limiter is `BLOCKED — rate-limited`, not a FAIL.** On RVD-308 the tester's
+  first runs failed with `seed submit 429 … Too many requests` and it spent minutes on flows that were fine.
+  `flow-run` now marks a failure carrying the limiter's answer (`Too many requests`, `too_many_requests`,
+  `rate_limit.exceeded`) as `BLOCKED` with `rateLimited: true` and what to do: raise the limit in the task
+  server's env (config `## Servers`), restart that server, run again. A bare 429 in an expectation is judged as
+  usual. The tester and `e2e-testing.md` say not to touch the flow; the config template says to put rate-limit
+  maxima high for task servers.
+
 ## [1.22.2] — 2026-11-21
 
 ### Fixed

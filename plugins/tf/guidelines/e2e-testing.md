@@ -48,6 +48,8 @@ fragile selectors silently.
   `gotoReady`). No fixed sleeps, no `networkidle` (slow and unreliable on SPAs). Android: `waitFor`.
 - Android: look at a screen with `flow-peek.mjs <task> - --android <serial>` before writing its steps; a failed
   step leaves `<case>-fail-<step>.ui.txt` (selectors + bounds), like `.page.txt` on the web.
+- An HTTP 429 stops a case as `BLOCKED — rate-limited`, not FAIL: the app's limiter, not a bug. Raise that
+  limit in the task server's env (workspace config `## Servers`) instead of slowing or rewriting the flow.
 - A whole case has a ceiling too (flow-run: 180 s Web/API, 360 s Android); when it is hit, the result names
   the step it hung in.
 - The timeout (≈15 s) is a ceiling, not a delay: a ready screen continues at once; only a stuck step

@@ -15,6 +15,9 @@
 //              Nothing left to run is a result here (`upToDate`), not an error.
 //   --timeout  seconds per case before it is killed (default 180 Web/API, 360 Android); the result says the
 //              step it was in (`[tf-step]` lines of the flow kit).
+//   A failure whose error is an HTTP 429 / "Too many requests" is recorded as BLOCKED (`rateLimited: true`):
+//   the app's rate limiter stopped the flow, not a bug — raise the limit in the task server's env (config
+//   "## Servers"), `serve.mjs restart`, run again.
 //   --verbose  print every field of each result (default: case, status, first error line, evidence files).
 //   --list     one line per flow (case · platform · last result · on this commit/flow or not · seconds · error)
 //              instead of reading flows.json; nothing runs.
@@ -56,6 +59,8 @@ for (let i = 1; i < argv.length; i++) {
 }
 const fail = (error, extra = {}) => { console.log(JSON.stringify({ error, ...extra }, null, 2)); process.exit(2) }
 const CASE_ID = /^[A-Za-z0-9_-]{1,64}$/
+// The limiter's own answer, not a bare 429: a case may expect a 429 and fail for another reason.
+const RATE_LIMITED = /too many requests|too_many_requests|rate[_ .-]?limit[_ .]?exceeded/i
 const flowsDir = join(dir, 'flows')
 const manifestPath = join(dir, 'flows.json')
 const manifest = existsSync(manifestPath) ? JSON.parse(readFileSync(manifestPath, 'utf8')) : {}
@@ -211,6 +216,10 @@ function runCase(f) {
       if (v && v.runId === runId && v.status === 'PASS' && (failure || signal || code !== 0))
         v = { ...v, status: failure ? 'BLOCKED' : 'FAIL', error: failure || `flow exited with ${signal || `code ${code}`} after writing PASS: ${outText.slice(-800)}` }
       if (!v || v.runId !== runId) v = { case: c, status: failure ? 'BLOCKED' : 'FAIL', error: failure || outText.slice(-1500) || 'flow wrote no verdict', shots: [], durationMs: 0 }
+      // The app's rate limiter stopped the flow (seeding a tournament, a login): the environment, not the app.
+      if (v.status === 'FAIL' && RATE_LIMITED.test(String(v.error || ''))) {
+        v = { ...v, status: 'BLOCKED', rateLimited: true, error: `rate-limited (HTTP 429) — not a bug: raise the limit in the task server's env (config "## Servers"), serve.mjs restart <server>, run again. ${String(v.error).split('\n')[0].slice(0, 300)}` }
+      }
       const shots = (v.shots || []).map((x) => x.replace(/\.png$/, '.webp'))
       // Keep what other tools recorded about the case (caseRev from --mark-written); replace only the run result.
       const prev = { ...(manifest.cases[c] || {}) }
@@ -221,7 +230,7 @@ function runCase(f) {
       if (v.warnings && v.warnings.length) ran[c].warnings = v.warnings
       if (v.trace) ran[c].trace = v.trace
       if (v.page) ran[c].page = `evd/${v.page}`
-      results.push({ case: c, status: v.status, error: (v.error || '').split('\n')[0], shots, ...(v.warnings && v.warnings.length ? { warnings: v.warnings } : {}), ...(v.trace ? { trace: v.trace } : {}), ...(v.page ? { page: `evd/${v.page}` } : {}) })
+      results.push({ case: c, status: v.status, error: (v.error || '').split('\n')[0], shots, ...(v.rateLimited ? { rateLimited: true } : {}), ...(v.warnings && v.warnings.length ? { warnings: v.warnings } : {}), ...(v.trace ? { trace: v.trace } : {}), ...(v.page ? { page: `evd/${v.page}` } : {}) })
       done()
     })
   })
@@ -280,6 +289,6 @@ for (const [c, r] of Object.entries(ran)) {
 save()
 const count = (s) => results.filter((x) => x.status === s).length
 // Default output is what the tester acts on; --verbose keeps every field (warnings, trace, marked files).
-const brief = (x) => ({ case: x.case, status: x.status, ...(x.status !== 'PASS' ? { error: x.error } : {}), ...(x.page ? { page: x.page } : {}), ...(x.status !== 'PASS' && (x.marked || x.shots).length ? { evd: (x.marked || x.shots).slice(0, 3) } : {}), ...(x.warnings ? { warnings: x.warnings.length } : {}) })
+const brief = (x) => ({ case: x.case, status: x.status, ...(x.rateLimited ? { rateLimited: true } : {}), ...(x.status !== 'PASS' ? { error: x.error } : {}), ...(x.page ? { page: x.page } : {}), ...(x.status !== 'PASS' && (x.marked || x.shots).length ? { evd: (x.marked || x.shots).slice(0, 3) } : {}), ...(x.warnings ? { warnings: x.warnings.length } : {}) })
 console.log(JSON.stringify({ target, commit, requested: requested || pick.map(caseOf), missing: [], ran: results.length, pass: count('PASS'), fail: count('FAIL'), blocked: count('BLOCKED'), ...(opts._skipped ? { skipped: opts._skipped } : {}), results: opts.verbose ? results : results.map(brief) }, opts.verbose ? null : undefined, opts.verbose ? 2 : undefined))
 process.exit(results.every((x) => x.status === 'PASS') ? 0 : 1)
