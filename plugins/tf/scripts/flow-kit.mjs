@@ -34,7 +34,7 @@
 
 import { createRequire } from 'node:module'
 import { execFileSync } from 'node:child_process'
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 export class Blocked extends Error {}
@@ -287,14 +287,48 @@ export function androidKit(serial, ADB = env.ADB || 'adb') {
   }
   const type = async (text) => { adb('shell', 'input', 'text', String(text).replace(/ /g, '%s')); await sleep(300) }
   const key = async (code) => { adb('shell', 'input', 'keyevent', String(code)); await sleep(300) }
-  return { adb, dump, nodes, find, waitFor, tap, type, key, sleep }
+  // A signed-in app session kept for this task: the first `session(key, …)` runs `login` and saves the app's
+  // shared_prefs; later ones (the next case, the next re-run of the same case) put them back and only check
+  // `ready` — no login form. A saved session that no longer reaches `ready` (expired, another build) is logged
+  // in again and saved anew. Needs a debuggable build (run-as); without one it just runs `login`.
+  // Files: <task>/tmp/app-sessions/<appId>-<key>.tar, readable by the user only (they hold tokens); never evidence.
+  async function session(sessionKey, login, { appId, ready, readyTimeout = 20_000, activity = '' } = {}) {
+    if (!/^[A-Za-z][\w.]*$/.test(String(appId || ''))) throw new Error('session: appId (the Android package) is required')
+    if (!/^[\w.-]{1,64}$/.test(String(sessionKey))) throw new Error('session: key is a short name for the account ([A-Za-z0-9_.-])')
+    if (!ready) throw new Error('session: ready (a selector that is only on screen when signed in) is required')
+    const t0 = Date.now()
+    const dir = join(env.TF_ROOT || '.', '.pipeline', env.TF_SLUG || '_', 'tmp', 'app-sessions')
+    const file = join(dir, `${appId}-${sessionKey}.tar`)
+    const dev = `/data/local/tmp/tf-session-${process.pid}.tar`
+    const launch = () => (activity ? adb('shell', 'am', 'start', '-n', `${appId}/${activity}`) : adb('shell', 'monkey', '-p', appId, '-c', 'android.intent.category.LAUNCHER', '1'))
+    if (existsSync(file)) {
+      try {
+        adb('shell', 'am', 'force-stop', appId)
+        adb('push', file, dev)
+        adb('shell', 'chmod', '644', dev)
+        // adb shell joins its arguments into one device command line: pass it whole (appId and dev are checked above).
+        adb('shell', `run-as ${appId} sh -c 'rm -rf shared_prefs && tar -xf ${dev}'`)
+        launch()
+        await waitFor(ready, readyTimeout)
+        return { reused: true, ms: Date.now() - t0 }
+      } catch { /* expired or another build: log in again below */ } finally { try { adb('shell', 'rm', '-f', dev) } catch {} }
+    }
+    await login()
+    await waitFor(ready, readyTimeout)
+    try {
+      const tar = adb('exec-out', 'run-as', appId, 'tar', '-cf', '-', 'shared_prefs')
+      if (tar.length > 512) { mkdirSync(dir, { recursive: true, mode: 0o700 }); writeFileSync(file, tar, { mode: 0o600 }) }
+    } catch { /* not debuggable: nothing to keep, the login still counts */ }
+    return { reused: false, ms: Date.now() - t0 }
+  }
+  return { adb, dump, nodes, find, waitFor, tap, type, key, sleep, session }
 }
 
 export async function androidFlow(caseId, fn) {
   const k = base(caseId, 'android')
   const serial = env.ANDROID_SERIAL
   const ADB = env.ADB || 'adb'
-  const { adb, dump, find, waitFor, tap, type, key, sleep } = androidKit(serial, ADB)
+  const { adb, dump, find, waitFor, tap, type, key, sleep, session } = androidKit(serial, ADB)
   // Screen pixels of a node (uiautomator bounds are already in screencap pixels).
   const markOf = async (sel) => {
     const n = sel && sel.bounds ? sel : find(sel)
@@ -323,7 +357,7 @@ export async function androidFlow(caseId, fn) {
       try { const file = `${k.v.case}-${tag}.ui.txt`; writeFileSync(join(EVD, file), describeAndroid(dump())); k.v.page = file } catch {}
     })
     try {
-      await fn({ adb, dump, find, waitFor, tap, type, key, shot, mark, step, sleep, api: k.api, uniq: k.uniq, expect: k.expect, blocked: k.blocked, env })
+      await fn({ adb, dump, find, waitFor, tap, type, key, shot, mark, step, sleep, session, api: k.api, uniq: k.uniq, expect: k.expect, blocked: k.blocked, env })
     } catch (e) {
       if (!failShot && serial && !(e instanceof Blocked)) { try { await failMark(k, markOf, e, 'end'); await shot('fail-end') } catch {} }
       throw e

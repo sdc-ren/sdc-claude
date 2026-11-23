@@ -4,6 +4,22 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.23.0] — 2026-11-24
+
+Measured on 52 Android case runs (Rồng Việt): the login step took a median of 79 s of a 109 s case — the flow
+filled the login form on every run, often after `pm clear`.
+
+### Added
+- **`session(key, login, { appId, ready })` in `androidFlow`.** The first call runs `login` and keeps the app's
+  `shared_prefs` for the task (`<task>/tmp/app-sessions/`, user-only — they hold tokens); later calls for the same
+  account restore them and only check `ready`. A session that no longer reaches `ready` is logged in and saved
+  again. Needs a debuggable build (`run-as`); without one it simply runs `login`. Measured on an emulator with
+  the Rồng Việt dev APK: login 11.5 s, restored session 6.5–6.7 s (the form login it replaces: 79 s median).
+
+### Changed
+- The tester signs in once per account and task: `session()` on Android, token/cookies on the Web, one account
+  per role across re-runs while debugging, no `pm clear` just to start clean.
+
 ## [1.22.3] — 2026-11-23
 
 ### Fixed

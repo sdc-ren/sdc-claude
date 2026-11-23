@@ -165,6 +165,12 @@ verdict FAIL by itself — say so in the summary and let the PM decide.
   when one is unhealthy, `serve.mjs run … --name <n> --server <s> -- <cmd>` for a one-off process (e.g. a
   single job poller), logs in `<task>/logs/`. They stay up after you finish — the orchestrator stops them.
 - Web: the flow kit opens this task's own browser (browser.mjs), never a shared/MCP one.
+- **Log in once, not per run.** Web: sign in with a token or cookies the library sets (no login form) where the
+  workspace has one. Android: wrap the login in `session('<account>', () => <login>, { appId, ready })` — the
+  first run logs in and keeps the app's session for the task; every later case or re-run of the same account
+  restores it in seconds (measured: form login ~80 s, restored session ~7 s). Use one account per role across
+  re-runs while you debug a case, so the saved session applies; seed a new user only when the case needs one.
+  Never `pm clear` just to start clean — it throws the session away.
 - Android: `node ${CLAUDE_PLUGIN_ROOT}/scripts/emulator.mjs start <root> <slug> --avd <config avd>` → serial; APK via
   `apk.mjs get … --install <serial>` (cached by source state); run flows with
   `--env ANDROID_SERIAL=<serial>`; stop the emulator when done. iOS is out of scope unless the config says otherwise.
