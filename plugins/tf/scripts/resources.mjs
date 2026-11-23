@@ -12,7 +12,11 @@
 //   release <root> <slug>                       release everything now (manual cleanup / verify-only)
 //   reap [--dry-run] [<root>...]                release tasks whose PRs are all merged or closed, then
 //                                               move .pipeline/<slug> to .pipeline/_archive/<slug>
-//   archive <root> <slug>                       move a finished task folder to .pipeline/_archive/
+//   archive <root> <slug>                       move a finished task folder to .pipeline/_archive/ and slim it: the
+//                                               text (plans, ticket, handoff, feedback, history) stays, evidence
+//                                               images, logs, scratch and attachments go (the PRs are merged)
+//   due <root>                                  one line when cleanup is due (last /tf:clean over 7 days ago, and 3+
+//                                               task worktree folders or 0.5 GB of archive), else nothing — for the run report
 //   prune [--days 7] [--dry-run] [<root>...]    tasks idle longer than N days: free their resources; delete the
 //                                               folder when no PR is still open (else keep only the text handoff
 //                                               files); delete old _archive entries and stray clean worktrees
@@ -323,9 +327,48 @@ export function archive(root, slug) {
   mkdirSync(join(root, '.pipeline', '_archive'), { recursive: true })
   if (existsSync(to)) rmSync(to, { recursive: true, force: true })
   renameSync(from, to)
-  say(`archive ${slug} → .pipeline/_archive/`)
+  const freed = slimArchived(to)
+  say(`archive ${slug} → .pipeline/_archive/${freed ? ` (slimmed, ${Math.round(freed / 1048576)} MB freed)` : ''}`)
   return true
 }
+// An archived task keeps what a person or a later ticket reads — text — and drops what only the run needed.
+const HEAVY_DIRS = new Set(['evd', 'logs', 'tmp', 'node_modules', 'attachments', '_sink', 'chain', 'proto-shots'])
+const HEAVY_FILE = /\.(webp|png|jpe?g|gif|mp4|webm|zip|apk|aab|ipa|trace|log|har|tar|gz|tgz|pdf|xlsx?)$/i
+export function slimArchived(dir) {
+  let freed = 0
+  const walk = (d) => {
+    for (const n of readdirSync(d)) {
+      const f = join(d, n)
+      let st
+      try { st = statSync(f) } catch { continue }
+      if (st.isDirectory()) {
+        if (HEAVY_DIRS.has(n)) { freed += sizeOf(f); rmSync(f, { recursive: true, force: true }) } else walk(f)
+      } else if (HEAVY_FILE.test(n) || st.size > 2 * 1048576) { freed += st.size; rmSync(f, { force: true }) }
+    }
+  }
+  try { walk(dir) } catch {}
+  return freed
+}
+function sizeOf(d) {
+  let n = 0
+  try { for (const e of readdirSync(d, { withFileTypes: true })) { const f = join(d, e.name); n += e.isDirectory() ? sizeOf(f) : statSync(f).size } } catch {}
+  return n
+}
+const LAST_CLEAN = join(HOME_DIR, 'last-clean')
+// Cleanup runs only when the user asks (/tf:clean). After a run the report says when it is due.
+export function due(root) {
+  let last = 0
+  try { last = statSync(LAST_CLEAN).mtimeMs } catch {} // written by /tf:clean (reap); reap.log is also written by every run end
+  const days = last ? Math.floor((Date.now() - last) / 86_400_000) : null
+  if (days !== null && days <= 7) return ''
+  // Cheap on purpose (it runs after every run): count task worktree folders, size only the archive.
+  const wtDir = join(root, '.worktrees')
+  const tasksWithWorktrees = existsSync(wtDir) ? readdirSync(wtDir).filter((n) => !n.startsWith('_') && !n.startsWith('.')).length : 0
+  const ar = existsSync(join(root, '.pipeline', '_archive')) ? sizeOf(join(root, '.pipeline', '_archive')) : 0
+  if (tasksWithWorktrees < 3 && ar < 512 * 1048576) return ''
+  return `Cleanup due: ${days === null ? 'no /tf:clean yet' : `last /tf:clean ${days} days ago`} — ${tasksWithWorktrees} task worktree folders, archive ${(ar / 1073741824).toFixed(1)} GB. /tf:status shows what /tf:clean frees.`
+}
+
 function roots(args) {
   if (args.length) return args.map((r) => resolve(r))
   return existsSync(ROOTS) ? readFileSync(ROOTS, 'utf8').split('\n').map((s) => s.trim()).filter(Boolean) : []
@@ -435,7 +478,7 @@ function lastActivity(dir) {
 const running = (dir) => { try { return Date.now() - statSync(join(dir, '.lock')).mtimeMs < 5_400_000 } catch { return false } }
 // Text handoff files a later round needs (HANDOFF, journal, flows; old-layout folders: STATUS, spec). Evidence images,
 // job reports, history and logs are heavy and regenerable.
-const KEEP_WHEN_PR_OPEN = new Set(['HANDOFF.md', 'journal.md', 'flows', 'flows.json', 'plan.md', 'design.md', 'board.md', 'STATUS.md', 'spec.md', 'ticket.md', 'ticket-history.md', 'ticket-comment.md', 'resources.json', 'metrics.json'])
+const KEEP_WHEN_PR_OPEN = new Set(['HANDOFF.md', 'journal.md', 'flows', 'flows.json', 'plan.md', 'design.md', 'board.md', 'STATUS.md', 'spec.md', 'ticket.md', 'ticket-history.md', 'ticket-comment.md', 'feedback.md', 'feedback-history.md', 'feedback-triage.md', 'cases.md', 'cases.approved.json', 'resources.json', 'metrics.json'])
 // Archived (all PRs merged/closed) tasks: slim to the handoff set after TF_PRUNE_DAYS, delete after this many days,
 // so a QC report that arrives after the merge still finds HANDOFF.md and the flows.
 const ARCHIVE_DAYS = Number(process.env.TF_ARCHIVE_DAYS || 30)
@@ -547,6 +590,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       const list = roots(process.argv.slice(3).filter((a) => a !== '--dry-run'))
       reap(list, dry)
       prune(list, Number(process.env.TF_PRUNE_DAYS || 7), dry) // /tf:clean runs `reap`, so pruning rides along
+      if (!dry) { mkdirSync(HOME_DIR, { recursive: true }); writeFileSync(LAST_CLEAN, new Date().toISOString() + '\n') }
       break
     }
     case 'prune': {
@@ -558,6 +602,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       break
     }
     case 'archive': process.exitCode = archive(root, slug) ? 0 : 1; break
+    case 'due': { const line = due(root); if (line) console.log(line); break }
     case 'list':
       if (process.argv.includes('--table')) { process.stdout.write(table(roots(process.argv.slice(3).filter((a) => a !== '--table')))); break }
       for (const r of roots(pos)) for (const s of tasks(r)) {

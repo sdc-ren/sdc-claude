@@ -242,7 +242,7 @@ for the workspace when the user asks, and nothing runs in the background; days v
 
 | What | When | Action |
 |---|---|---|
-| Task whose PRs are all merged/closed | next `/tf:clean` | free worktrees, DB, cache, ports; promote passing flows to `_regression/`; move folder to `_archive/` |
+| Task whose PRs are all merged/closed | next `/tf:clean` | free worktrees, DB, cache, ports; promote passing flows to `_regression/`; move folder to `_archive/` and slim it at once (text stays; evidence, logs, scratch, attachments go) |
 | Task idle > `TF_PRUNE_DAYS` (7), PR still open | next `/tf:clean` | free resources (worktree with unsaved work is kept); slim folder to the handoff set |
 | Task idle > `TF_PRUNE_DAYS`, no open PR | next `/tf:clean` | free resources, delete folder |
 | Archived task idle > 7 / > `TF_ARCHIVE_DAYS` (30) days | next `/tf:clean` | slim to the handoff set / delete |

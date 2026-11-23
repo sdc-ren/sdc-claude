@@ -335,6 +335,11 @@ Every form shows a **dry run first** and changes nothing until you say yes.
 | `--legacy` | Fold old suffixed task folders (`PROJ-123-e2e`, `-qc`, `-r2`…) into `.pipeline/PROJ-123/history/legacy/` |
 | *(nothing)* | Clean the workspace: free and archive every task whose PRs are all merged or closed (and idle ones past `TF_PRUNE_DAYS`), promote their passing flows to `_regression/`. Also says what `--migrate` and `--legacy` would do |
 
+An archived task keeps its text (plans, ticket, handoff, feedback, history) and drops evidence images, logs,
+scratch and attachments — the PRs are merged by then. Nothing is cleaned in the background: when the last
+`/tf:clean` is over a week old and worktrees or the archive have piled up, the run report ends with one line
+saying so.
+
 Nothing is ever posted to the tracker or GitHub as a comment without your approval of the exact text. On Jira,
 tf reads and posts with `scripts/jira.mjs` (through your signed-in browser session); agents cannot post.
 tf never merges, approves, force-pushes, or enables auto-merge.

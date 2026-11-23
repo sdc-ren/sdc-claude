@@ -172,7 +172,8 @@ merge duplicates, keep the source tag). Devs and reviewers read it before every 
 **Report** (report language, plain): PR links (ready), case table (case · result · evidence), the PM's
 assumptions (so the user can correct them), findings outside scope, review verdict (review mode),
 then the run's cost from `metrics.mjs`: wall time, minutes per role, jobs, re-tests, tokens — plus the one or two
-slowest jobs with their slowest command when a job took over 10 minutes.
+slowest jobs with their slowest command when a job took over 10 minutes. Last, `node $S/resources.mjs due <cwd>`:
+when it prints a line (cleanup due), add it as the report's last line — nothing is cleaned without the user.
 
 ## Hard rules
 

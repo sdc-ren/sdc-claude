@@ -4,7 +4,9 @@ The PM reads this file first on every turn of a feedback run; nothing here appli
 
 Input: `<task>/feedback.md` — per PR its review decision (`APPROVED` / `CHANGES_REQUESTED` / none) and state
 (open / merged), then unresolved review threads `R<n>` (stable ids), reviews and conversation comments;
-`[new]` = written after the PR's last commit, `[replied]` = we answered last.
+`[new]` = written after the PR's last commit, `[replied]` = we answered last. What an earlier round already
+handled (we answered last and nothing new came; a review or comment shown before) is one line there, its full
+text in `<task>/feedback-history.md` — open that only to quote it.
 1. **Triage** every point into `<task>/feedback-triage.md` before planning. A review posted as one long
    comment holds many points: split it, id them `<comment author>-<n>` (e.g. `tnthangvn-3`). Table:
    `id | PR | reviewer | file:line | point (one line) | P0–P3 | verdict | fix in repo | reason`, verdict one of

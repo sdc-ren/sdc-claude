@@ -51,3 +51,21 @@ test('table: one row per task, totals, and a warning for an id held twice', () =
   assert.match(out, /⚠ cache 2 is held by T-1 and T-2 at the same time/)
   assert.doesNotMatch(out, /redis-cli/, 'no commands in the table')
 })
+
+test('an archived task keeps its text and drops evidence, logs, scratch and attachments', async () => {
+  const { slimArchived } = await import('../scripts/resources.mjs')
+  const d = mkdtempSync(join(tmpdir(), 'tf-slim-'))
+  for (const f of ['HANDOFF.md', 'plan.md', 'history/r1/plan.md', 'evd/C1-after.webp', 'logs/be.log', 'tmp/jira.json', 'attachments/spec.pdf', 'r2/shot.png', 'r2/notes.md'])
+    { mkdirSync(join(d, dirname(f)), { recursive: true }); writeFileSync(join(d, f), 'x'.repeat(100)) }
+  assert.ok(slimArchived(d) >= 500)
+  for (const f of ['HANDOFF.md', 'plan.md', 'history/r1/plan.md', 'r2/notes.md']) assert.ok(existsSync(join(d, f)), f)
+  for (const f of ['evd', 'logs', 'tmp', 'attachments', 'r2/shot.png']) assert.ok(!existsSync(join(d, f)), f)
+})
+
+test('due: silent for a small workspace, one line when worktrees pile up and /tf:clean never ran', () => {
+  const root = ws()
+  assert.equal(cli('due', root).stdout, '')
+  for (const t of ['A-1', 'A-2', 'A-3']) mkdirSync(join(root, '.worktrees', t), { recursive: true })
+  mkdirSync(join(root, '.worktrees', '_pool'), { recursive: true })
+  assert.match(cli('due', root).stdout, /^Cleanup due: no \/tf:clean yet — 3 task worktree folders, archive 0\.0 GB\./)
+})
