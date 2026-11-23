@@ -56,6 +56,8 @@ No row for a repo → its test script from the repo `CLAUDE.md` / package file w
 - Web viewport: <e.g. 1440x900>. Android: AVD `<name>`, appId `<id>`. iOS: <recipe or "out of scope">.
 
 ## Servers (`serve.mjs` starts them once per run; jobs reuse them; `end-run` stops them)
+<!-- Flows seed data through the API many times a minute: put the app's rate-limit maxima high in the task
+     servers' env here (only these local servers get it). A limiter that ignores the global switch still counts. -->
 Placeholders: `{port}` `{port:<server>}` `{db}` `{cache}` `{wt}` `{root}` `{slug}` `{dir}` (from the task's
 resources). `"optional": true` = only when named. Put every env override the local app needs here
 (feature flags off, dry-run senders) so no job composes a start command by hand.

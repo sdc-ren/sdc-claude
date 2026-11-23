@@ -238,3 +238,19 @@ test('--list: one line per flow instead of flows.json, nothing runs', () => {
   assert.match(lines[1], /^A · web · PASS \(local\) · up to date · /)
   assert.match(lines[2], /^B · web · FAIL \(local\) · stale · .* · expect failed: x$/)
 })
+
+test('a case stopped by the app rate limiter is BLOCKED rate-limited, not a bug', () => {
+  const { dir } = task()
+  const failWith = (id, error) => writeFileSync(join(dir, 'flows', `${id}.mjs`), `import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+writeFileSync(join(process.env.EVD_DIR, process.env.CASE + '.verdict.json'), JSON.stringify({ case: process.env.CASE, status: 'FAIL', platform: 'web', runId: process.env.RUN_ID, shots: [], marks: [], error: ${JSON.stringify(error)}, durationMs: 1 }))
+process.exitCode = 1
+`)
+  failWith('R', 'seed submit 429: {"success":false,"error":{"code":"too_many_requests","message":"Too many requests","key":"errors.rate_limit.exceeded"}}')
+  failWith('E', 'expect failed: expected 429 after 6 logins, got 200')
+  const r = run([dir, '--cases', 'R,E'])
+  const by = Object.fromEntries(r.json.results.map((x) => [x.case, x]))
+  assert.equal(by.R.status, 'BLOCKED'); assert.equal(by.R.rateLimited, true); assert.match(by.R.error, /^rate-limited \(HTTP 429\) — not a bug/)
+  assert.equal(by.E.status, 'FAIL', 'a case that expects a 429 is judged as usual')
+  assert.equal(manifest(dir).cases.R.lastResult, 'BLOCKED')
+})
