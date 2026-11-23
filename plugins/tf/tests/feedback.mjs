@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
-import { parseReplies, planRound, postRound, render, summarize } from '../scripts/pr-feedback.mjs'
+import { parseReplies, planRound, postRound, render, renderFeedback, seenUrls, summarize } from '../scripts/pr-feedback.mjs'
 
 const API = 'https://github.com/org/api/pull/665'
 const WEB = 'https://github.com/org/web/pull/12'
@@ -186,4 +186,25 @@ test('findings on a diff line go inline, the rest stay in the body, as one revie
   const all = planReview(parseReview(REVIEW.replace(/- \[P2\][\s\S]*?per cart\?\n/, '')), diffLines(DIFF))
   assert.ok(!all.body.includes('## Findings'))
   assert.throws(() => planReview(parseReview('hello'), new Map()), /nothing to post/)
+})
+
+test('what an earlier round handled is one line in feedback.md, in full in feedback-history.md', () => {
+  const c = (author, url, at = '2026-11-20T01:00:00Z') => ({ author, at, body: `${author} says something long enough to cut`, url })
+  const pr = (threads, comments) => ({ url: 'https://github.com/o/r/pull/1', number: 1, state: 'OPEN', draft: false, decision: 'CHANGES_REQUESTED', branch: 'b', head: 'abc', headAt: 'x', waiting: [], reviews: [], threads, comments })
+  const answered = { rid: 'R1', path: 'a.ts', line: 3, reviewer: 'hoa', replied: true, new: false, outdated: false, comments: [c('hoa', 'u1'), c('me', 'u2')] }
+  const open = { rid: 'R2', path: 'b.ts', line: 9, reviewer: 'hoa', replied: false, new: false, outdated: false, comments: [c('hoa', 'u3')] }
+  const fresh = { ...answered, rid: 'R3', new: true, comments: [c('hoa', 'u4'), c('me', 'u5'), c('hoa', 'u6')] }
+  const p = pr([answered, open, fresh], [{ ...c('lan', 'u7'), new: false }])
+  // First fetch: nothing was seen before — everything in full.
+  const first = renderFeedback([p], 'now')
+  assert.equal(first.folded, 0); assert.equal(first.history, '')
+  // Next fetch, nothing new: R1 (we answered last) and the old comment fold; R2 (no answer yet) and R3 (new) stay.
+  const again = renderFeedback([p], 'later', seenUrls([p]))
+  assert.equal(again.folded, 2)
+  assert.match(again.md, /- R1 \[replied\] · `a\.ts:3` · hoa — hoa says something .* → we answered, waiting for the reviewer \(full: feedback-history\.md\)/)
+  assert.match(again.md, /#### R2 · `b\.ts:9` · hoa/)
+  assert.match(again.md, /#### R3 \[new\] \[replied\]/)
+  assert.match(again.md, /- \*\*lan\*\* .* \[handled\] — lan says/)
+  assert.match(again.history, /## https:\/\/github\.com\/o\/r\/pull\/1 · R1 \[replied\][\s\S]*\*\*me\*\*/)
+  assert.equal(render([p], 'later', seenUrls([p])), again.md)
 })

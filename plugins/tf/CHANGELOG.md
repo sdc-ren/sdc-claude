@@ -4,6 +4,22 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.24.0] — 2026-11-24
+
+### Changed
+- **`feedback.md` shows only what still needs an answer.** A thread we answered last with nothing new since, and
+  a review or comment an earlier fetch already showed, become one line; their full text goes to
+  `feedback-history.md`. Re-fetching real Rồng Việt tasks with nothing new: RVD-337 14.2 KB → 2.2 KB, RVD-307
+  27.4 KB → 16.6 KB. The PM opens the history only to quote it.
+- **An archived task is slimmed when it is archived**, not weeks later: plans, ticket, handoff, feedback and
+  history stay; evidence images, logs, scratch folders and attachments go (the PRs are merged). RVD-250's
+  archive: 242 MB → 3.1 MB.
+
+### Added
+- **`resources.mjs due <root>`** — one line when cleanup is due (no `/tf:clean` for 7 days and 3+ task worktree
+  folders or 0.5 GB of archive), else nothing; 0.1 s. The run report ends with it, so cleanup comes up without
+  anything running in the background. `/tf:clean` records when it last ran.
+
 ## [1.23.0] — 2026-11-24
 
 Measured on 52 Android case runs (Rồng Việt): the login step took a median of 79 s of a 109 s case — the flow
