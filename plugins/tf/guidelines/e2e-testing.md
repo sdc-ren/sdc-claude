@@ -48,6 +48,10 @@ fragile selectors silently.
   `gotoReady`). No fixed sleeps, no `networkidle` (slow and unreliable on SPAs). Android: `waitFor`.
 - Android: look at a screen with `flow-peek.mjs <task> - --android <serial>` before writing its steps; a failed
   step leaves `<case>-fail-<step>.ui.txt` (selectors + bounds), like `.page.txt` on the web.
+- Sign in once per account and task: Android flows get `session(key, login, { appId, ready })` from
+  `androidFlow` (saves the app's shared_prefs after the first login, restores them next time; debuggable builds);
+  Web flows set the token/cookies instead of filling the login form. The saved sessions live in
+  `<task>/tmp/app-sessions/` (user-only; they hold tokens) and are never evidence.
 - An HTTP 429 stops a case as `BLOCKED — rate-limited`, not FAIL: the app's limiter, not a bug. Raise that
   limit in the task server's env (workspace config `## Servers`) instead of slowing or rewriting the flow.
 - A whole case has a ceiling too (flow-run: 180 s Web/API, 360 s Android); when it is hit, the result names

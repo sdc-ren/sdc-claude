@@ -254,3 +254,12 @@ process.exitCode = 1
   assert.equal(by.E.status, 'FAIL', 'a case that expects a 429 is judged as usual')
   assert.equal(manifest(dir).cases.R.lastResult, 'BLOCKED')
 })
+
+test('session() refuses a missing app id, a bad key or no ready check before touching a device', async () => {
+  const { androidKit } = await import('../scripts/flow-kit.mjs')
+  const kit = androidKit('emulator-0000', '/nonexistent/adb')
+  await assert.rejects(kit.session('org', async () => {}, { ready: { id: 'x' } }), /appId/)
+  await assert.rejects(kit.session('org; rm -rf /', async () => {}, { appId: 'com.x', ready: { id: 'x' } }), /key is a short name/)
+  await assert.rejects(kit.session('org', async () => {}, { appId: 'com.x' }), /ready/)
+  await assert.rejects(kit.session('org', async () => {}, { appId: "com.x' ; reboot ; '", ready: { id: 'x' } }), /appId/)
+})

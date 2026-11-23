@@ -599,6 +599,8 @@ node <plugin>/scripts/jira.mjs read .pipeline/PROJ-123 PROJ-123 --site https://a
 
 - Waits for the app, not the clock: `waitApi`, `ready`, `gotoReady`; a 15 s ceiling per step, never a delay, and
   a ceiling per case (180 s Web/API, 360 s Android) — a hung case is stopped and the result names its step.
+- Log in once: an Android flow wraps its login in `session(key, login, { appId, ready })` — later runs restore the
+  saved app session in seconds instead of filling the form again (Rồng Việt: ~80 s → ~7 s).
 - A failed step leaves what was on the screen: `<case>-fail-<step>.page.txt` (Web) or `.ui.txt` (Android), with
   the locators to use, so the flow is fixed from it instead of re-run.
 - Evidence: `<case>-after.webp` (+ `before` for visual changes), failure screenshot automatically,
