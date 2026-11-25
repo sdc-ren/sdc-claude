@@ -4,6 +4,18 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.25.2] — 2026-11-25
+
+### Changed
+- **Examples and tests no longer name a real client, ticket or person.** Issue keys in guidelines, docs, tests and
+  this changelog are `PROJ-…`, business examples are generic, a reviewer handle is `reviewer-login`, and a test
+  no longer looks for a Playwright at a path on the author's machine (set `TF_PLAYWRIGHT` to run the rendering
+  tests). Behaviour is unchanged.
+
+### Added
+- `SECURITY.md` (private reporting, what is in scope), `CONTRIBUTING.md`, issue and PR templates, and
+  `.gitleaksignore` for the fake secrets in the `redact()` tests.
+
 ## [1.25.1] — 2026-11-25
 
 ### Fixed
@@ -11,7 +23,7 @@ All notable changes to the `tf` plugin are documented here. The format follows
   is committed. It now scans a mirror of the change (each file with only its added lines, line numbers kept), so
   an uncommitted secret is caught; tested with an npm token the built-in patterns do not know.
 - **Pre-existing problems were blamed on the change.** semgrep scans whole files and npm audit the whole lockfile;
-  on RVD-308 (28 backend files) the one semgrep result was a line written on develop in February, which the gate
+  on PROJ-308 (28 backend files) the one semgrep result was a line written on develop in February, which the gate
   would have rated P2 and sent back to the dev. Only results on added lines (npm audit: packages the change added
   or re-versioned) count; the rest are listed as `pre-existing` in the summary.
 - A self-check without S rows no longer costs a round: the gate fills them from its own scan instead of rating P2.
@@ -65,10 +77,10 @@ All notable changes to the `tf` plugin are documented here. The format follows
 ### Changed
 - **`feedback.md` shows only what still needs an answer.** A thread we answered last with nothing new since, and
   a review or comment an earlier fetch already showed, become one line; their full text goes to
-  `feedback-history.md`. Re-fetching real Rồng Việt tasks with nothing new: RVD-337 14.2 KB → 2.2 KB, RVD-307
+  `feedback-history.md`. Re-fetching real client tasks with nothing new: PROJ-337 14.2 KB → 2.2 KB, PROJ-307
   27.4 KB → 16.6 KB. The PM opens the history only to quote it.
 - **An archived task is slimmed when it is archived**, not weeks later: plans, ticket, handoff, feedback and
-  history stay; evidence images, logs, scratch folders and attachments go (the PRs are merged). RVD-250's
+  history stay; evidence images, logs, scratch folders and attachments go (the PRs are merged). PROJ-250's
   archive: 242 MB → 3.1 MB.
 
 ### Added
@@ -78,7 +90,7 @@ All notable changes to the `tf` plugin are documented here. The format follows
 
 ## [1.23.0] — 2026-11-24
 
-Measured on 52 Android case runs (Rồng Việt): the login step took a median of 79 s of a 109 s case — the flow
+Measured on 52 Android case runs (one client workspace): the login step took a median of 79 s of a 109 s case — the flow
 filled the login form on every run, often after `pm clear`.
 
 ### Added
@@ -86,7 +98,7 @@ filled the login form on every run, often after `pm clear`.
   `shared_prefs` for the task (`<task>/tmp/app-sessions/`, user-only — they hold tokens); later calls for the same
   account restore them and only check `ready`. A session that no longer reaches `ready` is logged in and saved
   again. Needs a debuggable build (`run-as`); without one it simply runs `login`. Measured on an emulator with
-  the Rồng Việt dev APK: login 11.5 s, restored session 6.5–6.7 s (the form login it replaces: 79 s median).
+  a client dev APK: login 11.5 s, restored session 6.5–6.7 s (the form login it replaces: 79 s median).
 
 ### Changed
 - The tester signs in once per account and task: `session()` on Android, token/cookies on the Web, one account
@@ -95,7 +107,7 @@ filled the login form on every run, often after `pm clear`.
 ## [1.22.3] — 2026-11-23
 
 ### Fixed
-- **A case stopped by the app's rate limiter is `BLOCKED — rate-limited`, not a FAIL.** On RVD-308 the tester's
+- **A case stopped by the app's rate limiter is `BLOCKED — rate-limited`, not a FAIL.** On PROJ-308 the tester's
   first runs failed with `seed submit 429 … Too many requests` and it spent minutes on flows that were fine.
   `flow-run` now marks a failure carrying the limiter's answer (`Too many requests`, `too_many_requests`,
   `rate_limit.exceeded`) as `BLOCKED` with `rateLimited: true` and what to do: raise the limit in the task
@@ -114,9 +126,9 @@ filled the login form on every run, often after `pm clear`.
 ## [1.22.1] — 2026-11-21
 
 ### Fixed
-- **The issue key is the scope of every commit and PR title, and a PR title is English.** On Rồng Việt, 52 of 400
-  backend commits put the key at the end (`feat(goalkeeper-award): … (RVD-306)`), one PR put it in brackets
-  (`fix(goalkeeper): [RVD-306] …`), and many PR titles were Vietnamese copies of commit summaries. Commits were
+- **The issue key is the scope of every commit and PR title, and a PR title is English.** On one client workspace, 52 of 400
+  backend commits put the key at the end (`feat(loyalty-points): … (PROJ-306)`), one PR put it in brackets
+  (`fix(loyalty): [PROJ-306] …`), and many PR titles were Vietnamese copies of commit summaries. Commits were
   made per area of the plan, the area became the scope, and later packaging copied that style from `git log`.
   - `guidelines/git.md`: the key is always the scope, also with several commits per PR; a table of wrong vs
     right; PR titles are written in English for the PR; a repo convention counts only when written down.
@@ -138,7 +150,7 @@ Measured over ten days: agents read `ticket.md` (up to 117 KB on a long task), t
   verbatim to `ticket-history.md` with old round blocks; `jira.mjs read --since <id> --history <file>` does the
   split (an edited comment counts as new). The PM opens the history only to quote it.
 - **The tester reads `flow-run.mjs --list`** — one line per flow: last result, up to date or stale, seconds, first
-  error — never `flows.json` (17 KB instead of 76 KB on RVD-297).
+  error — never `flows.json` (17 KB instead of 76 KB on PROJ-297).
 - **`_lib/README.md` is an index:** one line per helper file with its export names; arguments live in a one-line
   comment above each export, found with `grep`.
 - **e2e-only instructions moved out of what every run reads:** `docs/pm-e2e.md` (the PM's case writing) and
@@ -420,7 +432,7 @@ Cost: about 30–40 ms per export, whatever the number of screens.
 - A job that cannot finish is no longer sent again and again. When the same kind of job on the same repo does
   not finish twice in a row (blocked, failed, no answer), the run stops: the PM gets one turn to write the
   board and the handoff, then the run escalates with both reasons, and says so when they look like a
-  tool-permission block. RVD-298 had lost four `PACKAGE` jobs and seven PM turns to one such block.
+  tool-permission block. PROJ-298 had lost four `PACKAGE` jobs and seven PM turns to one such block.
 
 ## [1.12.0] — 2026-11-17
 
@@ -539,7 +551,7 @@ From a review of two days of runs (28 runs, 35 human review points on five tasks
 ### Fixed
 - **Worktrees a tool dirtied were never freed.** `flutter pub get` rewrites `analysis_options.yaml` on its
   own, so every mobile worktree counted as "uncommitted changes" and the reaper kept it for good (five of
-  them on the measured workspace); the same file cost RVD-289 a gate round as an out-of-plan change. A
+  them on the measured workspace); the same file cost PROJ-289 a gate round as an out-of-plan change. A
   workspace can now list such files under `## Tool-touched files`: tf puts them back as committed before a
   worktree is checked for unsaved work, and the reviewer gate does the same before reading the diff
   (`resources.mjs restore-touched <root> <worktree>`). Only tracked, modified, listed files are restored.
@@ -615,8 +627,8 @@ From a review of two days of runs (28 runs, 35 human review points on five tasks
 ### Fixed
 - **Metrics `byHand` over-counted**: it matched the word `kill` anywhere in a command (an echo, a comment,
   code being written) and counted each call twice. It now matches the program in command position and
-  counts a call once; tool counts were doubled for the same reason. RVD-289 has 0, not 10.
-- **Dev jobs that commit**: on RVD-289 a dev lead committed three times although only the reviewer packages.
+  counts a call once; tool counts were doubled for the same reason. PROJ-289 has 0, not 10.
+- **Dev jobs that commit**: on PROJ-289 a dev lead committed three times although only the reviewer packages.
   The lead now reports the worktree HEAD before and after its job; when it moved, the executor has the
   commits undone (`task.mjs uncommit`, changes kept; refused when already pushed) before the gate runs.
 - **Testers running side by side**: each tester job gets its own scratch folder (`<task>/tmp/<job>/`) and is
@@ -645,7 +657,7 @@ From a review of two days of runs (28 runs, 35 human review points on five tasks
 - **The reviewer gate runs on the model of the dev lead it judges** (the repo's last dev job); the executor
   sets it. PACKAGE jobs keep the PM's model.
 - **Close is judged per repo**: a repo needs a tester PASS after its own last dev job. A later fix on another
-  repo no longer forces a re-test and a second PACKAGE (measured on RVD-289: 2 jobs and 2 PM turns wasted).
+  repo no longer forces a re-test and a second PACKAGE (measured on PROJ-289: 2 jobs and 2 PM turns wasted).
   A FAIL followed by a PASS in a later group (a flow or test-data error re-run) no longer blocks the close.
 - **Job limits**: 12 jobs per dispatch and 6 per group (was 6 per dispatch, counting groups that run one
   after another); 12 PM turns (was 10).

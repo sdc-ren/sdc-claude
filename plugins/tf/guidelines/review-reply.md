@@ -16,7 +16,7 @@ submitted review, so each reviewer gets one notification and the conversation ga
 ### Summary
 ## Review reply · abc1234
 
-**@tnthangvn**
+**@reviewer-login**
 | # | Point | Result |
 |---|---|---|
 | 1 | Quantity is not validated | Fixed — abc1234 |

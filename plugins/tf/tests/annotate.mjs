@@ -138,7 +138,7 @@ test('the image size comes from the PNG header; JPEG is refused', () => {
 // ── Rendering ────────────────────────────────────────────────────────────────
 // A Playwright that loads AND starts a browser, else the rendering tests skip.
 async function pwSource() {
-  for (const c of [process.env.TF_PLAYWRIGHT, '/Users/sondc/Desktop/projects/tripc/rongviet/autotest/package.json']) {
+  for (const c of [process.env.TF_PLAYWRIGHT]) {
     if (!c || !existsSync(c)) continue
     for (const name of ['@playwright/test', 'playwright']) {
       try {
