@@ -1,24 +1,25 @@
 #!/usr/bin/env node
 // tf: the deterministic first pass of the security categories in guidelines/review-standard.md (S1–S7), run by
-// the gate on a task worktree before any model judges the code.
+// the dev before it reports and by the gate, on a task worktree, before any model judges the code.
 //
 //   node security-scan.mjs <worktree> --base <ref> [--out <file.json>] [--no-tools]
 //     with --out the full JSON goes to the file and only a short summary is printed (what an agent reads);
 //     without --out it prints the JSON object: { base, files, sensitive, findings, deps, tools }
-//     - findings: [{ s, rule, file, line, text }] from built-in patterns on the ADDED lines of the diff
+//     - findings: [{ s, rule, file, line, text }] on the lines this change ADDED (committed or not): built-in
 //       (S5 secrets, S3 sensitive values in log calls), plus what the installed scanners report;
 //       secret values are masked, never printed whole
 //     - sensitive: areas the diff touches that make the change security-sensitive (auth, permission, money…)
 //     - deps: packages added or re-versioned in package.json / pubspec.yaml (S6: check each one exists and is
 //       the intended package)
 //     - tools: gitleaks / semgrep / npm-audit → "ran" | "not installed" | "skipped: <why>" | "failed: <why>"
+//     - preExisting: per scanner, results on lines the change did not add (there on the base; not counted)
 //     exit 0 with the report (findings do not change the exit code); exit 2 on a usage or git error.
 //   --no-tools runs only the built-in checks (tests, or a machine where scanners must not run).
 //   import { scanDiff, maskSecret } from './security-scan.mjs'
 import { spawnSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { which } from './platform.mjs'
 
@@ -134,7 +135,10 @@ export function scanDiff(wt, base) {
     const hit = files.filter((f) => isCode(f) && re.test(f)).concat(lines.filter((l) => isCode(l.file) && re.test(l.text)).map((l) => l.file))
     if (hit.length) sensitive.push({ area, files: [...new Set(hit)].slice(0, 10) })
   }
-  return { base, mergeBase: mb, files, sensitive, findings, deps: depChanges(wt, mb, files) }
+  const report = { base, mergeBase: mb, files, sensitive, findings, deps: depChanges(wt, mb, files), preExisting: {} }
+  // Which lines this change added, per file: the scanners report whole files, and only these lines are its own.
+  Object.defineProperty(report, 'added', { value: lines, enumerable: false })
+  return report
 }
 
 // A scanner from PATH. On Windows a .cmd/.bat shim cannot run without a shell, so it is skipped and said so.
@@ -146,55 +150,93 @@ function tool(bin) {
 }
 const run = (p, args, cwd, timeout = 300_000) => spawnSync(p, args, { cwd, encoding: 'utf8', windowsHide: true, timeout, maxBuffer: 64 * 1024 * 1024 })
 
+// A finding on a line this change did not add was there on the base: counted apart, never as the change's.
+function addedSet(report) {
+  const by = new Map()
+  for (const l of report.added) {
+    if (!by.has(l.file)) by.set(l.file, new Set())
+    by.get(l.file).add(l.line)
+  }
+  return (file, from, to = from) => {
+    const set = by.get(file)
+    if (!set) return false
+    for (let n = from; n <= to; n++) if (set.has(n)) return true
+    return false
+  }
+}
+const lastLine = (r) => (r.stderr || r.error?.message || '').trim().split('\n').pop()
+
 function runTools(wt, report) {
   const tools = {}
   const tmp = mkdtempSync(join(tmpdir(), 'tf-sec-'))
+  const isAdded = addedSet(report)
+  const pre = (tool) => { report.preExisting[tool] = (report.preExisting[tool] || 0) + 1 }
   try {
-    // gitleaks: the commits of the change, then the uncommitted files.
+    // gitleaks: a mirror of the change — each file with only its added lines, the rest blank so line numbers hold.
+    // Dev and gate run before anything is committed, so scanning commits would miss the code under review.
     const gl = tool('gitleaks')
     if (!gl.p) tools.gitleaks = gl.why
     else {
-      const out = join(tmp, 'gitleaks.json')
-      const r = run(gl.p, ['detect', '--source', wt, '--log-opts', `${report.mergeBase}..HEAD`, '--report-format', 'json', '--report-path', out, '--exit-code', '0', '--no-banner', '--redact'], wt)
-      if (r.status !== 0 || !existsSync(out)) tools.gitleaks = `failed: ${(r.stderr || r.error?.message || '').trim().split('\n').pop()}`
+      const src = join(tmp, 'src'), out = join(tmp, 'gitleaks.json')
+      const byFile = new Map()
+      for (const l of report.added) {
+        if (!byFile.has(l.file)) byFile.set(l.file, [])
+        byFile.get(l.file)[l.line - 1] = l.text
+      }
+      for (const [f, rows] of byFile) {
+        mkdirSync(dirname(join(src, f)), { recursive: true })
+        writeFileSync(join(src, f), Array.from(rows, (x) => x ?? '').join('\n') + '\n')
+      }
+      const common = ['--report-format', 'json', '--report-path', out, '--exit-code', '0', '--no-banner', '--redact']
+      let r = run(gl.p, ['dir', src, ...common], tmp)
+      if (r.status !== 0 && /unknown command/i.test(r.stderr || '')) r = run(gl.p, ['detect', '--no-git', '--source', src, ...common], tmp)
+      if (r.status !== 0 || !existsSync(out)) tools.gitleaks = `failed: ${lastLine(r)}`
       else {
         tools.gitleaks = 'ran'
-        for (const f of JSON.parse(readFileSync(out, 'utf8') || '[]')) report.findings.push({ s: 'S5', rule: `gitleaks:${f.RuleID}`, file: f.File, line: f.StartLine, text: 'REDACTED' })
+        for (const f of JSON.parse(readFileSync(out, 'utf8') || '[]')) {
+          const file = relative(src, resolve(tmp, f.File)).split(sep).join("/")
+          report.findings.push({ s: 'S5', rule: `gitleaks:${f.RuleID}`, file, line: f.StartLine, text: 'REDACTED' })
+        }
       }
     }
     // semgrep: its recommended ruleset (p/default — it holds the OWASP rules and, unlike p/owasp-top-ten, catches
-    // command injection) on the changed files that still exist.
+    // command injection) on the changed files as they are; only results on added lines are the change's.
     const sg = tool('semgrep')
-    const targets = report.files.filter((f) => existsSync(join(wt, f)))
+    const targets = report.files.filter((f) => existsSync(join(wt, f)) && isCode(f))
     if (!sg.p) tools.semgrep = sg.why
-    else if (!targets.length) tools.semgrep = 'skipped: no changed file'
+    else if (!targets.length) tools.semgrep = 'skipped: no changed code file'
     else {
       const r = run(sg.p, ['scan', '--config', 'p/default', '--json', '--quiet', '--metrics', 'off', ...targets], wt)
       try {
         const j = JSON.parse(r.stdout || '')
         tools.semgrep = 'ran'
         for (const x of j.results || []) {
+          if (!isAdded(x.path, x.start?.line, x.end?.line)) { pre('semgrep'); continue }
           const ow = newestOwasp(x.extra?.metadata?.owasp)
           report.findings.push({ s: ow ? `OWASP ${ow}` : 'S4', rule: `semgrep:${x.check_id}`, file: x.path, line: x.start?.line, text: String(x.extra?.message || '').slice(0, 160) })
         }
-      } catch { tools.semgrep = `failed: ${(r.stderr || r.error?.message || '').trim().split('\n').pop()}` }
+      } catch { tools.semgrep = `failed: ${lastLine(r)}` }
     }
-    // npm audit: each package dir whose lockfile changed; high and critical only.
+    // npm audit: each package dir whose lockfile changed; high and critical only, and only for packages this change
+    // added or re-versioned — the rest were on the base.
     const locks = report.files.filter((f) => f.split('/').pop() === 'package-lock.json')
+    const mine = new Set(report.deps.filter((d) => d.ecosystem === 'npm').map((d) => d.name))
     const npm = tool('npm')
     if (!locks.length) tools['npm-audit'] = 'skipped: no lockfile changed'
     else if (!npm.p) tools['npm-audit'] = npm.why
     else {
       tools['npm-audit'] = 'ran'
       for (const lock of locks) {
-        const dir = join(wt, dirname(lock))
-        const r = run(npm.p, ['audit', '--json', '--audit-level=high'], dir, 120_000)
+        const r = run(npm.p, ['audit', '--json', '--audit-level=high'], join(wt, dirname(lock)), 120_000)
         try {
           const v = JSON.parse(r.stdout || '{}').vulnerabilities || {}
           for (const [name, x] of Object.entries(v)) {
-            if (x.severity === 'high' || x.severity === 'critical') report.findings.push({ s: 'S6', rule: `npm-audit:${x.severity}`, file: lock, line: 0, text: `${name} ${x.range || ''}`.trim() })
+            if (x.severity !== 'high' && x.severity !== 'critical') continue
+            const via = (x.effects || []).concat(name)
+            if (!via.some((n) => mine.has(n))) { pre('npm-audit'); continue }
+            report.findings.push({ s: 'S6', rule: `npm-audit:${x.severity}`, file: lock, line: 0, text: `${name} ${x.range || ''}`.trim() })
           }
-        } catch { tools['npm-audit'] = `failed in ${dirname(lock) || '.'}: ${(r.stderr || r.error?.message || '').trim().split('\n').pop()}` }
+        } catch { tools['npm-audit'] = `failed in ${dirname(lock) || '.'}: ${lastLine(r)}` }
       }
     }
   } finally { rmSync(tmp, { recursive: true, force: true }) }
@@ -229,6 +271,7 @@ export function summary(r, out, max = 20) {
     `sensitive: ${r.sensitive.map((s) => s.area).join(', ') || 'none'}`,
     `deps: ${r.deps.length ? r.deps.map((d) => `${d.ecosystem}:${d.name}@${d.version}${d.was ? ` (was ${d.was})` : ' (new)'}`).join(', ') : 'none'}`,
     Object.entries(r.tools).map(([t, s]) => `${t} ${s}`).join(' · '),
+    ...(Object.keys(r.preExisting || {}).length ? [`pre-existing on the base (not this change's): ${Object.entries(r.preExisting).map(([t, n]) => `${t} ${n}`).join(', ')}`] : []),
   ].join('\n')
   const short = (rule) => rule.split(', ').map((x) => x.replace(/^semgrep:(?:[\w-]+\.)*([\w-]+)$/, 'semgrep:$1')).join(', ')
   const lines = r.findings.slice(0, max).map((f) => `- [${f.s}] ${f.file}:${f.line} ${short(f.rule)} — ${String(f.text).slice(0, 100)}`)
