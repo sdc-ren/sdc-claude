@@ -162,19 +162,20 @@ function runTools(wt, report) {
         for (const f of JSON.parse(readFileSync(out, 'utf8') || '[]')) report.findings.push({ s: 'S5', rule: `gitleaks:${f.RuleID}`, file: f.File, line: f.StartLine, text: 'REDACTED' })
       }
     }
-    // semgrep: the OWASP ruleset on the changed files that still exist.
+    // semgrep: its recommended ruleset (p/default — it holds the OWASP rules and, unlike p/owasp-top-ten, catches
+    // command injection) on the changed files that still exist.
     const sg = tool('semgrep')
     const targets = report.files.filter((f) => existsSync(join(wt, f)))
     if (!sg.p) tools.semgrep = sg.why
     else if (!targets.length) tools.semgrep = 'skipped: no changed file'
     else {
-      const r = run(sg.p, ['scan', '--config', 'p/owasp-top-ten', '--json', '--quiet', '--metrics', 'off', ...targets], wt)
+      const r = run(sg.p, ['scan', '--config', 'p/default', '--json', '--quiet', '--metrics', 'off', ...targets], wt)
       try {
         const j = JSON.parse(r.stdout || '')
         tools.semgrep = 'ran'
         for (const x of j.results || []) {
-          const ow = ((x.extra?.metadata?.owasp || [])[0] || '').toString()
-          report.findings.push({ s: ow ? `OWASP ${ow.split(' ')[0]}` : 'S4', rule: `semgrep:${x.check_id}`, file: x.path, line: x.start?.line, text: String(x.extra?.message || '').slice(0, 160) })
+          const ow = newestOwasp(x.extra?.metadata?.owasp)
+          report.findings.push({ s: ow ? `OWASP ${ow}` : 'S4', rule: `semgrep:${x.check_id}`, file: x.path, line: x.start?.line, text: String(x.extra?.message || '').slice(0, 160) })
         }
       } catch { tools.semgrep = `failed: ${(r.stderr || r.error?.message || '').trim().split('\n').pop()}` }
     }
@@ -200,6 +201,13 @@ function runTools(wt, report) {
   return tools
 }
 
+// A rule lists its OWASP row for several editions ("A01:2017 - Injection", "A05:2025 - Injection"): keep the newest.
+export function newestOwasp(list) {
+  const rows = [].concat(list || []).map((x) => String(x).match(/^(A\d{2}):(\d{4})/)).filter(Boolean)
+  rows.sort((a, b) => Number(b[2]) - Number(a[2]))
+  return rows.length ? `${rows[0][1]}:${rows[0][2]}` : ''
+}
+
 // One finding per category, file and line: the built-in check and a scanner often flag the same secret.
 export function dedupe(findings) {
   const by = new Map()
@@ -222,7 +230,8 @@ export function summary(r, out, max = 20) {
     `deps: ${r.deps.length ? r.deps.map((d) => `${d.ecosystem}:${d.name}@${d.version}${d.was ? ` (was ${d.was})` : ' (new)'}`).join(', ') : 'none'}`,
     Object.entries(r.tools).map(([t, s]) => `${t} ${s}`).join(' · '),
   ].join('\n')
-  const lines = r.findings.slice(0, max).map((f) => `- [${f.s}] ${f.file}:${f.line} ${f.rule} — ${f.text}`)
+  const short = (rule) => rule.split(', ').map((x) => x.replace(/^semgrep:(?:[\w-]+\.)*([\w-]+)$/, 'semgrep:$1')).join(', ')
+  const lines = r.findings.slice(0, max).map((f) => `- [${f.s}] ${f.file}:${f.line} ${short(f.rule)} — ${String(f.text).slice(0, 100)}`)
   if (r.findings.length > max) lines.push(`- +${r.findings.length - max} more`)
   return [head, ...lines, `full report: ${out}`].join('\n')
 }

@@ -53,7 +53,7 @@ past reviews, and each one names the OWASP rows of [pr-review.md](pr-review.md) 
 
 **Scans first, judgement second.** The gate runs `scripts/security-scan.mjs` on the diff: built-in patterns
 for secrets and sensitive values in log calls, the list of new dependencies, and the scanners the machine has
-(`gitleaks`, `semgrep` with the OWASP ruleset, `npm audit` when a lockfile changed). A model reading code it did
+(`gitleaks`, `semgrep` with its recommended ruleset (OWASP rules included), `npm audit` when a lockfile changed). A model reading code it did
 not write is the second line, not the first. A scanner that is not installed is named in the report, never
 counted as a pass.
 

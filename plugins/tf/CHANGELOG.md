@@ -18,7 +18,7 @@ All notable changes to the `tf` plugin are documented here. The format follows
 - **`scripts/security-scan.mjs`** — the deterministic first pass the dev and the gate run: secrets (masked in
   the output) and sensitive values in log calls on the added lines, new or re-versioned npm/pub dependencies
   for a name check, the security-sensitive areas the diff touches, and `gitleaks`, `semgrep --config
-  p/owasp-top-ten` and `npm audit` when the machine has them. A missing scanner is reported as not run. It never
+  p/default` and `npm audit` when the machine has them. A missing scanner is reported as not run. It never
   touches the index. With `--out` it prints a few-line summary (counts, sensitive areas, new dependencies, each
   scanner's state, up to 20 findings) and keeps the full JSON in the file; a secret flagged by both the built-in
   check and gitleaks is one finding. `/tf:status --doctor` warns when gitleaks or semgrep is missing.

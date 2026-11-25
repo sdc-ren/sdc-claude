@@ -7,7 +7,7 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { dedupe, maskSecret, scanDiff, summary } from '../scripts/security-scan.mjs'
+import { dedupe, maskSecret, newestOwasp, scanDiff, summary } from '../scripts/security-scan.mjs'
 
 const S = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'security-scan.mjs')
 const g = (wt, ...args) => {
@@ -69,6 +69,8 @@ test('cli: --no-tools reports each scanner as skipped, never as a pass; usage er
   assert.match(j.tools.gitleaks, /^skipped/)
   assert.equal(spawnSync(process.execPath, [S, wt], { encoding: 'utf8' }).status, 2)
   assert.equal(maskSecret('abcdefghijkl'), 'abcd…(12 chars)')
+  assert.equal(newestOwasp(['A01:2017 - Injection', 'A05:2025 - Injection', 'A03:2021 - Injection']), 'A05:2025')
+  assert.equal(newestOwasp([]), '')
 })
 
 test('--out keeps the JSON in the file and prints a short summary; one finding per category, file and line', () => {
