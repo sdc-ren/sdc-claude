@@ -12,19 +12,19 @@ Pick by the change's main purpose. Breaking change: `!` before the colon, e.g. `
 
 ## The issue key is the scope — always
 
-When the task has an issue key (`SCRUM-132`, `RVD-306`, `GH-WEB-9`), it is the scope of EVERY commit and the PR
+When the task has an issue key (`SCRUM-132`, `PROJ-306`, `GH-WEB-9`), it is the scope of EVERY commit and the PR
 title, exactly as written: `<type>(<KEY>): …`. Nothing else goes in the parentheses, and the key appears
 nowhere else in the line.
 
 | Wrong | Why | Right |
 |---|---|---|
-| `feat(goalkeeper-award): bỏ preset Huế (RVD-306)` | key at the end, an area as scope | `feat(RVD-306): goalkeeper-award — bỏ preset Huế` |
-| `fix(goalkeeper): [RVD-306] hide config CTA` | key in brackets | `fix(RVD-306): hide redundant goalkeeper config CTA` |
-| `[RVD-267] Decode multipart filenames` | no type, key in brackets | `fix(RVD-267): decode multipart filenames as UTF-8` |
-| `feat(rvd-306): …` / `feat(RVD306): …` | key not as written | `feat(RVD-306): …` |
+| `feat(loyalty-points): bỏ hạn mức mặc định (PROJ-306)` | key at the end, an area as scope | `feat(PROJ-306): loyalty-points — bỏ hạn mức mặc định` |
+| `fix(loyalty): [PROJ-306] hide config CTA` | key in brackets | `fix(PROJ-306): hide redundant loyalty config CTA` |
+| `[PROJ-267] Decode multipart filenames` | no type, key in brackets | `fix(PROJ-267): decode multipart filenames as UTF-8` |
+| `feat(proj-306): …` / `feat(PROJ306): …` | key not as written | `feat(PROJ-306): …` |
 
 - **Several commits in one PR** (the plan's commit groups): every one is `<type>(<KEY>): …`. Name the area at
-  the start of the summary when it helps — `test(RVD-337): tournament — update existing tests for LEAGUE_GROUPS`.
+  the start of the summary when it helps — `test(PROJ-337): tournament — update existing tests for LEAGUE_GROUPS`.
 - **No issue key** (plain words, a doc, a canvas): a lowercase kebab scope (`feat(auth): …`) or none
   (`feat: …`). The branch uses the task slug: `feat/booking-screen-1a2b3c`.
 

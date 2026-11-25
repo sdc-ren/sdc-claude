@@ -12,7 +12,7 @@ import { adf, htmlText, issueMarkdown } from '../scripts/jira.mjs'
 
 const J = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'jira.mjs')
 const cli = (...a) => spawnSync(process.execPath, [J, ...a], { encoding: 'utf8' })
-const task = () => { const root = mkdtempSync(join(tmpdir(), 'tf-jira-')); const dir = join(root, '.pipeline', 'RVD-1'); mkdirSync(dir, { recursive: true }); return dir }
+const task = () => { const root = mkdtempSync(join(tmpdir(), 'tf-jira-')); const dir = join(root, '.pipeline', 'PROJ-1'); mkdirSync(dir, { recursive: true }); return dir }
 const SITE = ['--site', 'https://acme.atlassian.net']
 
 test('markdown becomes headings, paragraphs with links and bold, lists and a table', () => {
@@ -39,9 +39,9 @@ test('--mention turns the first @name into a real mention, and refuses a name th
 test('rendered HTML reads as text; the issue becomes one markdown file', () => {
   assert.equal(htmlText('<p>Bước 1<br/>Bước 2</p><ul><li>a</li><li>b &amp; c</li></ul><a href="https://x/y">spec</a>'), 'Bước 1\nBước 2\n\n- a\n- b & c\nspec (https://x/y)')
   const md = issueMarkdown(
-    { key: 'RVD-1', fields: { summary: 'Tạo giải', status: { name: 'QC' }, issuetype: { name: 'Bug' }, attachment: [{ filename: 's.png', mimeType: 'image/png', size: 2048, id: '9' }] }, renderedFields: { description: '<p>Mô tả</p>' } },
+    { key: 'PROJ-1', fields: { summary: 'Tạo giải', status: { name: 'QC' }, issuetype: { name: 'Bug' }, attachment: [{ filename: 's.png', mimeType: 'image/png', size: 2048, id: '9' }] }, renderedFields: { description: '<p>Mô tả</p>' } },
     [{ id: '11196', author: { displayName: 'Hiền' }, created: '2026-11-21T03:04:05.000+0700', renderedBody: '<p>L1 lỗi</p>' }])
-  assert.match(md, /^# RVD-1 — Tạo giải/)
+  assert.match(md, /^# PROJ-1 — Tạo giải/)
   assert.match(md, /Status: QC · Type: Bug/)
   assert.match(md, /- s\.png \(image\/png, 2 KB, 9\)/)
   assert.match(md, /### 11196 · Hiền · 2026-11-21 03:04\n\nL1 lỗi/)
@@ -50,26 +50,26 @@ test('rendered HTML reads as text; the issue becomes one markdown file', () => {
 test('comment without --confirm is a dry run: nothing opens, the text is shown', () => {
   const dir = task()
   writeFileSync(join(dir, 'c.md'), 'Kết quả: **PASS**\n')
-  const r = cli('comment', dir, 'RVD-1', '--file', join(dir, 'c.md'), ...SITE)
+  const r = cli('comment', dir, 'PROJ-1', '--file', join(dir, 'c.md'), ...SITE)
   assert.equal(r.status, 0, r.stderr)
   const out = JSON.parse(r.stdout)
-  assert.equal(out.dryRun, true); assert.equal(out.key, 'RVD-1'); assert.match(out.text, /Kết quả: PASS/)
+  assert.equal(out.dryRun, true); assert.equal(out.key, 'PROJ-1'); assert.match(out.text, /Kết quả: PASS/)
 })
 
 test('bad key, bad site, leftover <evd:…> placeholders and bad ids are refused before any browser', () => {
   const dir = task()
   writeFileSync(join(dir, 'c.md'), 'Ảnh: <evd:TC1-after.webp>\n')
   const c = (...a) => cli('comment', dir, ...a)
-  assert.match(c('rvd-1', '--file', join(dir, 'c.md'), ...SITE).stderr, /not an issue key/)
-  assert.match(c('RVD-1', '--file', join(dir, 'c.md'), '--site', 'http://acme.atlassian.net').stderr, /plain https origin/)
-  assert.match(c('RVD-1', '--file', join(dir, 'c.md'), '--site', 'https://acme.atlassian.net/rest?x=1').stderr, /plain https origin/)
-  assert.match(c('RVD-1', '--file', join(dir, 'c.md'), ...SITE).stderr, /<evd:FILE> placeholders/)
-  assert.match(c('RVD-1', '--file', join(dir, 'c.md'), ...SITE, '--reply-to', '12; rm').stderr, /--reply-to must be a comment id/)
+  assert.match(c('proj-1', '--file', join(dir, 'c.md'), ...SITE).stderr, /not an issue key/)
+  assert.match(c('PROJ-1', '--file', join(dir, 'c.md'), '--site', 'http://acme.atlassian.net').stderr, /plain https origin/)
+  assert.match(c('PROJ-1', '--file', join(dir, 'c.md'), '--site', 'https://acme.atlassian.net/rest?x=1').stderr, /plain https origin/)
+  assert.match(c('PROJ-1', '--file', join(dir, 'c.md'), ...SITE).stderr, /<evd:FILE> placeholders/)
+  assert.match(c('PROJ-1', '--file', join(dir, 'c.md'), ...SITE, '--reply-to', '12; rm').stderr, /--reply-to must be a comment id/)
 })
 
 test('--since folds comments earlier rounds worked from into one line each; an edited one stays in full', async () => {
   const { issueHistory } = await import('../scripts/jira.mjs')
-  const issue = { key: 'RVD-1', fields: { summary: 's' }, renderedFields: {} }
+  const issue = { key: 'PROJ-1', fields: { summary: 's' }, renderedFields: {} }
   const c = (id, body, updated) => ({ id, author: { displayName: 'QC' }, created: '2026-11-20T01:00:00.000+0700', ...(updated ? { updated } : {}), renderedBody: `<p>${body}</p>` })
   const comments = [c('100', 'vòng 1 lỗi A'), c('101', 'vòng 1 lỗi B', '2026-11-21T02:00:00.000+0700'), c('102', 'vòng 2 lỗi C')]
   const md = issueMarkdown(issue, comments, { since: '101' })

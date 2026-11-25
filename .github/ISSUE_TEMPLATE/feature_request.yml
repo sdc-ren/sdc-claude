@@ -1,0 +1,20 @@
+name: Feature request
+description: A change to a command, an agent's rules or the workflow
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: The problem
+      description: What goes wrong or takes too long today, ideally with a real run as the example.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: What you propose
+  - type: textarea
+    id: cost
+    attributes:
+      label: Cost
+      description: Does it add prompt text, agents or time to every run, or only in one mode?

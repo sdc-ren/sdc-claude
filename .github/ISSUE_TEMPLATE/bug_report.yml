@@ -1,0 +1,38 @@
+name: Bug report
+description: Something in tf did not work as documented
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: Security problems go through Security → Report a vulnerability, not here. Remove secrets, tokens and customer data from anything you paste.
+  - type: input
+    id: version
+    attributes:
+      label: tf version
+      description: plugins/tf/.claude-plugin/plugin.json, or `/tf:status --doctor`
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options: [macOS, Linux, Windows (Git Bash), Other]
+    validations:
+      required: true
+  - type: input
+    id: command
+    attributes:
+      label: Command
+      placeholder: /tf:build PROJ-123
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what you expected
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log excerpt
+      description: The end of the run log or the failing job report.
+      render: text

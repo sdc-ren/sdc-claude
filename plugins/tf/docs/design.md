@@ -64,7 +64,7 @@ them in its prompt on turn 1 and after a rejection, generated from the same cons
    once, then the job fails). The lead merges and reports once.
 4. Gate before test: a reviewer gate never shares a group with a tester of its repo. When a job is not `done`,
    or a gate returns `NEEDS-WORK`/`BLOCK`, the later groups of that dispatch are skipped and the PM decides —
-   a gate next to a running tester throws the test run away (RVD-293 round 3: ~16 min). In code modes a
+   a gate next to a running tester throws the test run away (PROJ-293 round 3: ~16 min). In code modes a
    tester that did not PASS skips them too, so a `PACKAGE` job dispatched after it never pushes failing code.
 5. A gate runs on the model of the dev lead it judges (the repo's last dev job); the executor sets it.
    `PACKAGE` jobs keep the PM's model but never run below sonnet (they write the PR body).

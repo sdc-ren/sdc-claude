@@ -121,7 +121,8 @@ LICENSE                           MIT
 
 ## Contributing
 
-Issues and pull requests are welcome.
+Issues and pull requests are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md). Report security problems privately
+([SECURITY.md](SECURITY.md)), never in a public issue.
 
 1. Fork and branch: `<type>/<summary>` (see [git guidelines](plugins/tf/guidelines/git.md)).
 2. Keep each plugin self-contained; reference bundled files with `${CLAUDE_PLUGIN_ROOT}`.

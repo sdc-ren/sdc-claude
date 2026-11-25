@@ -7,7 +7,7 @@ Môi trường: dev · Chrome 1440px · vai BTC · commit abc1234 · 2026-11-18
 
 | ID | TC | Kết quả | Evidence |
 |---|---|---|---|
-| A1 | Thẻ phạt ảnh hưởng thứ hạng | Failed — BUG: đội bị thẻ vẫn hạng 1 | <evd:RVD-297-1811-A1a-doi-bi-the-van-hang-1.webp> |
+| A1 | Thẻ phạt ảnh hưởng thứ hạng | Failed — BUG: đội bị thẻ vẫn hạng 1 | <evd:PROJ-297-1811-A1a-doi-bi-the-van-hang-1.webp> |
 | B2 | Ngưỡng dự phòng để trống báo lỗi | PASS | <evd:…> |
 
 Chi tiết lỗi:

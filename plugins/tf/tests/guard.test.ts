@@ -89,32 +89,32 @@ test('every tf agent, the PM included, is held to the rules for all agents', () 
       expect(refuseAll(job, 'Bash', { command: cmd })).toContain('never merges')
     for (const cmd of ['git push --force origin HEAD', 'git -C /w push -f', 'git push origin HEAD --force-with-lease', 'git push origin +HEAD:main'])
       expect(refuseAll(job, 'Bash', { command: cmd })).toContain('never force-pushes')
-    for (const cmd of ['gh pr comment 12 --body hi', 'gh issue comment 3 -b x', 'node /s/pr-feedback.mjs post /r/.pipeline/T-1', 'node "/s/pr-feedback.mjs" review /d https://github.com/o/r/pull/1', 'node /s/jira.mjs comment /r/.pipeline/T-1 RVD-1 --file c.md --site https://x.atlassian.net --confirm'])
+    for (const cmd of ['gh pr comment 12 --body hi', 'gh issue comment 3 -b x', 'node /s/pr-feedback.mjs post /r/.pipeline/T-1', 'node "/s/pr-feedback.mjs" review /d https://github.com/o/r/pull/1', 'node /s/jira.mjs comment /r/.pipeline/T-1 PROJ-1 --file c.md --site https://x.atlassian.net --confirm'])
       expect(refuseAll(job, 'Bash', { command: cmd })).toContain('never posts')
     // What the work needs still passes.
-    for (const cmd of ['git push -u origin feat/x', 'git push origin HEAD', 'gh pr create --base develop --title "feat: add booking screen" --body-file b.md', 'gh pr edit 12 --body-file b.md', 'gh pr view 12 --json state', 'gh pr diff 12', 'gh pr ready 12', 'node /s/pr-feedback.mjs fetch /r/.pipeline/T-1 https://github.com/o/r/pull/1', 'node /s/browser.mjs auth jira --url https://x.atlassian.net', 'node /s/jira.mjs comment /r/.pipeline/T-1 RVD-1 --file c.md --site https://x.atlassian.net', 'node /s/jira.mjs read /r/.pipeline/T-1 RVD-1 --site https://x.atlassian.net', 'git -C /w grep -n "feature" origin/develop', 'ls ~/.claude/task-flow'])
+    for (const cmd of ['git push -u origin feat/x', 'git push origin HEAD', 'gh pr create --base develop --title "feat: add booking screen" --body-file b.md', 'gh pr edit 12 --body-file b.md', 'gh pr view 12 --json state', 'gh pr diff 12', 'gh pr ready 12', 'node /s/pr-feedback.mjs fetch /r/.pipeline/T-1 https://github.com/o/r/pull/1', 'node /s/browser.mjs auth jira --url https://x.atlassian.net', 'node /s/jira.mjs comment /r/.pipeline/T-1 PROJ-1 --file c.md --site https://x.atlassian.net', 'node /s/jira.mjs read /r/.pipeline/T-1 PROJ-1 --site https://x.atlassian.net', 'git -C /w grep -n "feature" origin/develop', 'ls ~/.claude/task-flow'])
       expect(refuseAll(job, 'Bash', { command: cmd })).toBe('')
     expect(refuseAll(job, 'Read', { file_path: '/r/.pipeline/T-1/ticket.md' })).toBe('')
   }
 })
 
 test('commits and PR titles follow git.md: the issue key is the scope, a PR title is English', () => {
-  const pack = parseJob('Job J9 · role reviewer · repo be\nTask RVD-306 · mode build · round 5\n\nBrief: PACKAGE\n', 'tf:reviewer')!
-  expect(pack.key).toBe('RVD-306')
+  const pack = parseJob('Job J9 · role reviewer · repo be\nTask PROJ-306 · mode build · round 5\n\nBrief: PACKAGE\n', 'tf:reviewer')!
+  expect(pack.key).toBe('PROJ-306')
   const no = (cmd: string) => expect(refuseAll(pack, 'Bash', { command: cmd })).toContain('guidelines/git.md')
   const yes = (cmd: string) => expect(refuseAll(pack, 'Bash', { command: cmd })).toBe('')
-  // Seen on Rồng Việt PRs.
-  no('git -C /w commit -m "feat(goalkeeper-award): bỏ mặc định preset Huế (RVD-306)"')
-  no(`gh pr create --base develop --title 'fix(goalkeeper): [RVD-306] hide redundant config CTA' --body-file b.md`)
-  no('gh pr create --title "feat(RVD-306): cấu hình xét giải thủ môn theo từng giải" --body-file b.md')
-  no('gh pr edit 12 --title "[RVD-306] hide config CTA"')
+  // Seen on real PRs.
+  no('git -C /w commit -m "feat(loyalty-points): bỏ hạn mức mặc định (PROJ-306)"')
+  no(`gh pr create --base develop --title 'fix(loyalty): [PROJ-306] hide redundant config CTA' --body-file b.md`)
+  no('gh pr create --title "feat(PROJ-306): cấu hình điểm thưởng theo từng hạng" --body-file b.md')
+  no('gh pr edit 12 --title "[PROJ-306] hide config CTA"')
   no('gh pr create --fill --base develop')
-  no(`git commit -m "$(cat <<'EOF'\nfeat(tournament): add groups (RVD-306)\n\nbody\nEOF\n)"`)
+  no(`git commit -m "$(cat <<'EOF'\nfeat(tournament): add groups (PROJ-306)\n\nbody\nEOF\n)"`)
   // Right, and what cannot be read from the command (a file, a variable) is left to naming.mjs.
-  yes('git -C /w commit -m "feat(RVD-306): goalkeeper-award — bỏ mặc định preset Huế"')
-  yes(`git commit -m "$(cat <<'EOF'\nfix(RVD-306): hide redundant config CTA\n\nbody\nEOF\n)"`)
-  yes('gh pr create --base develop --title "fix(RVD-306): hide redundant goalkeeper config CTA" --body-file b.md')
-  yes('git commit -F /r/.pipeline/RVD-306/tmp/msg.txt')
+  yes('git -C /w commit -m "feat(PROJ-306): loyalty-points — bỏ hạn mức mặc định"')
+  yes(`git commit -m "$(cat <<'EOF'\nfix(PROJ-306): hide redundant config CTA\n\nbody\nEOF\n)"`)
+  yes('gh pr create --base develop --title "fix(PROJ-306): hide redundant loyalty config CTA" --body-file b.md')
+  yes('git commit -F /r/.pipeline/PROJ-306/tmp/msg.txt')
   yes('gh pr create --title "$TITLE" --body-file b.md')
   yes('gh pr edit 12 --body-file b.md')
   // No key: any lowercase scope or none.

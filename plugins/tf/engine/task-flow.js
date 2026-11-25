@@ -569,7 +569,7 @@ let last = []
 let violation = ''
 let strikes = 0
 // A job of the same kind on the same repo that did not finish twice in a row (blocked, failed, no answer):
-// sending it a third time changes nothing — RVD-298 lost four PACKAGE jobs and seven PM turns to one
+// sending it a third time changes nothing — PROJ-298 lost four PACKAGE jobs and seven PM turns to one
 // permission block. The PM gets one turn to write the board and the handoff, then the run escalates.
 let stuck = ''
 const kindOf = (j) => `${j.role}:${j.repo}:${isPackage(j) ? 'package' : isFlows(j) ? 'flows' : ''}`

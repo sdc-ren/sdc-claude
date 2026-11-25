@@ -50,7 +50,7 @@ export function staleDeps(mainDir, wtDir, lockName) {
 if (!existsSync(join(M, lock)) || !existsSync(join(W, lock))) done({ cloned: false, reason: 'no-lock' })
 if (hash(join(M, lock)) !== hash(join(W, lock))) done({ cloned: false, reason: 'lock-differs' })
 // Same lockfile is not enough: the main checkout may have pulled a new lockfile without reinstalling
-// (RVD-293: develop added pdfkit, main node_modules lacked it). Check every direct dependency is installed,
+// (PROJ-293: develop added pdfkit, main node_modules lacked it). Check every direct dependency is installed,
 // at the locked version when the lockfile is npm's.
 if (dirs.includes('node_modules')) {
   const stale = staleDeps(M, W, lock)
