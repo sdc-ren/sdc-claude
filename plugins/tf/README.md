@@ -696,6 +696,8 @@ testing, gates and PR packaging; haiku for setup and tiny edits, retried once on
 [docs/design.md](docs/design.md) — roles, hard rules, files, retention, metrics.
 [docs/orchestrator.md](docs/orchestrator.md) — what a `/tf:*` command does step by step.
 [docs/orchestrator-e2e.md](docs/orchestrator-e2e.md) and [docs/pm-e2e.md](docs/pm-e2e.md) — the e2e parts, read only by e2e runs.
+[docs/reviewer-plan.md](docs/reviewer-plan.md) and [docs/reviewer-review.md](docs/reviewer-review.md) — the reviewer's plan check and
+review mode, read only by those jobs.
 [CHANGELOG.md](CHANGELOG.md) — what changed in each version.
 
 ## License

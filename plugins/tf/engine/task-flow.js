@@ -695,7 +695,7 @@ for (let turn = 1; turn <= MAX_TURNS; turn++) {
     if (['M', 'L'].includes(d.size)) {
       const pc = await run(
         `Job J0 · role reviewer · PLAN check\n${context}\n\n` +
-          `Brief: PLAN (reviewer.md "Plan check"). The PM wrote ${dir}/plan.md${d.size === 'L' ? ` and ${dir}/design.md (size L: the design comes first — a missing or empty design.md is a point)` : ''} from ${dir}/ticket.md; no code exists yet. Check ${d.size === 'L' ? 'both' : 'the plan'} against the ticket and the workspace config. No git, no code edits, do not rewrite the plan.\n` +
+          `Brief: PLAN (read ${S}/../docs/reviewer-plan.md first). The PM wrote ${dir}/plan.md${d.size === 'L' ? ` and ${dir}/design.md (size L: the design comes first — a missing or empty design.md is a point)` : ''} from ${dir}/ticket.md; no code exists yet. Check ${d.size === 'L' ? 'both' : 'the plan'} against the ticket and the workspace config. No git, no code edits, do not rewrite the plan.\n` +
           `Write your report to ${planFile} (heredoc) and append one line: node ${S}/task.mjs journal ${dir} "J0 reviewer plan: <one-line result>". Return the structured report; reportFile = that path; verdict SHIP when you found nothing, NEEDS-WORK otherwise, issues = the points (PP<n>).`,
         { label: 'J0 reviewer:plan', phase: 'PM', model, schema: REPORT, agentType: AGENT.reviewer })
       const points = (pc && pc.issues) || []

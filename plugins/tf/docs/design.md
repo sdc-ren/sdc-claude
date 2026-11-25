@@ -5,7 +5,7 @@ executor runs the jobs and enforces the hard rules.
 
 This file is the reference for **why and how the pieces fit**. What each agent must do is in its own file
 and is not repeated here: `agents/*.md` (roles), `docs/orchestrator.md` (what a `/tf:*` command does in the
-session), `docs/pm-feedback.md` (feedback mode), `guidelines/` (git, PR, review, review reply, ticket comment, e2e). How
+session), `docs/pm-feedback.md` (feedback mode), `docs/reviewer-plan.md` and `docs/reviewer-review.md` (the reviewer's plan check and review mode), `guidelines/` (git, PR, review, review reply, ticket comment, e2e). How
 to use the plugin is in `README.md`.
 
 ## Shape

@@ -70,9 +70,8 @@ into the conversation.
 Micro-task → files → done-when result · deviations from the plan and why · anything the tester should
 look at hardest · formatter/typecheck output (its tail) · `## Self-check` — the table of
 `${CLAUDE_PLUGIN_ROOT}/guidelines/review-standard.md` for every category your change touches, each row with its
-evidence (`file:line`, case id, command); for M1 read the other repos (read-only) or the plan's `## Contract`. S1–S7 rows for every code change: run
-`node ${CLAUDE_PLUGIN_ROOT}/scripts/security-scan.mjs <worktree> --base origin/<base> --out <task>/logs/<job>-security.json`
-before you report, fix what it finds in your files, and give its summary as the evidence. Agents read it, people do not: terse `key: value` lines, no prose, nothing the plan already says. Return `verdict: NONE`, `filesChanged`, and `status`
+evidence (`file:line`, case id, command); for M1 read the other repos (read-only) or the plan's `## Contract`. For S rows run the scan
+(review-standard.md "Scan first") before you report, fix what it finds on your lines, and quote its summary. Agents read it, people do not: terse `key: value` lines, no prose, nothing the plan already says. Return `verdict: NONE`, `filesChanged`, and `status`
 (`blocked` with the exact need when you could not proceed).
 
 ## Language

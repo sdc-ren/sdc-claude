@@ -4,6 +4,24 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.25.1] — 2026-11-25
+
+### Fixed
+- **gitleaks never saw the code under review.** It scanned commits, but the dev and the gate run before anything
+  is committed. It now scans a mirror of the change (each file with only its added lines, line numbers kept), so
+  an uncommitted secret is caught; tested with an npm token the built-in patterns do not know.
+- **Pre-existing problems were blamed on the change.** semgrep scans whole files and npm audit the whole lockfile;
+  on RVD-308 (28 backend files) the one semgrep result was a line written on develop in February, which the gate
+  would have rated P2 and sent back to the dev. Only results on added lines (npm audit: packages the change added
+  or re-versioned) count; the rest are listed as `pre-existing` in the summary.
+- A self-check without S rows no longer costs a round: the gate fills them from its own scan instead of rating P2.
+
+### Changed
+- **Smaller prompts.** `guidelines/review-standard.md` 10.0 KB → 5.6 KB (rationale, upkeep and sources were for
+  people, not jobs). The reviewer's plan check and review mode moved to `docs/reviewer-plan.md` and
+  `docs/reviewer-review.md`, read only by those jobs: every gate and PACKAGE job loads 9.3 KB instead of 14.3 KB.
+- semgrep scans only changed code files (not docs or lockfiles).
+
 ## [1.25.0] — 2026-11-25
 
 ### Added

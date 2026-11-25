@@ -90,3 +90,24 @@ test('--out keeps the JSON in the file and prints a short summary; one finding p
   assert.ok(!r.stdout.trim().startsWith('{'), 'no JSON on stdout')
   assert.equal(JSON.parse(readFileSync(out, 'utf8')).base, 'main')
 })
+
+// With the real scanners (skipped where they are not installed, as in CI): only what the change added counts.
+const has = (bin) => spawnSync(bin, ['--version'], { encoding: 'utf8' }).status === 0
+test('gitleaks sees uncommitted code; a semgrep result on a line the change did not add is pre-existing', { skip: !has('gitleaks') || !has('semgrep') }, () => {
+  const wt = repo()
+  const lib = "const { exec } = require('child_process')\nmodule.exports = (req) => exec('ls ' + req.query.dir)\n"
+  writeFileSync(join(wt, 'old.js'), lib)
+  g(wt, 'add', '.')
+  g(wt, 'commit', '-q', '-m', 'old injection on the base')
+  g(wt, 'branch', '-f', 'main')
+  writeFileSync(join(wt, 'old.js'), lib + 'const x = 2\n') // touch the file, not the bad line
+  const token = 'npm_' + 'q7w2e9r4t1y8u3i6o0p5a2s7d4f9g1h3j6k8'
+  writeFileSync(join(wt, 'new.js'), `const t = "${token}"\n`) // never committed
+  const r = spawnSync(process.execPath, [S, wt, '--base', 'main'], { encoding: 'utf8', timeout: 300_000 })
+  assert.equal(r.status, 0, r.stderr)
+  const j = JSON.parse(r.stdout)
+  assert.ok(j.findings.some((f) => f.file === 'new.js' && f.rule.includes('gitleaks:')), JSON.stringify(j.findings))
+  assert.ok(!j.findings.some((f) => f.file === 'old.js'), 'the injection on the base is not this change')
+  assert.equal(j.preExisting.semgrep, 1)
+  assert.ok(!r.stdout.includes(token))
+})
