@@ -37,6 +37,9 @@ check('git', sh('git --version').ok, sh('git --version').out)
 const gh = sh('gh auth status 2>&1')
 check('gh installed + logged in', gh.ok, gh.ok ? 'authenticated' : gh.out)
 check('codegraph CLI', !!which('codegraph'), 'used by PM/reviewer for impact search', false)
+for (const [bin, why] of [['gitleaks', 'secret scan of each change (security-scan.mjs)'], ['semgrep', 'OWASP rules on changed files (security-scan.mjs)']]) {
+  check(`${bin} (security scan)`, !!which(bin), which(bin) ? '' : `${why} — not installed, the gate reports it as not run`, false)
+}
 check('WebP encoder (cwebp/ffmpeg)', !!which('cwebp') || !!which('ffmpeg'), 'falls back to Playwright Chromium', false)
 // What this operating system offers (scripts/platform.mjs).
 const sys = info()

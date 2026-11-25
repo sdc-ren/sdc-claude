@@ -11,8 +11,19 @@ All notable changes to the `tf` plugin are documented here. The format follows
   team agreements, workspace lessons) and nine miss categories built from about 90 human review points over 9
   tickets: client parity, modes, roles, lifecycle and existing data, shared code, limits, checks on the base,
   scope against approval, hygiene. Client parity, modes, roles, lifecycle and scope caused almost every P1/P2.
+- **Security as part of the standard**: S1–S7 (access control, audit trail, logs and errors, input and
+  injection, secrets and configuration, dependencies, data integrity), taken from OWASP Top 10:2025, ASVS, CWE
+  Top 25 and NIST SSDF rather than past reviews, which rarely look for them. Until now only review mode (other
+  people's PRs) read OWASP; the gate on tf's own code had no security step.
+- **`scripts/security-scan.mjs`** — the deterministic first pass the dev and the gate run: secrets (masked in
+  the output) and sensitive values in log calls on the added lines, new or re-versioned npm/pub dependencies
+  for a name check, the security-sensitive areas the diff touches, and `gitleaks`, `semgrep --config
+  p/owasp-top-ten` and `npm audit` when the machine has them. A missing scanner is reported as not run. It never
+  touches the index. `/tf:status --doctor` warns when gitleaks or semgrep is missing.
+- **Security-sensitive changes** (auth, permissions, locks, money, audit, migrations) run their dev job, and so
+  their gate, on opus, get refused-role and audit-row cases, and a `## Security` section in the PR body.
 - **Self-check in the dev report.** The dev (the lead, once per job) fills a `## Self-check` table for each
-  category the change touches, with `file:line`, case id or command as evidence; the gate checks every row and
+  category the change touches (S1–S7 for every code change), with `file:line`, case id or command as evidence; the gate checks every row and
   rates a missing or wrong one P2.
 - **Two more kinds of planned case**: one per role that opens the changed screen, and "go back" cases for a
   value changed after it was locked, a feature turned off then on, and rows written before the change. The

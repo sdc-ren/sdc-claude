@@ -76,7 +76,18 @@ otherwise (it does not block: the PM fixes the plan or records why it stands, on
    IMPACT lines are cases for the tester, not defects: they do not make the verdict `NEEDS-WORK` (the executor
    hands them to the tester jobs that follow in the same dispatch). A user you can show is broken by reading
    the code is a `QP` as usual.
-10. **Feedback mode** — every point the brief lists (`feedback-triage.md`, verdict `fix`) is addressed in the
+10. **Security** — run `node ${CLAUDE_PLUGIN_ROOT}/scripts/security-scan.mjs <worktree> --base origin/<base> --out <task>/logs/<job>-security.json`
+   and read its summary, not the whole file in your context. Every finding is real until you show at its
+   `file:line` that it is not (a test fixture, a placeholder): a secret or a sensitive value in a log is P1
+   (`QP`, OWASP row named), a scanner finding is rated by what it lets happen. Each `deps` entry: the package
+   exists under that exact name and is the one intended (a look-alike name is P1). A scanner listed `not
+   installed` or `skipped` is not a pass — name it in your report. Then read the diff against S1–S7 of
+   `${CLAUDE_PLUGIN_ROOT}/guidelines/review-standard.md` for the `sensitive` areas the scan lists (confirm or
+   drop each: the list is a hint from words in the code) and the dev report's S rows: a route or action with no
+   server-side role/ownership check, a lock or permission skipped without a quoted approval, a sensitive action
+   with no audit row (who, before, after, reason), an error that fails open — at least P2, P1 when money,
+   permissions or data that cannot be redone are at stake.
+11. **Feedback mode** — every point the brief lists (`feedback-triage.md`, verdict `fix`) is addressed in the
    diff the way the reviewer asked (or the triage reason says why differently); an unaddressed point is
    P2. Nothing beyond those points changed (scope).
 Rate problems with the P0–P3 scale of `${CLAUDE_PLUGIN_ROOT}/guidelines/pr-review.md` (`file:line`, scenario,
@@ -99,7 +110,8 @@ introduced by this diff). Ids `QP<n> [P1]: file:line — problem — fix`, stabl
   - an open PR exists for this repo → push to its branch and refresh the body with `gh pr edit`;
   - otherwise, or the old PR is merged → `gh pr create` against the plan's base, **ready — never
     `--draft`** unless the brief says the user passed `--draft`. Body per
-    `${CLAUDE_PLUGIN_ROOT}/guidelines/pr-description.md`; its Testing section comes from the actual runs
+    `${CLAUDE_PLUGIN_ROOT}/guidelines/pr-description.md` (a security-sensitive change gets its `## Security`
+    section from the gate's scan and the S rows); its Testing section comes from the actual runs
     (`flows.json` cases and results) plus whatever the workspace `Test policy` requires the PR to state. An existing draft PR that passed the gate → `gh pr ready`.
   Return `prUrl` and `prDraft`.
 Base moved and the PR conflicts → merge the base into the branch (`git merge origin/<base>`), resolve only
@@ -131,6 +143,7 @@ diff (`gh pr diff`), the ticket, and the code around every change — not the di
    workspace test policy asks for them.
 5. **Typecheck and build** — run them in the task worktree; paste the result. They are the only commands you
    run: no server, no flow, no emulator.
+Run `security-scan.mjs` on the PR's worktree as in the gate (item 10) and put its result, scanners not installed included, under Security.
 Also flag any change inside a read-only zone, and list the UI files changed with the screens they render.
 Then findings as P0–P3 with file:line. `review.md` ends with `Not run on the app` and the acceptance criteria
 or screens worth an e2e, so the author can ask for `/tf:e2e` when they want it. Draft (do not post)

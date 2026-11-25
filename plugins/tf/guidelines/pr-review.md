@@ -54,7 +54,10 @@ diff touches it; a finding names its row (`A01`) after the level.
 | A09 | Security Logging and Alerting Failures | A sensitive action with no audit trail; secrets or personal data written to logs; errors swallowed silently |
 | A10 | Mishandling of Exceptional Conditions | An error path that leaves state half-written, fails open, leaks internals, or is not handled at all |
 
-Money, migrations and transactions are checked wherever the PR touches them, whatever the row.
+Money, migrations and transactions are checked wherever the PR touches them, whatever the row. The same rows
+as author-side checks, with audit and logs spelled out, are S1–S7 of [review-standard.md](review-standard.md);
+`scripts/security-scan.mjs` gives the deterministic first pass (secrets, sensitive values in logs, new
+dependencies, the installed scanners).
 
 ## A finding counts only if
 

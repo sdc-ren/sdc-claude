@@ -52,3 +52,5 @@ jobs:
         run: node --test plugins/tf/tests/jira.mjs
       - name: Commit and PR naming (git.md)
         run: node --test plugins/tf/tests/naming.mjs
+      - name: Security scan (secrets, logs, new dependencies)
+        run: node --test plugins/tf/tests/security-scan.mjs
