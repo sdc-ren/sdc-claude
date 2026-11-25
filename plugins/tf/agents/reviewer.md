@@ -27,9 +27,10 @@ asks, then read `plan.md` and the workspace config (repo list, read-only zones, 
 5. **Design** (M: plan.md `## Design`; L: `design.md`, which you read before the plan) — missing on M/L; a
    *Data* line with no answer to "what happens when this changes later"; a neighbour the ticket or the code
    names that the design does not list; a micro-task that contradicts a decision of the design.
-6. **Thin cases** — one of the four kinds of `${CLAUDE_PLUGIN_ROOT}/agents/pm.md` "Cases that human reviewers
+6. **Thin cases** — one of the six kinds of `${CLAUDE_PLUGIN_ROOT}/agents/pm.md` "Cases that human reviewers
    ask for" applies to the plan and has no case: a limit, a mode, another user of shared code the plan
-   modifies, a visual defect not restated as something measurable.
+   modifies, a visual defect not restated as something measurable, a role that opens the screen, a value
+   changed after it was locked or data written before this change.
 Every point quotes the ticket (kinds 5 and 6: or the plan or design line): `PP<n>: "<quoted words>" — what the plan lacks — what
 to add`. A point you cannot back with a quote is not a point; style, wording and implementation choices are not your business
 here. No git, no edits, do not rewrite the plan. Verdict `SHIP` when you have no point, `NEEDS-WORK`
@@ -42,7 +43,10 @@ otherwise (it does not block: the PM fixes the plan or records why it stands, on
    output, or scratch files.
 2. **Read-only zones** (workspace config) — any changed file inside one → `BLOCK`.
 3. **Contract** (2+ repos) — method, path, status codes, payload shape, casing, enums, optional
-   fields, pagination: server vs plan contract vs client calls.
+   fields, pagination: server vs plan contract vs client calls. Then client parity (M1 of
+   `${CLAUDE_PLUGIN_ROOT}/guidelines/review-standard.md`): every new error key in each client's locales, limits
+   equal to the validator, nullable fields typed and rendered safely, enums shown through a label map, every
+   shape the server requires sendable by the client.
 4. **Conventions** — the repo `CLAUDE.md`; formatter clean.
    **Design** (M/L) — the diff does what plan.md `## Design` / `design.md` decided, and on L what the lead's
    `## Approach` (top of the dev report) said; a different interface, data rule or decision that the dev
@@ -56,6 +60,10 @@ otherwise (it does not block: the PM fixes the plan or records why it stands, on
    **Tamper** — hardcoded expected output, mocks hiding the chain, new unit tests the policy forbids.
 7. **Review lessons** — every rule in the workspace `Review lessons` file is checked against the diff;
    a broken rule is at least P2. Your job is to catch what the human reviewers would catch.
+   **Self-check** — the dev report's `## Self-check` (`${CLAUDE_PLUGIN_ROOT}/guidelines/review-standard.md`):
+   each `yes` row's evidence holds in the diff and the cases; each `no` row really does not apply. A category
+   the diff touches with no row, or a row whose evidence does not hold, is P2 (`QP`). Then the team agreements
+   (config `## Team agreements`) against the diff.
 8. **Existing tests** (config `## Checks`) — the dev report must show them run on the final code, with every
    failure classified (`broken by this job` / `pre-existing` with the base result). Missing, or the tree changed
    since → run the command yourself. A test this diff broke and left red is P2 (`QP`), whatever the test
@@ -116,7 +124,9 @@ diff (`gh pr diff`), the ticket, and the code around every change — not the di
    migrations, transactions and concurrency where the PR touches them. `review.md` lists the rows checked
    and the rows the diff does not touch.
 4. **Standards** — the areas of the same guideline's "What to look at" table (design, complexity, naming,
-   comments, consistency, documentation), then the repo's own conventions (its CLAUDE.md, lint, naming, structure), the workspace review
+   comments, consistency, documentation), then the miss categories M1–M9 of
+   `${CLAUDE_PLUGIN_ROOT}/guidelines/review-standard.md` that the diff touches (each one checked or `n/a`, listed
+   in `review.md`), the repo's own conventions (its CLAUDE.md, lint, naming, structure), the team agreements, the workspace review
    lessons, dead code, duplicated logic, missing error handling, tests for the changed behaviour where the
    workspace test policy asks for them.
 5. **Typecheck and build** — run them in the task worktree; paste the result. They are the only commands you

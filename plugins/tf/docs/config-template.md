@@ -21,6 +21,13 @@ Keep sections short; link to longer docs instead of copying them.
 ## Test policy
 - <e2e-only | unit-for-logic | full> — what verification means here; whether new unit tests are allowed.
 
+## Team agreements (agreed with the team's human reviewers — the team layer of guidelines/review-standard.md)
+<!-- Only what the reviewers agreed to; a rule they keep reviewing against is not an agreement yet. Link this
+     section from each repo's CLAUDE.md so people read the same text. -->
+- <e.g. Tests: e2e flows for behaviour; unit tests for pure functions and validators — agreed with <reviewer>, <date>>
+- <e.g. No new env keys in BE PRs; tunables are constants>
+- <e.g. Contract changes: BE PR merges first; the FE/App PR bodies say so>
+
 ## Checks (existing tests — run by the dev lead before it reports and checked by the gate; never new tests)
 | repo | command (scoped to the touched modules when the runner can) | notes |
 |---|---|---|
@@ -45,7 +52,8 @@ No row for a repo → its test script from the repo `CLAUDE.md` / package file w
 
 ## Knowledge (PM reads first; orchestrator updates at close-out)
 - Known bugs: <path> · Verified env recipes: <path> · Decisions: <path>
-- Review lessons: <path> — rules learned from human PR reviews; devs and reviewers read it before every job.
+- Review lessons: <path> — rules learned from human PR reviews, each led by its category tag (`[M1]`…, see
+  guidelines/review-standard.md); devs and reviewers read it before every job.
 
 ## Flows (e2e)
 - Playwright package: `<path>/package.json` (`--playwright` / `PLAYWRIGHT_FROM`).

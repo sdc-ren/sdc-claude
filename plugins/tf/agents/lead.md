@@ -62,7 +62,8 @@ their reports is not enough:
 4. One report for the whole job (`jobs/<id>-dev-<repo>.md`, terse `key: value` lines — agents read it): micro-task → files → done-when result, who did
    what in one line each, deviations from the plan, what the tester should look at hardest, the real
    typecheck/build output and the existing-tests result (`broken by this job: none` or the list, `pre-existing:` the
-   list). `filesChanged` lists every file changed by you and the members.
+   list), and ONE `## Self-check` table (`${CLAUDE_PLUGIN_ROOT}/guidelines/review-standard.md`) for the whole
+   job, merged from the members' tables and re-checked where the parts meet. `filesChanged` lists every file changed by you and the members.
 
 ## Language
 Report language from the prompt for reports and the team plan; code and comments follow the repo conventions.

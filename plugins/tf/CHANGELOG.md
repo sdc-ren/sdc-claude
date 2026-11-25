@@ -4,6 +4,31 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.25.0] — 2026-11-25
+
+### Added
+- **One review standard for both sides of a PR** — `guidelines/review-standard.md`. Three layers (plugin,
+  team agreements, workspace lessons) and nine miss categories built from about 90 human review points over 9
+  tickets: client parity, modes, roles, lifecycle and existing data, shared code, limits, checks on the base,
+  scope against approval, hygiene. Client parity, modes, roles, lifecycle and scope caused almost every P1/P2.
+- **Self-check in the dev report.** The dev (the lead, once per job) fills a `## Self-check` table for each
+  category the change touches, with `file:line`, case id or command as evidence; the gate checks every row and
+  rates a missing or wrong one P2.
+- **Two more kinds of planned case**: one per role that opens the changed screen, and "go back" cases for a
+  value changed after it was locked, a feature turned off then on, and rows written before the change. The
+  plan check looks for all six kinds.
+- **`## Team agreements` in the workspace config** — what the team agreed with its human reviewers (test
+  policy, env keys, merge order). Devs, gate and review mode read it; `task.mjs config --role dev|reviewer`
+  includes it and names it as missing when the workspace has none yet.
+
+### Changed
+- The plan's `## Contract` names, per field, nullability, limits and enum values, and per error its key, which
+  every client must have in its locales; the gate checks client parity on top of shape.
+- Feedback triage tags each point with its category (`M` column); review lessons lead with the tag. The close
+  report proposes a new category, a lesson seen in 3 tickets moving into the plugin standard, and a team
+  agreement the reviewers keep reviewing against being settled with them.
+- `/tf:status --doctor` checks that `guidelines/review-standard.md` is present.
+
 ## [1.24.0] — 2026-11-24
 
 ### Changed

@@ -22,7 +22,10 @@ these rules: do not, name it under `blocked` in your report, and carry on with t
    canvas (`<task>/specs/canvas-*.md` lists the screens; each screen's `project/<file>.dc.html` is its exact
    markup, inline styles, copy and states — rebuild it in the repo's own stack and components, never copy the
    canvas runtime or `{{ }}` templates), and the workspace
-   `Review lessons` file — the mistakes human reviewers flagged before; do not repeat them.
+   `Review lessons` file — the mistakes human reviewers flagged before; do not repeat them — and the config's
+   `## Team agreements` when it has them.
+4. Read the miss categories of `${CLAUDE_PLUGIN_ROOT}/guidelines/review-standard.md`: you fill its self-check
+   at the end, so build with them in mind.
 
 ## Rules
 - Edit only files your micro-tasks name, or files they clearly require (list every extra file and why).
@@ -65,7 +68,9 @@ into the conversation.
 
 ## Report (`jobs/<id>-dev-<repo>.md`)
 Micro-task → files → done-when result · deviations from the plan and why · anything the tester should
-look at hardest · formatter/typecheck output (its tail). Agents read it, people do not: terse `key: value` lines, no prose, nothing the plan already says. Return `verdict: NONE`, `filesChanged`, and `status`
+look at hardest · formatter/typecheck output (its tail) · `## Self-check` — the table of
+`${CLAUDE_PLUGIN_ROOT}/guidelines/review-standard.md` for every category your change touches, each row with its
+evidence (`file:line`, case id, command); for M1 read the other repos (read-only) or the plan's `## Contract`. Agents read it, people do not: terse `key: value` lines, no prose, nothing the plan already says. Return `verdict: NONE`, `filesChanged`, and `status`
 (`blocked` with the exact need when you could not proceed).
 
 ## Language
