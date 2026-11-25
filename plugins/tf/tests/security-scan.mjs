@@ -1,13 +1,13 @@
 // security-scan.mjs: the built-in first pass of the S categories in guidelines/review-standard.md.
 // Run: node --test plugins/tf/tests/security-scan.mjs
 import { spawnSync } from 'node:child_process'
-import { mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { maskSecret, scanDiff } from '../scripts/security-scan.mjs'
+import { dedupe, maskSecret, scanDiff, summary } from '../scripts/security-scan.mjs'
 
 const S = join(dirname(fileURLToPath(import.meta.url)), '..', 'scripts', 'security-scan.mjs')
 const g = (wt, ...args) => {
@@ -69,4 +69,22 @@ test('cli: --no-tools reports each scanner as skipped, never as a pass; usage er
   assert.match(j.tools.gitleaks, /^skipped/)
   assert.equal(spawnSync(process.execPath, [S, wt], { encoding: 'utf8' }).status, 2)
   assert.equal(maskSecret('abcdefghijkl'), 'abcd…(12 chars)')
+})
+
+test('--out keeps the JSON in the file and prints a short summary; one finding per category, file and line', () => {
+  const merged = dedupe([
+    { s: 'S5', rule: 'slack-token', file: 'a.js', line: 1, text: 'xoxb…' },
+    { s: 'S5', rule: 'gitleaks:slack-bot-token', file: 'a.js', line: 1, text: 'REDACTED' },
+    { s: 'S3', rule: 'sensitive-value-in-log', file: 'a.js', line: 1, text: 'console.log(token)' },
+  ])
+  assert.deepEqual(merged.map((f) => [f.s, f.rule]), [['S5', 'slack-token, gitleaks:slack-bot-token'], ['S3', 'sensitive-value-in-log']])
+  const text = summary({ findings: merged, sensitive: [{ area: 'auth' }], deps: [], tools: { gitleaks: 'ran', semgrep: 'not installed' } }, '/x/sec.json')
+  assert.match(text, /^security-scan: 2 findings \(S5 ×1, S3 ×1\)\nsensitive: auth\ndeps: none\ngitleaks ran · semgrep not installed/)
+  assert.match(text, /full report: \/x\/sec\.json$/)
+  const wt = repo()
+  const out = join(wt, 'sec.json')
+  const r = spawnSync(process.execPath, [S, wt, '--base', 'main', '--no-tools', '--out', out], { encoding: 'utf8' })
+  assert.equal(r.status, 0, r.stderr)
+  assert.ok(!r.stdout.trim().startsWith('{'), 'no JSON on stdout')
+  assert.equal(JSON.parse(readFileSync(out, 'utf8')).base, 'main')
 })

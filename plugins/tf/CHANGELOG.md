@@ -19,9 +19,11 @@ All notable changes to the `tf` plugin are documented here. The format follows
   the output) and sensitive values in log calls on the added lines, new or re-versioned npm/pub dependencies
   for a name check, the security-sensitive areas the diff touches, and `gitleaks`, `semgrep --config
   p/owasp-top-ten` and `npm audit` when the machine has them. A missing scanner is reported as not run. It never
-  touches the index. `/tf:status --doctor` warns when gitleaks or semgrep is missing.
-- **Security-sensitive changes** (auth, permissions, locks, money, audit, migrations) run their dev job, and so
-  their gate, on opus, get refused-role and audit-row cases, and a `## Security` section in the PR body.
+  touches the index. With `--out` it prints a few-line summary (counts, sensitive areas, new dependencies, each
+  scanner's state, up to 20 findings) and keeps the full JSON in the file; a secret flagged by both the built-in
+  check and gitleaks is one finding. `/tf:status --doctor` warns when gitleaks or semgrep is missing.
+- **Security-sensitive changes** (auth, permissions, locks, money, audit, migrations): the PM marks their jobs
+  `sensitive` and the executor runs the gate on opus while the dev keeps its own model; they also get refused-role and audit-row cases, and a `## Security` section in the PR body.
 - **Self-check in the dev report.** The dev (the lead, once per job) fills a `## Self-check` table for each
   category the change touches (S1–S7 for every code change), with `file:line`, case id or command as evidence; the gate checks every row and
   rates a missing or wrong one P2.

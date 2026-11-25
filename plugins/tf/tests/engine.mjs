@@ -67,6 +67,18 @@ test('close is judged per repo: a later fix on another repo does not undo a test
   expect(r.ran).toContain('J8 reviewer:mobile(sonnet)')
 })
 
+test('a security-sensitive change is gated on opus while its dev keeps sonnet', async () => {
+  const pm = [
+    D([{ ...J('J1', 'dev', 'be', 1), sensitive: true }, J('J2', 'dev', 'fe', 1), ...gates(['be', 'fe'], 2, 3), J('J5', 'tester', 'be', 3), J('J6', 'tester', 'fe', 3)]),
+    pack(7, ['be', 'fe']), close]
+  const r = await sim(pm)
+  expect(r.out.status).toBe('done')
+  expect(r.ran).toContain('J1 lead:be(sonnet)')
+  expect(r.ran).toContain('J3 reviewer:be(opus)')
+  expect(r.ran).toContain('J4 reviewer:fe(sonnet)')
+  expect(r.logs.join('\n')).toContain('opus (security-sensitive change)')
+})
+
 test('a repo tested before its own last dev job cannot close', async () => {
   const r = await sim([oneRepo, D([J('J4', 'dev', 'be', 1), J('J5', 'reviewer', 'be', 2)]), pack(6), close, close])
   expect(r.out.status).toBe('escalate')

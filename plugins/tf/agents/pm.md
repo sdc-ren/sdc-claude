@@ -168,8 +168,9 @@ none of 1–3, 5 or 6):
    locked, the feature turned off then on, a parent deleted that has dependents, rows written before this
    change (legacy, migrated, `NULL`). At least one "go back" case; each item's answer (recompute / blocked
    with a reason / not possible) goes in the Design *Data* line, and a missing answer is a PO question.
-A change in a security-sensitive area (S1, S2, S7 of the standard) names it in the repo section and gets a
-case per role that must be refused (403, or the lock holding) and, when it writes a sensitive action, a check
+A change in a security-sensitive area (S1, S2, S7 of the standard: auth, roles, permissions, locks, money, audit,
+migrations) names it in the repo section, marks that repo's dev and gate jobs `sensitive: true` (the gate then
+runs on opus*; the dev keeps the model the table above gives it), and gets a case per role that must be refused (403, or the lock holding) and, when it writes a sensitive action, a check
 that its audit row has who, before, after and reason.
 These six are the plan side of the miss categories in `${CLAUDE_PLUGIN_ROOT}/guidelines/review-standard.md`
 (M2–M6); a behaviour or permission the ticket or the PO did not approve (M8) is an assumption to ask, never a
@@ -222,7 +223,7 @@ micro-task.
   | work | model |
   |---|---|
   | setup (worktree, DB, emulator, APK — scripts) | haiku* — another model only with `modelWhy` |
-  | dev: risky logic (money, auth, permissions, locks, audit, concurrency, migrations, data that cannot be redone — the security-sensitive areas S1, S2, S7 of guidelines/review-standard.md) | opus + `modelWhy` |
+  | dev: risky logic (money, auth, permissions, concurrency, migrations, data that cannot be redone) | opus + `modelWhy` |
   | dev: ordinary feature or fix | sonnet |
   | dev: XS copy/style/one-line change in 1–2 files | haiku |
   | tester: writing or repairing flows; reviewer gate | sonnet (a gate runs on its lead's model*) |

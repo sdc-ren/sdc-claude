@@ -88,6 +88,7 @@ const DISPATCH = {
           model: { type: 'string', enum: MODELS },
           modelWhy: { type: 'string', description: 'Only when you pick a model above the default for the role (pm.md "Models"): one line why. A setup job runs on haiku without it.' },
           effort: { type: 'string', enum: ['low', 'medium', 'high'] },
+          sensitive: { type: 'boolean', description: 'dev or gate job of a security-sensitive change (auth, roles, permissions, locks, money, audit, migrations — S1, S2, S7 of guidelines/review-standard.md): the gate of that repo runs on opus; the dev keeps its own model.' },
           group: { type: 'integer', minimum: 1, description: 'same group runs in parallel; groups run in order' },
           brief: { type: 'string', description: 'What to do, concretely. Point at plan.md sections instead of repeating them.' },
           reads: { type: 'array', items: { type: 'string' }, description: 'Files/sections the job must read (keep it short).' },
@@ -519,6 +520,9 @@ function leadModel(repo) {
   const ms = [...lastByRepo.values()]
   return ms.length ? MODELS[Math.max(...ms.map((m) => MODELS.indexOf(m)))] : ''
 }
+// A security-sensitive change is judged on opus, whatever model wrote it: the gate job says so, or a dev job of
+// that repo (any repo for "all") in this run did.
+const sensitiveRepo = (repo) => ledger.some((x) => x.job.role === 'dev' && x.job.sensitive && (repo === 'all' || x.job.repo === repo))
 // The model a non-dev job runs on. Setup is scripts (worktree, DB, emulator, APK): haiku unless the PM says why
 // not. A PACKAGE job writes the PR body people read: never below sonnet. A gate never runs below the lead it
 // judges (leadModel, in runJob).
@@ -544,6 +548,7 @@ async function runJob(j, turn) {
     if (j.role === 'reviewer' && (!isPackage(j) || j._noGate) && CODE_MODES.includes(mode)) {
       const lm = leadModel(j.repo)
       if (lm && lm !== model) { log(`${j.id} gate ${j.repo}: model ${model} → ${lm} (the dev lead's)`); model = lm }
+      if ((j.sensitive || sensitiveRepo(j.repo)) && rank(model) < rank('opus')) { log(`${j.id} gate ${j.repo}: model ${model} → opus (security-sensitive change)`); model = 'opus' }
     }
     const o = { label: `${j.id} ${j.role}:${j.repo}`, phase: 'Jobs', model, schema: REPORT }
     if (AGENT[j.role]) o.agentType = AGENT[j.role]

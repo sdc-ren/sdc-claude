@@ -3,7 +3,8 @@
 // the gate on a task worktree before any model judges the code.
 //
 //   node security-scan.mjs <worktree> --base <ref> [--out <file.json>] [--no-tools]
-//     prints one JSON object: { base, files, sensitive, findings, deps, tools }
+//     with --out the full JSON goes to the file and only a short summary is printed (what an agent reads);
+//     without --out it prints the JSON object: { base, files, sensitive, findings, deps, tools }
 //     - findings: [{ s, rule, file, line, text }] from built-in patterns on the ADDED lines of the diff
 //       (S5 secrets, S3 sensitive values in log calls), plus what the installed scanners report;
 //       secret values are masked, never printed whole
@@ -199,6 +200,33 @@ function runTools(wt, report) {
   return tools
 }
 
+// One finding per category, file and line: the built-in check and a scanner often flag the same secret.
+export function dedupe(findings) {
+  const by = new Map()
+  for (const f of findings) {
+    const k = `${f.s}|${f.file}|${f.line}`
+    const had = by.get(k)
+    if (!had) by.set(k, { ...f })
+    else if (!had.rule.split(', ').includes(f.rule)) had.rule += `, ${f.rule}`
+  }
+  return [...by.values()]
+}
+
+// What an agent reads when the full report went to a file: a few lines, never the whole JSON in its context.
+export function summary(r, out, max = 20) {
+  const count = {}
+  for (const f of r.findings) count[f.s] = (count[f.s] || 0) + 1
+  const head = [
+    `security-scan: ${r.findings.length} finding${r.findings.length === 1 ? '' : 's'}${r.findings.length ? ` (${Object.entries(count).map(([s, n]) => `${s} ×${n}`).join(', ')})` : ''}`,
+    `sensitive: ${r.sensitive.map((s) => s.area).join(', ') || 'none'}`,
+    `deps: ${r.deps.length ? r.deps.map((d) => `${d.ecosystem}:${d.name}@${d.version}${d.was ? ` (was ${d.was})` : ' (new)'}`).join(', ') : 'none'}`,
+    Object.entries(r.tools).map(([t, s]) => `${t} ${s}`).join(' · '),
+  ].join('\n')
+  const lines = r.findings.slice(0, max).map((f) => `- [${f.s}] ${f.file}:${f.line} ${f.rule} — ${f.text}`)
+  if (r.findings.length > max) lines.push(`- +${r.findings.length - max} more`)
+  return [head, ...lines, `full report: ${out}`].join('\n')
+}
+
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 if (isMain) {
   const a = process.argv.slice(2)
@@ -210,8 +238,9 @@ if (isMain) {
   try {
     const report = scanDiff(resolve(wt), base)
     report.tools = noTools ? { gitleaks: 'skipped: --no-tools', semgrep: 'skipped: --no-tools', 'npm-audit': 'skipped: --no-tools' } : runTools(resolve(wt), report)
+    report.findings = dedupe(report.findings)
     const text = JSON.stringify(report, null, 1)
-    if (out) writeFileSync(out, text + '\n')
-    console.log(text)
+    if (!out) console.log(text)
+    else { writeFileSync(out, text + '\n'); console.log(summary(report, out)) }
   } catch (e) { console.error(String(e.message || e)); process.exit(2) }
 }

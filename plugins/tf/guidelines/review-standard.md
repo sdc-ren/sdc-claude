@@ -58,8 +58,7 @@ not write is the second line, not the first. A scanner that is not installed is 
 counted as a pass.
 
 **Security-sensitive changes.** A change that touches S1, S2 or S7 areas (auth, roles, permissions, locks, money,
-audit, migrations — the scan lists them as `sensitive`) is planned as risky: its dev job and therefore its gate
-run on opus, every S row gets a case or a `file:line`, and the PR body has a `## Security` section naming the
+audit, migrations — the scan lists them as `sensitive`) is planned as risky: the PM marks its jobs `sensitive` and its gate runs on opus (the dev keeps its own model), every S row gets a case or a `file:line`, and the PR body has a `## Security` section naming the
 sensitive parts, so the human reviewer knows where to look hardest.
 
 ## Self-check (author side)
