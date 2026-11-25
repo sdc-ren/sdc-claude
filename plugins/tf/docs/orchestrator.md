@@ -167,7 +167,12 @@ e2e only: `<PLUGIN>/docs/orchestrator-e2e.md` (the approved-cases gate, the fast
 
 **Review lessons** (config `Review lessons` file): when this round answered human review points rated
 P0–P2 (or a reviewer BLOCK), add one generalized rule per new pattern to that file (≤ 60 lines total,
-merge duplicates, keep the source tag). Devs and reviewers read it before every job.
+merge duplicates, keep the source tag, lead with the category tag of the triage `M` column: `[M4]`). Devs and
+reviewers read it before every job. In the report: a point with `M` = `new` → propose a category row for
+`guidelines/review-standard.md`; a lesson whose source tags now name 3 tickets → propose it as a check under its
+category there; points rated against a `## Team agreements` line (or a test-policy `discuss`) in 2 rounds
+running → say the agreement is not shared by the reviewers yet and needs settling with them. Proposals only —
+the plugin's files are changed by a person.
 
 **Report** (report language, plain): PR links (ready), case table (case · result · evidence), the PM's
 assumptions (so the user can correct them), findings outside scope, review verdict (review mode),

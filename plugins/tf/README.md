@@ -450,6 +450,9 @@ Beyond scope, contract, conventions and tamper, the checks that human reviewers 
 | Limits and modes | PM, plan check | A rule with a limit gets a case at the limit and just past it; a flag one side accepts and the other rejects in some mode gets a case per mode |
 | Visual fixes | tester | Before and after shots of the region the ticket names must differ, and the after state is asserted by measurement; identical shots are never a PASS |
 | Design | gate | On M/L the diff must do what the design decided; a departure nobody explained is P2 |
+| Roles and lifecycle | PM, plan check | Every role that opens the changed screen gets a case; a value changed after it was locked, a feature turned off then on, and rows written before the change get "go back" cases |
+| Security | dev, gate, review mode | `scripts/security-scan.mjs` runs first on every change: secrets and sensitive values in log calls on the added lines, new or re-versioned dependencies (each must exist under that exact name), and `gitleaks`, `semgrep` (recommended ruleset, OWASP rules included) and `npm audit` when installed — a scanner that is missing is reported as not run, never as a pass. Then the gate reads the diff against S1–S7 of [guidelines/review-standard.md](guidelines/review-standard.md) (access control, audit trail, logs, input, secrets, dependencies, data integrity). A change in auth, permissions, locks, money, audit or migrations is gated on opus (its dev keeps its own model) and gets a `## Security` section in the PR. With `--out` the scan prints a few-line summary and keeps the full JSON in the file, so an agent's context holds only the summary |
+| Self-check | dev lead → gate | The dev report fills the miss-category table of [guidelines/review-standard.md](guidelines/review-standard.md) — client parity (error keys, limits, nullable fields, enums in every client), modes, roles, lifecycle, scope against approval — with evidence; a category the diff touches with no row, or evidence that does not hold, is P2 |
 
 ### Hard rules
 
@@ -676,8 +679,11 @@ word. Pass `--assume` to run unattended.
 **Can I use it in any repository layout?** Yes — a workspace is any folder whose config lists one or more
 git repos. A single-repo project lists just one.
 
-**Where do the rules come from?** `guidelines/` in this plugin (git, PR description, PR review, ticket
-comment, e2e). A repo's own conventions (its CLAUDE.md, CONTRIBUTING, commitlint) win.
+**Where do the rules come from?** Three layers, described in [guidelines/review-standard.md](guidelines/review-standard.md):
+the plugin's `guidelines/` (git, PR description, PR review and its miss categories, ticket comment, e2e) for
+every project; the config's `## Team agreements` plus the repo's own conventions (CLAUDE.md, CONTRIBUTING,
+commitlint), which win on conventions; and the workspace's review lessons, learned from its own reviews. Review
+rounds tag each point with its category, and the close report proposes what should move up a layer.
 
 **What does it cost?** Fewer agents than a fixed pipeline: a small task runs five (the PM twice, a dev, a
 tester, a reviewer), a large one a lead per repo with gates and testers. Each job gets the model its work

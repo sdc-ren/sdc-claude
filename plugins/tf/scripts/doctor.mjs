@@ -37,6 +37,9 @@ check('git', sh('git --version').ok, sh('git --version').out)
 const gh = sh('gh auth status 2>&1')
 check('gh installed + logged in', gh.ok, gh.ok ? 'authenticated' : gh.out)
 check('codegraph CLI', !!which('codegraph'), 'used by PM/reviewer for impact search', false)
+for (const [bin, why] of [['gitleaks', 'secret scan of each change (security-scan.mjs)'], ['semgrep', 'OWASP and injection rules on changed files (security-scan.mjs)']]) {
+  check(`${bin} (security scan)`, !!which(bin), which(bin) ? '' : `${why} — not installed, the gate reports it as not run`, false)
+}
 check('WebP encoder (cwebp/ffmpeg)', !!which('cwebp') || !!which('ffmpeg'), 'falls back to Playwright Chromium', false)
 // What this operating system offers (scripts/platform.mjs).
 const sys = info()
@@ -52,7 +55,7 @@ if (reaperInstalled()) check('no background cleanup job', false, 'a job of an ol
 const PLUGIN = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const agents = ['pm', 'lead', 'dev', 'tester', 'reviewer'].filter((a) => !existsSync(join(PLUGIN, 'agents', `${a}.md`)))
 check('plugin agents tf:pm/lead/dev/tester/reviewer', !agents.length, agents.length ? `missing: ${agents.join(', ')}` : '')
-const gl = ['git', 'pr-description', 'pr-review', 'ticket-comment', 'e2e-testing'].filter((g) => !existsSync(join(PLUGIN, 'guidelines', `${g}.md`)))
+const gl = ['git', 'pr-description', 'pr-review', 'review-standard', 'ticket-comment', 'e2e-testing'].filter((g) => !existsSync(join(PLUGIN, 'guidelines', `${g}.md`)))
 check('plugin guidelines', !gl.length, gl.length ? `missing: ${gl.join(', ')}` : '')
 check('workspace config .claude/task-flow.md', !!cfg, cfgPath)
 

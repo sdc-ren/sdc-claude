@@ -9,7 +9,9 @@ handled (we answered last and nothing new came; a review or comment shown before
 text in `<task>/feedback-history.md` — open that only to quote it.
 1. **Triage** every point into `<task>/feedback-triage.md` before planning. A review posted as one long
    comment holds many points: split it, id them `<comment author>-<n>` (e.g. `tnthangvn-3`). Table:
-   `id | PR | reviewer | file:line | point (one line) | P0–P3 | verdict | fix in repo | reason`, verdict one of
+   `id | PR | reviewer | file:line | point (one line) | P0–P3 | M | verdict | fix in repo | reason`, `M` the miss
+   category of `${CLAUDE_PLUGIN_ROOT}/guidelines/review-standard.md` the point falls in (`M1`…`M9`, `team` for a
+   team agreement, `—` for a question, `new` when none fits), verdict one of
    `fix` (do it), `discuss` (we disagree — cite the ticket, a decision in board.md/config, a spec, or the
    code; never "won't fix" without a reason), `answered` (a question, no change), `out-of-scope` (belongs
    to another ticket — say which or propose one). Check the code before judging (codegraph, the worktree).

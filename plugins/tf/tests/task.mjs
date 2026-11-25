@@ -68,6 +68,8 @@ test('config prints only the sections a role needs, plus Hard rules, and names w
   assert.match(r.stdout, /## Hard rules\n- never X/)
   assert.doesNotMatch(r.stdout, /## Repos/)
   assert.match(r.stdout, /no section in .*: Test policy/)
+  const dev = spawnSync(process.execPath, [T, 'config', root, '--role', 'dev'], { encoding: 'utf8' }).stdout
+  assert.match(dev, /no section in .*Team agreements/)
   const one = spawnSync(process.execPath, [T, 'config', root, 'repos'], { encoding: 'utf8' }).stdout
   assert.match(one, /^## Repos\n- be/)
 })

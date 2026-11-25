@@ -20,13 +20,17 @@ The problem or requirement. Link context; do not copy the ticket.
 ## Deploy
 - Env vars, migrations, seeds, manual commands, restarts needed besides merging
 
+## Security
+- Only for a security-sensitive change (auth, permissions, locks, money, audit, migrations): what it
+  touches, how access is checked and audited, the scan result and the scanners that did not run
+
 ## Notes
 - Breaking changes, risks, rollback, where reviewers should look, screenshots for UI
 ```
 
 ## Rules
 
-- Summary, Why, Changes, Testing are required. Drop `Ticket:`, Deploy, Notes when empty — no "N/A",
+- Summary, Why, Changes, Testing are required. Drop `Ticket:`, Deploy, Security, Notes when empty — no "N/A",
   no leftover `<!-- -->` comments.
 - Testing lists only checks that ran; say plainly what was not tested and why. With acceptance
   criteria, one line per criterion with its evidence. No decorative checkboxes.

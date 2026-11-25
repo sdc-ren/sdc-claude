@@ -35,7 +35,8 @@ Never edit repo code, never checkout/commit, never post anything anywhere.
    words. Words alone are a full task: plan from them, the config and the code, and record each guess as an
    assumption.
    New comments since the last round are marked; on a follow-up round focus on them.
-2. Read the workspace config and its `Review lessons` file (plan around those pitfalls). The config lists the repos you may change, excluded paths you ignore, read-only
+2. Read the workspace config, its `## Team agreements` and its `Review lessons` file (plan around those
+   pitfalls), and the miss categories of `${CLAUDE_PLUGIN_ROOT}/guidelines/review-standard.md`. The config lists the repos you may change, excluded paths you ignore, read-only
    zones (read and call, never edit), test policy, escalation additions, spec sources.
 3. Inspect every listed repo for what the task touches (codegraph `codegraph_explore` with
    `projectPath` first, then `git -C <repo> grep origin/<base>`). Do not ask the user which repos.
@@ -135,6 +136,8 @@ Không làm: X… · Rủi ro / câu hỏi: what could be wrong, what you assume
   How: only for API contracts, shared types, migrations, non-obvious decisions.
   done-when: a cheap check — typecheck/lint of the file, a curl with expected status/body, one flow step.
 ## Contract (when 2+ repos meet): method, path, request, response, errors — frozen before devs start.
+   Per field: nullable or not, limits and format (the validator's), enum values; per error: its key, which
+   every client must have in its locales (M1 of guidelines/review-standard.md).
 ## Cases: one line per acceptance criterion / QC case: a stable id (ticket case number when QC gave one), the
    data it needs and the expected result (`C2c — a ROSTER_IMPORT tournament in status CANCELLED → 409`), so the
    tester seeds it instead of testing whatever the DB clone happens to hold.
@@ -146,7 +149,7 @@ still run: the dev lead runs the repo's suite (config `## Checks`) and the gate 
 
 **Cases that human reviewers ask for** — a branch nobody tested costs a round, so plan them up front, with
 every branch a reviewer or an earlier round flagged (size them to the change: a text or spacing change needs
-none of 1–3):
+none of 1–3, 5 or 6):
 1. *Limits* — a rule with a number or an order (`<= 15'`, max length, "after", 0 of something) gets a case at
    the limit and one just past it, and the empty/zero input.
 2. *Modes* — when a flag, field or control is accepted in one mode and rejected in another (walkover, draft,
@@ -159,6 +162,19 @@ none of 1–3):
 4. *Visual defects* — restate the ask as something a flow can measure and that is false today (which element,
    relative to what, how far off). If the screenshot or words allow two readings, pick one, write the other
    under `## Assumptions`, and put it in `scope`. The case shoots before and after.
+5. *Roles* — every role that can open the changed screen or call the changed route (owner, staff, referee,
+   viewer, admin) gets one case: the endpoint it reaches and what it sees. A role left out is a 403 in review.
+6. *Lifecycle and existing data* — for each value the feature depends on: changed after it was confirmed or
+   locked, the feature turned off then on, a parent deleted that has dependents, rows written before this
+   change (legacy, migrated, `NULL`). At least one "go back" case; each item's answer (recompute / blocked
+   with a reason / not possible) goes in the Design *Data* line, and a missing answer is a PO question.
+A change in a security-sensitive area (S1, S2, S7 of the standard: auth, roles, permissions, locks, money, audit,
+migrations) names it in the repo section, marks that repo's dev and gate jobs `sensitive: true` (the gate then
+runs on opus*; the dev keeps the model the table above gives it), and gets a case per role that must be refused (403, or the lock holding) and, when it writes a sensitive action, a check
+that its audit row has who, before, after and reason.
+These six are the plan side of the miss categories in `${CLAUDE_PLUGIN_ROOT}/guidelines/review-standard.md`
+(M2–M6); a behaviour or permission the ticket or the PO did not approve (M8) is an assumption to ask, never a
+micro-task.
 
 ## Dispatch rules
 **Shape of a run**

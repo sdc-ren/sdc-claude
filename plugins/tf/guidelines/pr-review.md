@@ -5,7 +5,9 @@ Find real defects and merge risks, not style preferences. Few confident findings
 Check, in order, only what the change touches: correctness (edge cases, async, races) → security
 (authz, validation, injection, secrets) → reliability (failure paths, cleanup) → compatibility
 (API contracts and every client using them, migrations) → architecture → performance →
-maintainability → tests for the changed behavior → conventions.
+maintainability → tests for the changed behavior → conventions. The miss categories M1–M9 of
+[review-standard.md](review-standard.md) (client parity, modes, roles, lifecycle, scope against approval…)
+are read for every PR they apply to — they are where most real defects were found.
 
 | Level | Meaning | Merge |
 |---|---|---|
@@ -52,7 +54,10 @@ diff touches it; a finding names its row (`A01`) after the level.
 | A09 | Security Logging and Alerting Failures | A sensitive action with no audit trail; secrets or personal data written to logs; errors swallowed silently |
 | A10 | Mishandling of Exceptional Conditions | An error path that leaves state half-written, fails open, leaks internals, or is not handled at all |
 
-Money, migrations and transactions are checked wherever the PR touches them, whatever the row.
+Money, migrations and transactions are checked wherever the PR touches them, whatever the row. The same rows
+as author-side checks, with audit and logs spelled out, are S1–S7 of [review-standard.md](review-standard.md);
+`scripts/security-scan.mjs` gives the deterministic first pass (secrets, sensitive values in logs, new
+dependencies, the installed scanners).
 
 ## A finding counts only if
 
@@ -96,4 +101,5 @@ APPROVE | REQUEST_CHANGES | COMMENT — and what unblocks it
 - Security rows: OWASP Top 10:2025 (link above). For a deeper check of one row, the matching chapter of the
   OWASP Application Security Verification Standard.
 - Levels `P0`–`P3` and the merge rules are this team's own convention, not an outside standard.
+- Miss categories and the three layers (global, team, project): [review-standard.md](review-standard.md).
 - A repo's own conventions and the workspace review lessons come before this file.

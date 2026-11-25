@@ -400,9 +400,9 @@ function migrateWorktrees(root, repos, apply) {
 // with every role. A name with no section is listed at the end, so nothing is silently missing.
 export const ROLE_SECTIONS = {
   setup: ['Provisioning', 'Servers', 'Tool-touched files'],
-  dev: ['Repos', 'Excluded', 'Read-only zones', 'Test policy', 'Checks', 'Tool-touched files', 'Knowledge'],
+  dev: ['Repos', 'Excluded', 'Read-only zones', 'Test policy', 'Team agreements', 'Checks', 'Tool-touched files', 'Knowledge'],
   tester: ['Flows', 'Servers', 'Test policy'],
-  reviewer: ['Repos', 'Excluded', 'Read-only zones', 'Test policy', 'Checks', 'Tool-touched files', 'Knowledge'],
+  reviewer: ['Repos', 'Excluded', 'Read-only zones', 'Test policy', 'Team agreements', 'Checks', 'Tool-touched files', 'Knowledge'],
 }
 export function configSections(root, names) {
   const file = join(root, '.claude', 'task-flow.md')
