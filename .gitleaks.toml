@@ -1,0 +1,8 @@
+# Gitleaks' default rules, plus the fake secrets of the redact() tests (plugins/tf/tests/sources.mjs).
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "fixtures of the redact() tests, not credentials"
+paths = ['''plugins/tf/tests/sources\.mjs''']
+regexes = ['''abcdef1234567890XYZ''', '''abcd1234efgh''']

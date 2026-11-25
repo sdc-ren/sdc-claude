@@ -4,6 +4,28 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.26.0] — 2026-11-25
+
+### Fixed
+- **An expired Jira session no longer passes as signed in.** Jira keeps an expired visitor on the site instead of
+  redirecting to a login page, so the URL check let `jira.mjs` go on and fail with `HTTP 404`, and `browser.mjs auth`
+  kept the stale copy. Signed in on Jira now means `/rest/api/3/myself` answers 200.
+- **The session in your own browser is actually used.** Copying the Chrome profile and letting a second Chrome
+  decrypt it no longer signed in (measured: the session was valid in Chrome, the copy came up signed out and tf
+  fell back to a login window).
+
+### Changed
+- **Your own browser first.** `browser.mjs auth` reads the site's session from the browser you work in, which keeps
+  sessions longest, before the saved copy and before asking you to log in. The cookie store is decrypted directly
+  (macOS keychain "Safe Storage" item, asked once — choose Always Allow) and the browser is never opened or
+  driven. Chrome, Arc, Brave, Edge, Vivaldi and Chromium are read; the profile that used the site most recently
+  wins, and the next is tried when it is signed out. `--browser` and `--profile` pick one; `--no-login` stops
+  before the login window. About 6 s, no window.
+- **`jira.mjs` renews an expired session by itself.** When the saved session is signed out it takes the session
+  from your browser again and retries once; only when that fails does it ask you to sign in.
+- `.gitleaks.toml` allows the fake secrets of the `redact()` tests by value, so adding lines to that file no
+  longer breaks the line-numbered `.gitleaksignore`.
+
 ## [1.25.2] — 2026-11-25
 
 ### Changed

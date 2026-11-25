@@ -2,11 +2,13 @@
 // Run: node --test tests/sources.mjs
 import assert from 'node:assert/strict'
 import { mkdirSync, mkdtempSync, realpathSync, writeFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { createCipheriv, createHash, pbkdf2Sync } from 'node:crypto'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
-import { cookieSentTo, refreshedSession } from '../scripts/browser.mjs'
+import { browserProfilesFor, cookieSentTo, readCookieDb, refreshedSession, signedIn } from '../scripts/browser.mjs'
 import { redact } from '../scripts/metrics.mjs'
 import { okRef, okRel, projectDirName, projectDirs } from '../scripts/platform.mjs'
 import { listed, okSlug } from '../scripts/resources.mjs'
@@ -106,6 +108,57 @@ test('a cookie belongs to a site only at a domain boundary', () => {
   assert.ok(!cookieSentTo('.example.com', 'notexample.com'), 'a longer name that merely ends the same is another site')
   assert.ok(!cookieSentTo('.co.uk', 'example.com'))
   assert.ok(!cookieSentTo('other.atlassian.net', 'acme.atlassian.net'))
+})
+
+// A cookie database as Chromium writes it on macOS (version 24: the value starts with SHA-256 of the domain).
+const hasSqlite = spawnSync('sqlite3', ['-version']).status === 0
+const EPOCH = 11644473600
+function cookieDb(file, password, rows) {
+  const key = pbkdf2Sync(password, 'saltysalt', 1003, 16, 'sha1')
+  const enc = (host, v) => {
+    const c = createCipheriv('aes-128-cbc', key, Buffer.alloc(16, 0x20))
+    return Buffer.concat([Buffer.from('v10'), c.update(Buffer.concat([createHash('sha256').update(host).digest(), Buffer.from(v)])), c.final()]).toString('hex')
+  }
+  const t = (unix) => (unix ? (unix + EPOCH) * 1e6 : 0)
+  const sql = ['create table meta(key, value); insert into meta values (\'version\', \'24\');',
+    'create table cookies(host_key, name, path, value, encrypted_value blob, expires_utc integer, last_access_utc integer, is_secure, is_httponly, samesite);',
+    ...rows.map((r) => `insert into cookies values ('${r.host}', '${r.name}', '/', '', x'${enc(r.host, r.value)}', ${t(r.expires)}, ${t(r.used)}, 1, 1, ${r.sameSite ?? 1});`)].join('\n')
+  const r = spawnSync('sqlite3', [file], { input: sql })
+  assert.equal(r.status, 0, String(r.stderr))
+}
+
+test('the user\'s browser: site cookies decrypted, expired ones dropped, most recently used profile first', { skip: !hasSqlite }, () => {
+  const now = Math.floor(Date.now() / 1000)
+  const dir = tmp()
+  const chrome = join(dir, 'Chrome')
+  for (const p of ['Default', 'Profile 2']) mkdirSync(join(chrome, p), { recursive: true })
+  cookieDb(join(chrome, 'Default', 'Cookies'), 'pw', [
+    { host: 'acme.atlassian.net', name: 'tenant.session.token', value: 'old', expires: now + 86400, used: now - 86400 * 20 },
+  ])
+  cookieDb(join(chrome, 'Profile 2', 'Cookies'), 'pw', [
+    { host: 'acme.atlassian.net', name: 'tenant.session.token', value: 'fresh', expires: now + 86400 * 30, used: now - 60 },
+    { host: '.atlassian.net', name: 'ajs', value: 'a', expires: 0, used: now - 60, sameSite: 0 },
+    { host: 'acme.atlassian.net', name: 'gone', value: 'x', expires: now - 10, used: now - 60 },
+    { host: 'other.atlassian.net', name: 'tenant.session.token', value: 'not-ours', expires: now + 100, used: now },
+  ])
+  const found = browserProfilesFor('acme.atlassian.net', {}, [{ name: 'Chrome', dir: chrome, keychain: 'x' }])
+  assert.deepEqual(found.map((f) => f.profile), ['Profile 2', 'Default'])
+  assert.deepEqual(browserProfilesFor('acme.atlassian.net', { browser: 'arc' }, [{ name: 'Chrome', dir: chrome, keychain: 'x' }]), [])
+  assert.deepEqual(browserProfilesFor('acme.atlassian.net;drop', {}, [{ name: 'Chrome', dir: chrome, keychain: 'x' }]), [])
+
+  const { cookies } = readCookieDb(found[0].file, 'acme.atlassian.net', 'pw')
+  assert.deepEqual(cookies.map((c) => [c.domain, c.name, c.value]), [['acme.atlassian.net', 'tenant.session.token', 'fresh'], ['.atlassian.net', 'ajs', 'a']])
+  assert.equal(cookies[1].expires, -1, 'a session cookie stays a session cookie')
+  assert.equal(cookies[1].sameSite, 'None')
+  assert.deepEqual(readCookieDb(found[0].file, 'acme.atlassian.net', 'wrong').cookies, [], 'a wrong keychain key yields nothing, not garbage')
+})
+
+test('an expired Jira session that stays on the site as a visitor is not signed in', async () => {
+  const page = (url, ok) => ({ url: () => url, evaluate: async () => ok })
+  assert.equal(await signedIn(page('https://acme.atlassian.net/jira/your-work', false)), false)
+  assert.equal(await signedIn(page('https://acme.atlassian.net/browse/PROJ-1', true)), true)
+  assert.equal(await signedIn(page('https://id.atlassian.com/login?continue=x', true)), false)
+  assert.equal(await signedIn(page('https://yt.acme.io/issues', false)), true, 'other sites: no login page is enough')
 })
 
 test('a stored release command runs only when it is a recipe of the config with plain values filled in', () => {

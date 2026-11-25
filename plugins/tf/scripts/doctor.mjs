@@ -47,7 +47,7 @@ check(`system: ${sys.os}`, true)
 check(`shell: ${sys.shell}`, sys.shellOk, sys.shellOk ? '' : 'Windows needs Git for Windows (Git Bash): the scripts and the config recipes run through it. Install it, or set CLAUDE_CODE_GIT_BASH_PATH to bash.exe')
 check(`port lookup (${sys.portTool || 'none'})`, !!sys.portTool, 'install lsof: without it serve.mjs cannot tell whether a port is taken', false)
 if (!sys.cwdOfProcess) check('owner of a busy port', false, 'Windows cannot tell which folder a process runs from: serve.mjs trusts the server it started itself', false)
-if (!sys.chromeCookieImport) check('tracker login from Chrome cookies', false, 'macOS only — here `browser.mjs auth` opens a browser once for you to log in', false)
+if (!sys.chromeCookieImport) check('tracker login from your own browser', false, 'macOS only — here `browser.mjs auth` opens a browser once for you to log in', false)
 check(`dependency copy for new worktrees: ${sys.clone}`, sys.os === 'macos', 'a plain copy works, it is only slower', false)
 if (reaperInstalled()) check('no background cleanup job', false, 'a job of an older tf version still cleans up every 30 minutes — remove it: node <plugin>/scripts/reaper.mjs uninstall', false)
 

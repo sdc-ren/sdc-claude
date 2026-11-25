@@ -1,6 +1,3 @@
-# Fake secrets in the redact() tests (plugins/tf/tests/sources.mjs) — fixtures, not credentials.
+# Commits from before .gitleaks.toml: the fake secrets of the redact() tests (plugins/tf/tests/sources.mjs).
 fd7e1642bd4c5c84aab2aa01dee27a9d248cfe94:plugins/tf/tests/sources.mjs:generic-api-key:144
 fd7e1642bd4c5c84aab2aa01dee27a9d248cfe94:plugins/tf/tests/sources.mjs:curl-auth-header:143
-plugins/tf/tests/sources.mjs:generic-api-key:144
-plugins/tf/tests/sources.mjs:curl-auth-header:143
-plugins/tf/tests/sources.mjs:curl-auth-header:137

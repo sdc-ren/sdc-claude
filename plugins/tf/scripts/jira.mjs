@@ -156,14 +156,19 @@ export function issueHistory(issue, comments, since) {
 
 // ── Browser ─────────────────────────────────────────────────────────────────
 async function inJira(o, fn) {
-  const { openBrowser, closeBrowser } = await import('./browser.mjs')
-  const b = await openBrowser({ root: o.root, slug: o.slug, playwrightFrom: o.playwright, auth: o.auth })
-  try {
-    const page = await b.context.newPage()
-    await page.goto(`${o.site}/browse/${o.key}`, { waitUntil: 'domcontentloaded' })
-    if (!page.url().startsWith(o.site)) throw new Error(`not signed in to ${o.site} — run: node ${join(HERE, 'browser.mjs')} auth ${o.auth} --url ${o.site}`)
-    return await fn(page)
-  } finally { await closeBrowser(b) }
+  const { openBrowser, closeBrowser, ensureAuth, signedIn } = await import('./browser.mjs')
+  for (let attempt = 0; ; attempt++) {
+    const b = await openBrowser({ root: o.root, slug: o.slug, playwrightFrom: o.playwright, auth: o.auth })
+    try {
+      const page = await b.context.newPage()
+      await page.goto(`${o.site}/browse/${o.key}`, { waitUntil: 'domcontentloaded' })
+      if (page.url().startsWith(o.site) && (await signedIn(page))) return await fn(page)
+    } finally { await closeBrowser(b) }
+    // The saved copy expired: take the session again from the user's own browser (no window, no prompt
+    // beyond the keychain), then retry once. Only a login by hand is left to the user.
+    if (attempt === 0 && o.auth && (await ensureAuth(o.auth, o.site, { playwrightFrom: o.playwright, interactive: false })) !== 'failed') continue
+    throw new Error(`not signed in to ${o.site} — sign in in your browser, or run: node ${join(HERE, 'browser.mjs')} auth ${o.auth} --url ${o.site}`)
+  }
 }
 const getComments = (page, key) => page.evaluate(async (key) => {
   const all = []
