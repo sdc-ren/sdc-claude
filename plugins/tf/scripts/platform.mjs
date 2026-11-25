@@ -107,9 +107,20 @@ export function androidSdk(flag) {
 }
 // A tool inside the SDK: `sdkTool(sdk, 'platform-tools', 'adb')` → …/adb or …\adb.exe.
 export const sdkTool = (sdk, ...parts) => { const p = join(sdk, ...parts); return IS_WIN && !/\.(exe|bat|cmd)$/i.test(p) ? `${p}.exe` : p }
-// Chrome's profile folder, only where tf can read its cookie store (macOS). Elsewhere the user logs in
-// once in the browser tf opens.
-export const chromeProfiles = () => (IS_MAC ? join(homedir(), 'Library', 'Application Support', 'Google', 'Chrome') : '')
+// The user's own Chromium browsers whose cookie store tf can read (macOS: the key is in the login keychain).
+// Elsewhere this is empty and the user logs in once in the browser tf opens.
+export function userBrowsers() {
+  if (!IS_MAC) return []
+  const base = join(homedir(), 'Library', 'Application Support')
+  return [
+    ['Chrome', ['Google', 'Chrome'], 'Chrome Safe Storage'],
+    ['Arc', ['Arc', 'User Data'], 'Arc Safe Storage'],
+    ['Brave', ['BraveSoftware', 'Brave-Browser'], 'Brave Safe Storage'],
+    ['Edge', ['Microsoft Edge'], 'Microsoft Edge Safe Storage'],
+    ['Vivaldi', ['Vivaldi'], 'Vivaldi Safe Storage'],
+    ['Chromium', ['Chromium'], 'Chromium Safe Storage'],
+  ].map(([name, dir, keychain]) => ({ name, dir: join(base, ...dir), keychain }))
+}
 
 // ── Programs and shells ──────────────────────────────────────────────────────
 export function which(bin) {

@@ -9,12 +9,13 @@
 //   try { const page = await b.context.newPage(); … } finally { await closeBrowser(b) }
 //
 // CLI:
-//   auth <name> --url <site> [--playwright <package.json>] [--profile "Profile 1"]
+//   auth <name> --url <site> [--playwright <package.json>] [--browser Chrome] [--profile "Profile 1"] [--no-login]
 //     Ensure ~/.claude/task-flow/auth/<name>.json holds a logged-in session for <site>:
-//     1) existing saved session still valid → done
-//     2) macOS only: else copy the cookies of the user's Chrome profile that has cookies for the site
-//        (macOS asks the user to allow "Chrome Safe Storage" once) → save if logged in
-//     3) else open a visible browser and wait for the user to log in → save
+//     1) macOS: the session of the user's own browser (Chrome, Arc, Brave, Edge, Vivaldi, Chromium), from the
+//        profile that used the site most recently, checked in a headless test browser → save. The user's
+//        browser is only read, never opened (macOS asks once to allow its "Safe Storage" keychain item)
+//     2) else the saved session, if it is still valid
+//     3) else (unless --no-login) open a visible browser and wait for the user to log in → save
 //   check <name> --url <site>   exit 0 if the saved session is still logged in
 
 import { createRequire } from 'node:module'
@@ -22,14 +23,12 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { existsSync, mkdirSync, mkdtempSync, copyFileSync, readFileSync, readdirSync, renameSync, rmSync, chmodSync, writeFileSync } from 'node:fs'
 import { execFileSync } from 'node:child_process'
+import { createDecipheriv, createHash, pbkdf2Sync } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
 import { add, drop } from './resources.mjs'
-import { chromeProfiles, killCmd, stateDir } from './platform.mjs'
+import { killCmd, stateDir, userBrowsers } from './platform.mjs'
 
 const AUTH_DIR = join(stateDir(), 'auth')
-// Reading Chrome's cookie store is implemented for macOS only; elsewhere this is '' and `auth` goes
-// straight to the visible browser where the user logs in once.
-const CHROME_DIR = chromeProfiles()
 const LOGIN_RE = /next_path=|\/login|\/signin|\/sign-in|id\.atlassian\.com|accounts\.google\.com|\/auth\//i
 
 export const authFile = (name) => join(AUTH_DIR, `${name}.json`)
@@ -90,10 +89,17 @@ export async function closeBrowser(b) {
   if (b.root && b.slug) drop(b.root, b.slug, 'browser', String(b.pid))
 }
 
+// Signed in on the page that is open now. A URL check alone is not enough: an expired Jira session stays on the
+// site as an anonymous visitor instead of redirecting to a login page, so Jira is asked who the user is.
+export async function signedIn(page) {
+  if (LOGIN_RE.test(page.url())) return false
+  if (!/\.atlassian\.net$/i.test(new URL(page.url()).hostname)) return true
+  return page.evaluate(async () => (await fetch('/rest/api/3/myself', { headers: { Accept: 'application/json' } })).ok).catch(() => false)
+}
 async function loggedIn(page, url) {
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 }).catch(() => {})
   await page.waitForTimeout(3000)
-  return !LOGIN_RE.test(page.url())
+  return signedIn(page)
 }
 export async function checkAuth(name, url, playwrightFrom) {
   if (!existsSync(authFile(name))) return false
@@ -110,27 +116,133 @@ export async function checkAuth(name, url, playwrightFrom) {
 // Would a browser send a cookie stored under `key` (a host, or ".parent.domain") to `host`?
 export const cookieSentTo = (key, host) => key === host || (key.startsWith('.') && `.${host}`.endsWith(key))
 
-function chromeProfileFor(host, wanted) {
-  if (!CHROME_DIR || !existsSync(CHROME_DIR)) return null
-  // The host comes from a URL someone gave us. It never reaches a shell or the SQL text: sqlite3 is run
-  // without a shell, with a fixed query, and the host names are compared here.
-  if (!/^[a-z0-9.-]+$/.test(host)) return null
-  const profiles = wanted ? [wanted] : readdirSync(CHROME_DIR).filter((d) => d === 'Default' || d.startsWith('Profile '))
-  for (const p of profiles) {
-    if (p !== 'Default' && !/^Profile \d+$/.test(p)) continue
-    for (const rel of ['Network/Cookies', 'Cookies']) {
-      const src = join(CHROME_DIR, p, rel)
-      if (!existsSync(src)) continue
-      const dir = mkdtempSync(join(tmpdir(), 'tf-ck-'))
+// ── The user's own browser ───────────────────────────────────────────────────
+// The browser the user works in keeps its sessions far longer than a saved copy, so it is read first. Its cookie
+// store is decrypted here (macOS: AES-128-CBC with a key derived from the browser's "Safe Storage" keychain
+// item) and handed to the test browser as a storage state — the user's browser is never opened or driven.
+
+const CHROME_EPOCH = 11644473600 // seconds between 1601-01-01 (Chrome's clock) and 1970-01-01
+const SAME_SITE = { 0: 'None', 1: 'Lax', 2: 'Strict' }
+
+// Rows of a copied cookie database that the browser would send to `host`, decrypted with `password`.
+// Expired cookies are dropped; `lastUsed` (unix seconds) tells which profile used the site most recently.
+export function readCookieDb(db, host, password) {
+  // The host comes from a URL someone gave us. It never reaches a shell or the SQL text: sqlite3 runs without a
+  // shell, with a fixed query, and host names are compared here.
+  const out = execFileSync('sqlite3', ['-json', db,
+    'select host_key, name, path, hex(encrypted_value) as ev, value, expires_utc, last_access_utc, is_secure, is_httponly, samesite from cookies'],
+  { stdio: ['ignore', 'pipe', 'ignore'], maxBuffer: 256 * 1024 * 1024 }).toString()
+  const version = Number(execFileSync('sqlite3', [db, "select value from meta where key = 'version'"], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()) || 0
+  const key = pbkdf2Sync(password, 'saltysalt', 1003, 16, 'sha1')
+  const now = Date.now() / 1000
+  const cookies = []
+  let lastUsed = 0
+  for (const r of out.trim() ? JSON.parse(out) : []) {
+    if (!cookieSentTo(r.host_key, host)) continue
+    const expires = Number(r.expires_utc) ? Number(r.expires_utc) / 1e6 - CHROME_EPOCH : -1
+    if (expires !== -1 && expires < now) continue
+    let value = r.value || ''
+    const enc = Buffer.from(r.ev || '', 'hex')
+    if (enc.length) {
+      if (enc.subarray(0, 3).toString() !== 'v10') continue // another scheme: not readable here
       try {
-        const tmp = join(dir, 'c.db')
-        copyFileSync(src, tmp) // Chrome locks the live db; read a copy (values stay encrypted, only host names are read)
-        const keys = execFileSync('sqlite3', [tmp, 'select distinct host_key from cookies'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().split(/\r?\n/)
-        if (keys.some((k) => cookieSentTo(k.trim(), host))) return { profile: p, rel }
-      } catch {} finally { rmSync(dir, { recursive: true, force: true }) }
+        const d = createDecipheriv('aes-128-cbc', key, Buffer.alloc(16, 0x20))
+        let plain = Buffer.concat([d.update(enc.subarray(3)), d.final()])
+        // Database version 24+: the value starts with SHA-256 of the cookie's domain — which also proves the key.
+        if (version >= 24) {
+          if (!plain.subarray(0, 32).equals(createHash('sha256').update(r.host_key).digest())) continue
+          plain = plain.subarray(32)
+        }
+        value = plain.toString('utf8')
+      } catch { continue } // wrong key: this profile belongs to another keychain item
+    }
+    const secure = !!Number(r.is_secure)
+    let sameSite = SAME_SITE[Number(r.samesite)] || 'Lax'
+    if (sameSite === 'None' && !secure) sameSite = 'Lax'
+    cookies.push({ name: r.name, value, domain: r.host_key, path: r.path || '/', expires, httpOnly: !!Number(r.is_httponly), secure, sameSite })
+    lastUsed = Math.max(lastUsed, Number(r.last_access_utc) / 1e6 - CHROME_EPOCH)
+  }
+  return { cookies, lastUsed }
+}
+
+// Profiles of the user's browsers that hold cookies for `host`, most recently used first. Only host names and
+// access times are read here; no keychain access yet.
+export function browserProfilesFor(host, { browser, profile } = {}, browsers = userBrowsers()) {
+  if (!/^[a-z0-9.-]+$/.test(host)) return []
+  const found = []
+  for (const b of browsers) {
+    if (browser && b.name.toLowerCase() !== String(browser).toLowerCase()) continue
+    if (!existsSync(b.dir)) continue
+    const profiles = profile ? [profile] : readdirSync(b.dir).filter((d) => d === 'Default' || /^Profile \d+$/.test(d))
+    for (const p of profiles) {
+      if (p !== 'Default' && !/^Profile \d+$/.test(p)) continue
+      for (const rel of ['Network/Cookies', 'Cookies']) {
+        const src = join(b.dir, p, rel)
+        if (!existsSync(src)) continue
+        const dir = mkdtempSync(join(tmpdir(), 'tf-ck-'))
+        try {
+          const tmp = join(dir, 'c.db')
+          copyFileSync(src, tmp) // the browser locks the live database; read a copy
+          const rows = execFileSync('sqlite3', [tmp, 'select host_key, max(last_access_utc) from cookies group by host_key'], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().split(/\r?\n/)
+          let last = 0
+          for (const line of rows) {
+            const [k, t] = line.split('|')
+            if (k && cookieSentTo(k.trim(), host)) last = Math.max(last, Number(t) / 1e6 - CHROME_EPOCH)
+          }
+          if (last) found.push({ browser: b, profile: p, file: src, lastUsed: last })
+        } catch {} finally { rmSync(dir, { recursive: true, force: true }) }
+        break
+      }
     }
   }
-  return null
+  return found.sort((a, b) => b.lastUsed - a.lastUsed)
+}
+
+function keychainPassword(service) {
+  return execFileSync('security', ['find-generic-password', '-w', '-s', service], { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim()
+}
+
+// The site's session from the user's own browser, verified in a headless test browser and saved. Tries each
+// profile that has the site, most recently used first, and stops at the first one that is signed in.
+async function fromUserBrowser(name, url, playwrightFrom, pick = {}) {
+  const host = new URL(url).hostname
+  const passwords = {}
+  for (const f of browserProfilesFor(host, pick)) {
+    const label = `${f.browser.name} profile "${f.profile}"`
+    let password = passwords[f.browser.keychain]
+    if (password === undefined) {
+      console.log(`Reading the ${host} session from ${label} (macOS may ask to allow "${f.browser.keychain}" — choose Always Allow).`)
+      try { password = keychainPassword(f.browser.keychain) } catch { password = '' }
+      passwords[f.browser.keychain] = password
+    }
+    if (!password) { console.log(`${label}: keychain access denied`); continue }
+    const dir = mkdtempSync(join(tmpdir(), 'tf-ck-'))
+    let state
+    try {
+      const tmp = join(dir, 'c.db')
+      copyFileSync(f.file, tmp)
+      const { cookies } = readCookieDb(tmp, host, password)
+      if (!cookies.length) continue
+      state = { cookies, origins: [] }
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+    if (await stateWorks(state, url, playwrightFrom)) {
+      writePrivate(authFile(name), state)
+      console.log(`Signed in from ${label}.`)
+      return true
+    }
+    console.log(`${label}: not signed in to ${host}`)
+  }
+  return false
+}
+
+async function stateWorks(storageState, url, playwrightFrom) {
+  const { chromium } = playwright(playwrightFrom)
+  const browser = await chromium.launch()
+  try {
+    return await loggedIn(await (await browser.newContext({ storageState })).newPage(), url)
+  } finally {
+    await browser.close()
+  }
 }
 
 function siteOnly(state, url) {
@@ -139,31 +251,6 @@ function siteOnly(state, url) {
   return {
     cookies: state.cookies.filter((c) => cookieSentTo(c.domain, host)),
     origins: state.origins.filter((o) => new URL(o.origin).host === host),
-  }
-}
-
-async function fromChrome(name, url, playwrightFrom, wanted) {
-  const found = chromeProfileFor(new URL(url).hostname, wanted)
-  if (!found) return false
-  console.log(`Using cookies from Chrome profile "${found.profile}" (macOS may ask to allow "Chrome Safe Storage").`)
-  const dir = mkdtempSync(join(tmpdir(), 'tf-chrome-'))
-  try {
-    mkdirSync(join(dir, 'Default', 'Network'), { recursive: true })
-    copyFileSync(join(CHROME_DIR, 'Local State'), join(dir, 'Local State'))
-    copyFileSync(join(CHROME_DIR, found.profile, found.rel), join(dir, 'Default', found.rel))
-    const { chromium } = playwright(playwrightFrom)
-    // Real Chrome + real keychain so the copied cookies decrypt.
-    const ctx = await chromium.launchPersistentContext(dir, { channel: 'chrome', headless: false, ignoreDefaultArgs: ['--use-mock-keychain'] })
-    try {
-      const ok = await loggedIn(ctx.pages()[0] || (await ctx.newPage()), url)
-      // Keep only the site's cookies: the copied profile holds every site's, and some fail setCookies.
-      if (ok) writePrivate(authFile(name), siteOnly(await ctx.storageState(), url))
-      return ok
-    } finally {
-      await ctx.close()
-    }
-  } finally {
-    rmSync(dir, { recursive: true, force: true })
   }
 }
 
@@ -177,7 +264,7 @@ async function manualLogin(name, url, playwrightFrom) {
     console.log(`Log in to ${url} in the opened window. Waiting up to 10 minutes…`)
     for (let i = 0; i < 300; i++) {
       await page.waitForTimeout(2000)
-      if (new URL(page.url()).host === new URL(url).host && !LOGIN_RE.test(page.url())) {
+      if (new URL(page.url()).host === new URL(url).host && (await signedIn(page))) {
         await page.waitForTimeout(3000)
         // Only this site's cookies and storage: the window may have passed through other sites on the way in.
         writePrivate(authFile(name), siteOnly(await ctx.storageState(), url))
@@ -190,13 +277,16 @@ async function manualLogin(name, url, playwrightFrom) {
   }
 }
 
-export async function ensureAuth(name, url, { playwrightFrom, profile } = {}) {
+// Order: the user's own browser first (it keeps sessions longest), then the saved copy, then a visible
+// browser for the user to log in once. `interactive: false` stops before the last step (agents mid-run).
+export async function ensureAuth(name, url, { playwrightFrom, browser, profile, interactive = true } = {}) {
   mkdirSync(AUTH_DIR, { recursive: true, mode: 0o700 })
-  if (await checkAuth(name, url, playwrightFrom)) return 'valid'
-  if (await fromChrome(name, url, playwrightFrom, profile).catch((e) => (console.log(`Chrome copy failed: ${e.message.split('\n')[0]}`), false))) {
+  if (await fromUserBrowser(name, url, playwrightFrom, { browser, profile }).catch((e) => (console.log(`Reading the browser session failed: ${e.message.split('\n')[0]}`), false))) {
     chmodSync(authFile(name), 0o600)
-    return 'from-chrome'
+    return 'from-browser'
   }
+  if (await checkAuth(name, url, playwrightFrom)) return 'valid'
+  if (!interactive) return 'failed'
   if (await manualLogin(name, url, playwrightFrom)) {
     chmodSync(authFile(name), 0o600)
     return 'manual-login'
@@ -210,13 +300,13 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   const flags = {}
   for (let i = 0; i < rest.length; i++) if (rest[i].startsWith('--')) flags[rest[i].slice(2)] = rest[++i]
   if (!name || !flags.url) {
-    console.error('usage: browser.mjs auth|check <name> --url <site> [--playwright <package.json>] [--profile <Chrome profile>]')
+    console.error('usage: browser.mjs auth|check <name> --url <site> [--playwright <package.json>] [--browser Chrome|Arc|Brave|Edge|Vivaldi|Chromium] [--profile "Profile 1"] [--no-login]')
     process.exit(2)
   }
   if (cmd === 'check') {
     process.exit((await checkAuth(name, flags.url, flags.playwright)) ? 0 : 1)
   } else if (cmd === 'auth') {
-    const result = await ensureAuth(name, flags.url, { playwrightFrom: flags.playwright, profile: flags.profile })
+    const result = await ensureAuth(name, flags.url, { playwrightFrom: flags.playwright, browser: flags.browser, profile: flags.profile, interactive: !('no-login' in flags) })
     console.log(`auth ${name}: ${result}`)
     process.exit(result === 'failed' ? 1 : 0)
   }

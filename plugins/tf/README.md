@@ -643,7 +643,7 @@ run — servers, browser, emulator — has only been done on macOS so far; repor
 | Shell for scripts and config recipes | `/bin/sh` | `/bin/sh` | Git Bash (required) |
 | Dependency copy for a new worktree | APFS clone (instant) | reflink on btrfs/xfs, else copy | copy |
 | Who owns a busy port | by the process's folder | by the process's folder | the server tf started itself |
-| Tracker login | Chrome cookies, or log in once | log in once in the browser tf opens | log in once in the browser tf opens |
+| Tracker login | the session of your own browser (Chrome, Arc, Brave, Edge, Vivaldi), read without opening it; else log in once | log in once in the browser tf opens | log in once in the browser tf opens |
 | Android emulator | yes | needs KVM | needs hardware acceleration (WHPX/AEHD) |
 | Claude Code desktop app | yes | Debian-based only (beta); else the CLI | yes |
 
