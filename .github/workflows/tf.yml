@@ -27,7 +27,7 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Scripts parse
         shell: bash
-        run: for f in plugins/tf/scripts/*.mjs plugins/tf/core/*.mjs plugins/tf/modules/*/*.mjs plugins/tf/modules/*/*/*.mjs plugins/tf/modules/*/*/*/*.mjs plugins/tf/cli/*.mjs plugins/tf/hosts/*/*.mjs plugins/tf/engine/src/*.mjs plugins/tf/build/*.mjs plugins/tf/runtime/*.mjs; do node --check "$f"; done
+        run: shopt -s nullglob; for f in plugins/tf/scripts/*.mjs plugins/tf/core/*.mjs plugins/tf/modules/*/*.mjs plugins/tf/modules/*/*/*.mjs plugins/tf/cli/*.mjs plugins/tf/hosts/*/*.mjs plugins/tf/engine/src/*.mjs plugins/tf/build/*.mjs plugins/tf/runtime/*.mjs; do node --check "$f"; done
       - name: Generated files match their sources (host builds)
         run: node plugins/tf/hosts/claude/build.mjs --check && node plugins/tf/hosts/codex/build.mjs --check && node --test plugins/tf/tests/build.mjs
       - name: Process runtime (Codex driver, guard hook, background runner; fake agents)
