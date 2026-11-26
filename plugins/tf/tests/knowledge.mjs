@@ -122,7 +122,7 @@ test('init case A, one repo: a new config, local excludes, notes and maps; a sec
   const exclude = readFileSync(join(ws, '.git', 'info', 'exclude'), 'utf8')
   for (const x of ['/.worktrees/', '/.pipeline/', '/knowledge/*', '!/knowledge/pipeline/']) assert.ok(exclude.includes(x), x)
   assert.equal(git(ws, 'status', '--porcelain'), '?? knowledge/', 'only the hand-kept notes show; the user chooses to commit them')
-  assert.ok(r.gaps.some((g) => g.kind === 'index'))
+  assert.ok(r.gaps.some((g) => g.kind === 'index' || g.kind === 'tool'), 'no index yet: either the tool or the index is a gap, depending on the machine')
   assert.equal(draft(ws).changed, false, 'init twice: nothing more to write')
 })
 
@@ -145,7 +145,9 @@ test('init case B: a config and the workspace\'s own generator — only the Know
   assert.ok(after.includes('Our own notes line.') && after.includes('- never X'))
   assert.doesNotMatch(after, /⚠ confirm/, 'applying confirms the commands')
   assert.ok(!existsSync(join(ws, 'knowledge', 'manifest.json')), 'tf does not generate over the workspace\'s own maps')
-  assert.equal(before.split('\n').length + 7, after.split('\n').length)
+  // 6 lines, plus "Code index" when this machine has a code-index tool.
+  assert.equal(after.split('\n').length - before.split('\n').length, d.diff.length)
+  assert.ok(d.diff.length === 6 || d.diff.length === 7)
 })
 
 test('init case C and D, and --from takes only the shared sections', () => {

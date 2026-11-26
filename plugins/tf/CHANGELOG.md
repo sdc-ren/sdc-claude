@@ -4,6 +4,13 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.31.1] — 2026-11-26
+
+### Fixed
+- Two `/tf:init` tests assumed codegraph was installed on the machine; CI runners do not have it, so 1.31.0's CI
+  failed there. The tests now accept either gap (the tool, or the index) and count the Knowledge lines added
+  (6, or 7 with a code-index tool). tf itself is unchanged.
+
 ## [1.31.0] — 2026-11-26
 
 ### Added
