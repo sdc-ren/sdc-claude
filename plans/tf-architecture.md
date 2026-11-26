@@ -59,25 +59,28 @@ Quy tắc import (kiểm tra bằng test, mục 9):
 
 ```
 plugins/tf/
-  core/
-    platform.mjs          ← scripts/platform.mjs (macOS/Linux/Windows)
-    paths.mjs             ← thư mục dữ liệu, config workspace, migrate đường dẫn cũ (mục 7)
-    config.mjs            ← đọc workspace config theo vai trò (đang nằm trong task.mjs)
-    naming.mjs            ← luật tên commit/PR (đang bị chép đôi trong guard.ts)
-    guard-rules.mjs       ← logic thuần của hooks/guard.ts: (job, tool, args) → allow | deny + lý do
-    ports.mjs             ← định nghĩa cổng (JSDoc typedef), xem mục 5
-    log.mjs
-  modules/
-    task/                 ← task.mjs, sources.mjs (định danh task, khóa, vòng)
-    resources/            ← resources.mjs, pool.mjs, reaper.mjs, fresh.mjs
-    env/                  ← serve.mjs, fastdeps.mjs, emulator.mjs, apk.mjs
-    e2e/                  ← cases.mjs, flow-kit.mjs, flow-run.mjs, flow-peek.mjs, browser.mjs, annotate.mjs, webp.mjs
+  core/                   ✅ (1.27.0)
+    platform.mjs          ← macOS/Linux/Windows
+    paths.mjs             ← thư mục dữ liệu, config workspace, đọc đường dẫn cũ (mục 7)
+    config.mjs            ← đọc workspace config, các mục theo vai trò
+    naming.mjs            ← luật tên commit/PR (hook-safe: không import gì)
+    guard-rules.mjs       ← logic thuần của guard: (job, tool, args) → lý do từ chối (hook-safe)
+    main.mjs              ← isMain(): module tự chạy dòng lệnh khi được gọi trực tiếp hoặc qua vỏ scripts/
+    ports.mjs             ← định nghĩa cổng (JSDoc typedef), xem mục 5 — PR 2
+  modules/                ✅ (1.27.0) — module import thẳng file của module khác, không qua index.mjs:
+                            `export *` của nhiều file trong một index sẽ âm thầm bỏ tên trùng
+    task/                 ← task.mjs, sources.mjs
+    resources/            ← resources.mjs, reaper.mjs
+    worktree/             ← pool.mjs, fastdeps.mjs, fresh.mjs
+    env/                  ← serve.mjs, emulator.mjs, apk.mjs
+    browser/              ← browser.mjs (dùng chung cho jira, zalo, e2e)
+    e2e/                  ← cases.mjs, flow-kit.mjs, flow-run.mjs, flow-peek.mjs, annotate.mjs, webp.mjs
     review/               ← security-scan.mjs
-    tracker/jira/         ← jira.mjs
-    vcs/github/           ← pr-feedback.mjs
-    chat/zalo/            ← zalo.mjs (cho /tf:digest)
-    design/canvas/        ← canvas.mjs, canvas-runtime.js, canvas-smoke.mjs
-    metrics/              ← metrics.mjs, đọc transcript qua cổng TranscriptSource
+    vcs/                  ← pr-feedback.mjs, naming.mjs (dòng lệnh của core/naming)
+    tracker/              ← jira.mjs
+    chat/                 ← zalo.mjs (cho /tf:digest)
+    design/               ← canvas.mjs, canvas-runtime.js, canvas-smoke.mjs
+  scripts/                ← vỏ một dòng `export * from '../modules/…'` cho mọi đường dẫn cũ; test chặn code mới ở đây
   engine/
     index.mjs             ← vòng chính (chỉ điều phối)
     dispatch.mjs          ← kiểm tra dispatch của PM: vai trò theo mode, nhóm song song, writer ≠ judge
@@ -92,11 +95,15 @@ plugins/tf/
                             (thay docs/orchestrator*.md, pm-*.md, reviewer-*.md, attach.md, demo.md, digest.md)
     guidelines/           ← giữ nguyên
     partials/             ← đoạn dùng chung (hỏi người dùng, mở file cho người dùng …) có bản theo năng lực host
-  cli/
-    tf.mjs                ← `tf <nhóm> <lệnh>`: tf task resolve, tf cases validate, tf serve start, tf guard check, tf run …
+  cli/                    ✅ (1.27.0)
+    commands.mjs          ← tên lệnh → module (tên = tên script cũ: tf task, tf cases, tf serve …)
+    run.mjs               ← chạy dòng lệnh của module ngay trong tiến trình; help, --version
+    tf.mjs                ← `tf <lệnh> [args]` với các lệnh chung
   hosts/
     _contract/            ← mô tả hợp đồng adapter + bộ test tuân thủ (mục 9)
     claude/
+      transcripts.mjs, artifacts-local.mjs, artifacts-mcp.mjs, metrics.mjs, doctor.mjs  ✅ (1.27.0)
+      tf.mjs              ← `tf` của Claude: lệnh chung + doctor, metrics, artifacts-local ✅ (1.27.0)
       host.json           ← khai báo năng lực
       build.mjs           ← sinh .claude-plugin/, skills/, agents/ từ content/
       runtime-workflow.mjs← cài cổng Runtime bằng agent()/parallel()/phase() của Workflow
@@ -193,9 +200,14 @@ process tách JSON từ câu trả lời cuối, kiểm tra theo `engine/schemas
    `naming`, `guard-rules`. Guard (`hooks/guard.ts`) chỉ còn phần nối sự kiện, luật nằm ở `core/guard-rules.mjs`, bỏ bản
    chép `naming`. Phần transcript của Claude chuyển sớm sang `hosts/claude/transcripts.mjs`. `scripts/platform.mjs` và
    `scripts/naming.mjs` giữ làm vỏ tương thích cho đến bước 4.
-3. **cli/tf.mjs**: thêm lệnh `tf`; prompt trên Claude chuyển sang `{{tf}}` (build thay bằng
-   `node ${CLAUDE_PLUGIN_ROOT}/cli/tf.mjs`), kết quả như cũ.
-4. **modules/**: chuyển script vào từng miền, mỗi lần một miền, test chạy sau mỗi lần.
+3. ✅ **cli/tf.mjs**: lệnh `tf` (và `hosts/claude/tf.mjs` thêm lệnh riêng của Claude). Prompt **chưa** chuyển sang
+   `tf`: việc đó đi cùng bước 6 (sinh plugin từ `content/` với `{{tf}}`), để PR 1 không sửa prompt nào. Guard chặn đăng
+   comment qua `tf pr-feedback` / `tf jira` như qua script.
+4. ✅ **modules/**: 28 script chuyển vào 11 miền bằng `git mv` (giữ lịch sử); `scripts/` còn vỏ re-export. Kiểm tra:
+   31 lệnh chạy trên bản cũ và bản mới với cùng đầu vào cho cùng đầu ra và mã thoát; `tests/cli.mjs` so `tf <lệnh>` với
+   script cũ.
+
+**PR 1 = bước 1–4 (1.27.0).** PR 2 = bước 5–6, PR 3 = bước 7 (Codex), PR 4 = bước 8 (Copilot).
 5. **engine/**: chia `task-flow.js`, thêm cổng Runtime, `hosts/claude/runtime-workflow.mjs`; build gộp lại một file.
    Điều kiện qua: `tests/engine.mjs` pass, một `/tf:build` thật ra cùng kết quả.
 6. **content/ + hosts/claude/build.mjs**: dời nội dung, sinh lại plugin Claude vào `dist/claude`; diff so với plugin cũ

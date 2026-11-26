@@ -12,18 +12,25 @@ pull requests are all welcome.
 
 ## Layout
 
-Everything for the plugin lives in `plugins/tf/`:
+Everything for the plugin lives in `plugins/tf/`. The code is layered so it can run on more than one coding
+agent ([plans/tf-architecture.md](plans/tf-architecture.md)); imports only point down this table, and
+`tests/boundaries.mjs` checks it:
 
 | Folder | What it holds |
 |---|---|
+| `hosts/claude/` | what only Claude Code has: its transcripts, artifacts, `doctor`, `metrics`, the `tf` entry point with those commands |
+| `cli/` | `tf <command>`: one entry point for every module's command line |
+| `modules/<domain>/` | the Node helpers the agents call, one folder per domain (task, resources, worktree, env, browser, e2e, review, vcs, tracker, chat, design) |
+| `core/` | what everything shares: platform, paths, config, naming and guard rules. Names no coding agent |
+| `scripts/` | the old entry points, kept as one-line re-exports so prompts and saved commands keep working |
 | `agents/` | the role prompts (PM, lead, dev, tester, reviewer) |
 | `engine/task-flow.js` | the workflow executor and its hard rules |
 | `skills/` | the `/tf:*` commands |
-| `scripts/` | Node helpers the agents call (no npm dependencies) |
 | `guidelines/`, `docs/` | the standards and the per-mode instructions agents read |
-| `hooks/guard.ts` | the tool-use guard |
+| `hooks/` | Claude Code's hooks module: the tool-use guard (rules in `core/guard-rules.mjs`) and the Artifacts band |
 | `tests/` | `node --test` suites, plus `guard.test.ts` for the hook |
 
+No npm dependencies anywhere. New code goes in `core/` or `modules/`, never in `scripts/`.
 [plugins/tf/docs/design.md](plugins/tf/docs/design.md) explains the roles, hard rules and files.
 
 ## Making a change

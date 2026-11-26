@@ -1,6 +1,6 @@
 // tf — artifact picker above the prompt.
 // A band above the chat input lists this workspace's Claude artifacts, canvases and design systems
-// (found by scripts/artifacts-local.mjs: created in this workspace's sessions, attached to its tasks,
+// (found by hosts/claude/artifacts-local.mjs: created in this workspace's sessions, attached to its tasks,
 // or pinned in its config). Press one to pick it; picked items are appended as links to the next
 // message you send, e.g. `/tf:build PROJ-12`, which then attaches them to the task.
 import { atom, read, update } from 'claude-code'
@@ -31,7 +31,7 @@ async function refresh($: EngineInterface, startCwd: string) {
   }
   if (!root) return
   try {
-    const script = `${$.plugin.root}/scripts/artifacts-local.mjs`
+    const script = `${$.plugin.root}/hosts/claude/artifacts-local.mjs`
     const { exitCode, stdout, stderr } = await $.process.run(['node', script, root], { timeoutMs: 60_000 })
     if (exitCode !== 0) throw new Error((stderr || `exit ${exitCode}`).trim().split('\n').pop())
     const list = JSON.parse(stdout) as TfArtifact[]

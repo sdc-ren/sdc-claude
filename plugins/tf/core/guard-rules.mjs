@@ -68,7 +68,8 @@ const AUTH = /(?:task-flow|\.tf)[\\/]+auth(?![\w-])/i
 const OUTWARD = [
   [/\bgh\s+pr\s+merge\b|\bgh\s+api\b[^\n]*\/(merge|merges|auto-merge)\b|\bgh\s+pr\s+review\b/, 'never merges, approves or reviews a PR on GitHub — a PR stops at its link, and the user decides'],
   [/\bgit\b[^\n;&|]*\bpush\b[^\n;&|]*\s(--force(-with-lease|-if-includes)?\b|-[a-zA-Z]*f[a-zA-Z]*\b|\+\S)/, 'never force-pushes — push a new commit, or report why the branch cannot be pushed'],
-  [/\bgh\s+(pr|issue)\s+comment\b|pr-feedback\.mjs["']?\s+(post|reply|comment|review|resolve)\b|jira\.mjs["']?\s+comment\b[^\n;&|]*\s--confirm\b/, 'never posts a comment, a reply or a review — write the draft to the task folder; the orchestrator posts it after the user approved the text'],
+  // The scripts by file (pr-feedback.mjs …) or as `tf` commands (tf pr-feedback …).
+  [/\bgh\s+(pr|issue)\s+comment\b|\bpr-feedback(?:\.mjs)?["']?\s+(post|reply|comment|review|resolve)\b|\bjira(?:\.mjs)?["']?\s+comment\b[^\n;&|]*\s--confirm\b/, 'never posts a comment, a reply or a review — write the draft to the task folder; the orchestrator posts it after the user approved the text'],
 ]
 
 // The text of a quoted shell argument after a flag: "…", '…', or the first line of a "$(cat <<'EOF' … EOF)"

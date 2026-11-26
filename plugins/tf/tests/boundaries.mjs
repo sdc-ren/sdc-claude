@@ -45,7 +45,8 @@ const filesIn = (top, keep = (n) => CODE.test(n)) => { try { return walk(join(RO
 
 // Static and dynamic import specifiers of a file.
 function specifiers(file) {
-  const src = readFileSync(file, 'utf8')
+  // Comment lines are not imports, even when they show one.
+  const src = readFileSync(file, 'utf8').split('\n').filter((l) => !/^\s*(?:\/\/|\*|\/\*)/.test(l)).join('\n')
   const out = []
   for (const m of src.matchAll(/(?:^|[\n;])\s*(?:import|export)\s+(?:type\s+)?(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]/g)) out.push(m[1])
   for (const m of src.matchAll(/\bimport\(\s*['"]([^'"]+)['"]\s*\)/g)) out.push(m[1])
@@ -99,6 +100,33 @@ test('the allow list has no stale entries', () => {
   assert.deepEqual(stale, [], 'remove allow-list entries whose word no longer appears')
 })
 
+// The shared layers above core: what each may import (besides node:* and itself).
+const MAY_IMPORT = {
+  modules: ['core/', 'modules/'],
+  cli: ['core/', 'modules/', 'cli/'],
+}
+for (const [top, allowed] of Object.entries(MAY_IMPORT)) {
+  test(`${top}/ imports only ${allowed.join(', ')}`, () => {
+    const bad = []
+    for (const f of filesIn(top)) for (const s of specifiers(f)) {
+      if (s.startsWith('node:')) continue
+      const t = target(f, s)
+      if (!allowed.some((a) => t.startsWith(a))) bad.push(`${rel(f)} → ${s}`)
+    }
+    assert.deepEqual(bad, [], `${top}/ is shared: it never reaches into hosts/, scripts/ or engine/`)
+  })
+}
+
+test('the old scripts/ entry points are only re-exports', () => {
+  const bad = []
+  for (const f of filesIn('scripts')) {
+    const code = readFileSync(f, 'utf8').split('\n').filter((l) => l.trim() && !l.startsWith('//') && !l.startsWith('#!'))
+    if (rel(f) === 'scripts/platform.mjs') continue // also adds the Claude Code data folder to `info`
+    if (!code.every((l) => /^export \* from '\.\.\/[\w/.-]+'$/.test(l))) bad.push(rel(f))
+  }
+  assert.deepEqual(bad, [], 'scripts/ holds no code of its own any more: put it in core/, modules/ or hosts/')
+})
+
 test('no host imports another host', () => {
   const bad = []
   for (const f of filesIn('hosts')) for (const s of specifiers(f)) {
@@ -109,7 +137,7 @@ test('no host imports another host', () => {
 })
 
 // ── Reported (enforced with TF_BOUNDARIES=strict) ────────────────────────────
-const SHARED_CODE = ['scripts', 'engine', 'hooks']
+const SHARED_CODE = ['modules', 'cli', 'engine', 'hooks']
 const SHARED_TEXT = ['agents', 'skills', 'docs', 'guidelines']
 
 test('report: shared code that imports a host', (t) => {
