@@ -22,6 +22,7 @@
 // `resources.mjs end-run` stops it. Stop only kills process groups this script recorded, after checking
 // their command still runs from this task's worktree. Logs: <task>/logs/<name>.log.
 
+import { configPath } from '../core/paths.mjs'
 import { existsSync, readFileSync, writeFileSync, mkdirSync, openSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -32,7 +33,7 @@ const SELF = fileURLToPath(import.meta.url)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 export function readServers(root) {
-  const f = join(root, '.claude', 'task-flow.md')
+  const f = configPath(root)
   if (!existsSync(f)) throw new Error(`no workspace config ${f}`)
   const txt = readFileSync(f, 'utf8')
   const i = txt.search(/^## Servers\b/m)

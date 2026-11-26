@@ -17,6 +17,7 @@
 // a result (rev, target or commit changed). A case's internal id ([A-Za-z0-9_-]) names its flow, verdict and evidence;
 // sourceId (the ID as written, e.g. a QC id) is display-only.
 
+import { configPath } from '../core/paths.mjs'
 import { createHash } from 'node:crypto'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { basename, extname, join, resolve } from 'node:path'
@@ -186,7 +187,7 @@ export function flowsOf(taskDir) {
 // Targets a run may use: local, the ones saved in flows.json, the ones the workspace config `## Flows` names.
 export function knownTargets(taskDir) {
   const names = new Set(['local', ...Object.keys(flowsOf(taskDir).targets)])
-  const cfg = readText(join(rootOfTask(resolve(taskDir)), '.claude', 'task-flow.md'))
+  const cfg = readText(configPath(rootOfTask(resolve(taskDir))))
   if (cfg) {
     let inFlows = false
     for (const line of cfg.split(/\r?\n/)) {

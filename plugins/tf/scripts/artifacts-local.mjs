@@ -9,6 +9,7 @@
 //   node artifacts-local.mjs <workspaceRoot> [--days 365]   → JSON [{ id, url, title, kind, reasons[], last }]
 //   node artifacts-local.mjs --titles '<json [{url,title}]>'   remember titles from an account listing
 //   import { workspaceArtifacts, rememberTitles } from './artifacts-local.mjs'
+import { configPath } from '../core/paths.mjs'
 import { existsSync, readdirSync, readFileSync, statSync, writeFileSync, mkdirSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -156,7 +157,7 @@ export function workspaceArtifacts(rootArg, { days = 365 } = {}) {
   }
 
   // 3. Pinned in the workspace config.
-  const cfg = join(root, '.claude', 'task-flow.md')
+  const cfg = configPath(root)
   if (existsSync(cfg)) {
     const m = readFileSync(cfg, 'utf8').match(/^- Design system:\s*(.*)$/m)
     const u = m && m[1].match(URL_RE)

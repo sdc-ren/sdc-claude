@@ -7,17 +7,18 @@
 //   - `<shell command>` — <label>        (pass = exit code 0; `<root>` is replaced by the workspace root)
 // Prints a table; exit 1 when a required check fails. Optional checks only warn.
 
+import { configPath } from '../core/paths.mjs'
 import { existsSync, mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
 import { execFileSync, execSync } from 'node:child_process'
 import { homedir, tmpdir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import { SH, info, okRef, which } from './platform.mjs'
 import { reaperInstalled } from './reaper.mjs'
 
 const root = resolve(process.argv[2] || '.')
-const cfgPath = join(root, '.claude', 'task-flow.md')
+const cfgPath = configPath(root)
 const cfg = existsSync(cfgPath) ? readFileSync(cfgPath, 'utf8') : ''
 const sh = (cmd, timeout = 20_000) => { try { return { ok: true, out: execSync(cmd, { stdio: 'pipe', shell: SH, windowsHide: true, timeout, cwd: root }).toString().trim() } } catch (e) { return { ok: false, out: String(e.stderr || e.stdout || e.message).trim() } } }
 const rows = []
@@ -57,7 +58,7 @@ const agents = ['pm', 'lead', 'dev', 'tester', 'reviewer'].filter((a) => !exists
 check('plugin agents tf:pm/lead/dev/tester/reviewer', !agents.length, agents.length ? `missing: ${agents.join(', ')}` : '')
 const gl = ['git', 'pr-description', 'pr-review', 'review-standard', 'ticket-comment', 'e2e-testing'].filter((g) => !existsSync(join(PLUGIN, 'guidelines', `${g}.md`)))
 check('plugin guidelines', !gl.length, gl.length ? `missing: ${gl.join(', ')}` : '')
-check('workspace config .claude/task-flow.md', !!cfg, cfgPath)
+check(`workspace config ${relative(root, cfgPath).replace(/\\/g, '/')}`, !!cfg, cfgPath)
 
 // Workspace repos from the config table: | key | `path/` | `base` …
 for (const m of cfg.matchAll(/^\|\s*([\w-]+)\s*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`/gm)) {

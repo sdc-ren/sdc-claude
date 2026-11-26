@@ -9,6 +9,7 @@
 //   `read` says how the orchestrator reads it (docs/orchestrator.md "Sources"). Hosts listed in the workspace
 //   config `## Sources` win: their line says how to read them and whether they are a tracker.
 //   import { classify, keyFrom, strictKey, configSources } from './sources.mjs'
+import { configPath } from '../core/paths.mjs'
 import { existsSync, readFileSync } from 'node:fs'
 import { isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -43,7 +44,7 @@ export function strictKey(text, prefixes = []) {
 // `## Sources` (or the older `## Tracker and spec sources`) of <root>/.claude/task-flow.md:
 //   - <name>: <url or host> — <kind: tracker|docs|design|spec> — <how to read> [— keys: PROJ, OPS]
 export function configSources(root) {
-  const f = join(resolve(root || '.'), '.claude', 'task-flow.md')
+  const f = configPath(root)
   const out = { hosts: [], keys: [] }
   if (!existsSync(f)) return out
   const txt = readFileSync(f, 'utf8')

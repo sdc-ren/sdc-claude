@@ -19,6 +19,8 @@
 //   migrate-worktrees <root> [--apply]   move flat <slug>-<key> worktrees into .worktrees/<SLUG>/<repo dir>
 //   legacy <root> [--repos a,b] [--apply]   fold old suffixed folders/worktrees into the ticket folder (dry run by default)
 
+import { ROLE_SECTIONS, configSections } from '../core/config.mjs'
+import { configPath } from '../core/paths.mjs'
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync, appendFileSync } from 'node:fs'
 import { execSync, execFileSync } from 'node:child_process'
 import { basename, dirname, join, resolve } from 'node:path'
@@ -137,7 +139,7 @@ function findDir(pipe, slug) {
 // Repos from the workspace config table (| key | `path/` | …) → [{ key, dir }]; dir = the repo folder name.
 export function repoMap(root, flag) {
   if (flag) return flag.split(',').filter(Boolean).map((x) => { const [key, dir] = x.split(':'); return { key, dir: dir || key } })
-  const cfg = join(resolve(root), '.claude', 'task-flow.md')
+  const cfg = configPath(root)
   const out = []
   if (existsSync(cfg)) for (const m of readFileSync(cfg, 'utf8').matchAll(/^\|\s*([\w-]+)\s*\|\s*`([^`]+)`\s*\|/gm)) {
     if (m[1] === 'key' || m[1] === 'kind') continue
@@ -394,28 +396,8 @@ function migrateWorktrees(root, repos, apply) {
   return { applied: true, moved, skipped, ledgersRewritten: rewritten }
 }
 
-// The sections of the workspace config one role needs, instead of the whole file in every agent's context.
-// A section is a `## ` heading and everything to the next one; a name matches the start of a heading, any case
-// ("servers" → "## Servers (`serve.mjs` …)"). `--role <r>` takes that role's list (ROLE_SECTIONS). Hard rules come
-// with every role. A name with no section is listed at the end, so nothing is silently missing.
-export const ROLE_SECTIONS = {
-  setup: ['Provisioning', 'Servers', 'Tool-touched files'],
-  dev: ['Repos', 'Excluded', 'Read-only zones', 'Test policy', 'Team agreements', 'Checks', 'Tool-touched files', 'Knowledge'],
-  tester: ['Flows', 'Servers', 'Test policy'],
-  reviewer: ['Repos', 'Excluded', 'Read-only zones', 'Test policy', 'Team agreements', 'Checks', 'Tool-touched files', 'Knowledge'],
-}
-export function configSections(root, names) {
-  const file = join(root, '.claude', 'task-flow.md')
-  const text = existsSync(file) ? readFileSync(file, 'utf8') : ''
-  const parts = text.split(/\n(?=## )/)
-  const want = [...new Set([...names, 'Hard rules'])]
-  const got = [], missing = []
-  for (const n of want) {
-    const hit = parts.filter((p) => p.startsWith('## ') && p.slice(3).toLowerCase().startsWith(n.toLowerCase()))
-    if (hit.length) for (const h of hit) { if (!got.includes(h)) got.push(h) } else missing.push(n)
-  }
-  return got.map((p) => p.trimEnd()).join('\n\n') + (missing.length ? `\n\n(no section in ${file}: ${missing.join(', ')})` : '') + '\n'
-}
+// The sections of the workspace config one role needs: core/config.mjs.
+export { ROLE_SECTIONS, configSections } from '../core/config.mjs'
 
 const isMain = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 if (isMain) {

@@ -33,6 +33,7 @@
 // A worktree with uncommitted or unpushed work is never removed; it stays flagged for the user.
 // PRs: full URL or `owner/repo#n`. A task with no registered PR gets them from its worktrees' branches.
 
+import { configPath } from '../core/paths.mjs'
 import { readFileSync, writeFileSync, existsSync, readdirSync, mkdirSync, rmSync, appendFileSync, renameSync, statSync, copyFileSync, chmodSync } from 'node:fs'
 import { execFileSync, execSync } from 'node:child_process'
 import { basename, dirname, join, resolve } from 'node:path'
@@ -148,7 +149,7 @@ function freePort(e, root, slug, justRan) {
 // values — no spaces, no shell syntax. Anything else is kept and shown, and runs only when a person who has
 // seen it says so (`release --unlisted`).
 export function recipes(root) {
-  const cfg = join(root, '.claude', 'task-flow.md')
+  const cfg = configPath(root)
   const out = {}
   if (!existsSync(cfg)) return out
   const txt = readFileSync(cfg, 'utf8')
@@ -238,7 +239,7 @@ const gh = (args, cwd) => tool('gh', args, cwd) || ''
 // (`flutter pub get` adds exclude lines to analysis_options.yaml, an IDE re-sorts a lockfile…). They are
 // never part of a change, so a worktree whose only edits are in them holds no work.
 export function toolTouched(root) {
-  const cfg = join(root, '.claude', 'task-flow.md')
+  const cfg = configPath(root)
   if (!existsSync(cfg)) return []
   const txt = readFileSync(cfg, 'utf8')
   const i = txt.search(/^## Tool-touched files\b/m)

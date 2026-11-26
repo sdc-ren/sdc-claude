@@ -27,7 +27,11 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Scripts parse
         shell: bash
-        run: for f in plugins/tf/scripts/*.mjs; do node --check "$f"; done
+        run: for f in plugins/tf/scripts/*.mjs plugins/tf/core/*.mjs plugins/tf/hosts/*/*.mjs; do node --check "$f"; done
+      - name: Core layer (paths, config, naming, guard rules)
+        run: node --test plugins/tf/tests/core.mjs
+      - name: Layer boundaries (imports point inward, core names no agent)
+        run: node --test plugins/tf/tests/boundaries.mjs
       - name: Executor rules (mock agents)
         run: node --test plugins/tf/tests/engine.mjs
       - name: Platform layer (this operating system)

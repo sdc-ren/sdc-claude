@@ -20,6 +20,7 @@
 //   path <root> <name> <label> → where the digest file goes
 //
 //   import { windowOf, classify, render, coverage, discussed, chatSources } from './zalo.mjs'
+import { configPath } from '../core/paths.mjs'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -368,7 +369,7 @@ export function pageJs(step, args = {}, { standalone = false } = {}) {
 // `## Chat sources` of <root>/.claude/task-flow.md:
 //   - <name>: zalo <conversation id> [— <what the chat is about, what to watch for>]
 export function chatSources(root) {
-  const f = join(resolve(root || '.'), '.claude', 'task-flow.md')
+  const f = configPath(root)
   if (!existsSync(f)) return []
   const sec = readFileSync(f, 'utf8').match(/^##\s+Chat sources\b[^\n]*\n([\s\S]*?)(?=^##\s|(?![\s\S]))/m)
   if (!sec) return []
