@@ -4,6 +4,26 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.33.2] — 2026-11-26
+
+### Added
+- **`/tf:servers`** — one table of the dev servers of every task of the workspace (task, server, port, pid, running
+  or stopped, current or stale code, uptime, started by serve.mjs or by hand from a task worktree), then stop the
+  ones you pick. Behind it: `serve.mjs list <root> [--json]` and `serve.mjs stop <root> <slug> --pid <pid>`, which
+  stops a process only when it runs from that task's worktree.
+
+### Fixed
+- `serve.mjs start` reused any server answering on the task's port from its worktree, whatever code it ran. A
+  server started before the dev's latest change (no watcher, a dependency or a checkout it did not pick up), or
+  left by an earlier run, kept serving old code, and testers reported false FAILs. serve.mjs now records the
+  worktree's code version at launch (HEAD plus a hash of uncommitted changes) and restarts a server whose code
+  changed — status `restarted`, the reason in `stale`. A server that reloads edits by itself (a watcher in its
+  command or npm script, or `"reload": true`) is restarted only for a new HEAD or lockfile.
+- A server serve.mjs did not record (started by hand or by an earlier run) but running from this task's worktree
+  on this task's port is now replaced too. `restart` could not stop it, so testers started a second backend on
+  another port. A process outside the task's worktree is still never touched.
+- `serve.mjs status` shows each server's recorded version and whether it is current.
+
 ## [1.33.1] — 2026-11-26
 
 ### Fixed

@@ -263,7 +263,8 @@ The handoff set is HANDOFF, journal, flows, ticket, plan, design, board: a late 
   installing). `pool.mjs fill --install` then installs inside the pool, in the background.
 - `serve.mjs` starts the task's app servers once per run from the config `## Servers` (task ports, DB,
   cache filled in), waits for their health checks, and keeps them up across jobs; jobs call `start`
-  again (a no-op when they answer). Each is a `server` run-end resource, so `end-run` stops it.
+  again (a no-op when they answer and run the worktree's current code; a server whose code changed since it
+  started, or one serve.mjs did not start, from the task's worktree, is restarted). Each is a `server` run-end resource, so `end-run` stops it.
 
 ## Metrics
 
