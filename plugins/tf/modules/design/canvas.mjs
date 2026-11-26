@@ -3,7 +3,7 @@
 //
 // A canvas keeps every screen as project/<path>.dc.html (template + `class Component extends DCLogic`), the layout
 // in project/canvas.json (frames, title notes, order) and its design system under project/ds/<folder>/. The
-// orchestrator downloads those files with the Artifact tool (docs/demo.md); this script does the rest.
+// orchestrator downloads those files with the Artifact tool (hosts/claude/docs/demo.md); this script does the rest.
 //
 //   node canvas.mjs export <src> <out> [--lang vi|en] [--title T] [--url <canvas url>] [--feedback <mailto:… | https://…>]
 //       <src> = the folder holding project/ (or project/ itself). Writes <out>/index.html (role picker + screen list),

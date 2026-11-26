@@ -18,19 +18,21 @@ agent ([plans/tf-architecture.md](plans/tf-architecture.md)); imports only point
 
 | Folder | What it holds |
 |---|---|
-| `hosts/claude/` | what only Claude Code has: its transcripts, artifacts, `doctor`, `metrics`, the `tf` entry point with those commands |
+| `hosts/claude/` | what only Claude Code has: its build, host notes, transcripts, artifacts, `doctor`, `metrics`, the `/tf:demo` and `/tf:digest` commands and their docs |
+| `content/` | the shared prompts: `commands/` (one per `/tf:*` command) and `roles/` (PM, lead, dev, tester, reviewer), with `{{root}}`-style placeholders each host fills |
+| `engine/src/` | the executor as ES modules; the host gives it the runtime (run an agent, run in parallel, log) |
+| `build/` | what host builds share: the engine bundle, the placeholder renderer, write/check |
 | `cli/` | `tf <command>`: one entry point for every module's command line |
 | `modules/<domain>/` | the Node helpers the agents call, one folder per domain (task, resources, worktree, env, browser, e2e, review, vcs, tracker, chat, design) |
 | `core/` | what everything shares: platform, paths, config, naming and guard rules. Names no coding agent |
 | `scripts/` | the old entry points, kept as one-line re-exports so prompts and saved commands keep working |
-| `agents/` | the role prompts (PM, lead, dev, tester, reviewer) |
-| `engine/task-flow.js` | the workflow executor and its hard rules |
-| `skills/` | the `/tf:*` commands |
-| `guidelines/`, `docs/` | the standards and the per-mode instructions agents read |
+| `agents/`, `skills/`, `engine/task-flow.js` | **generated** for Claude Code by `hosts/claude/build.mjs` from `content/` and `engine/src/` — edit the sources, never these |
+| `guidelines/`, `docs/` | the standards and the per-mode instructions agents read, on every host. A step one agent does its own way is written *(host: …)*; `hosts/<agent>/notes.md` says how |
 | `hooks/` | Claude Code's hooks module: the tool-use guard (rules in `core/guard-rules.mjs`) and the Artifacts band |
 | `tests/` | `node --test` suites, plus `guard.test.ts` for the hook |
 
-No npm dependencies anywhere. New code goes in `core/` or `modules/`, never in `scripts/`.
+No npm dependencies anywhere. New code goes in `core/` or `modules/`, never in `scripts/`. After editing
+`content/` or `engine/src/`, run `node plugins/tf/hosts/claude/build.mjs` (CI checks the generated files match).
 [plugins/tf/docs/design.md](plugins/tf/docs/design.md) explains the roles, hard rules and files.
 
 ## Making a change
@@ -42,11 +44,12 @@ No npm dependencies anywhere. New code goes in `core/` or `modules/`, never in `
    claude plugin validate .
    claude plugin validate plugins/tf
    claude plugin test plugins/tf                # guard.test.ts and the Artifacts band
+   node plugins/tf/hosts/claude/build.mjs --check
    node --test plugins/tf/tests/*.mjs
    ```
 
 3. Prompts are read by every run: keep additions short, put mode-specific text in `docs/` and load it only in
-   that mode, and say in the PR how much the prompt grew.
+   that mode, and say in the PR how much the prompt grew. Prompts live in `content/`, `docs/` and `guidelines/`.
 4. Use no real customer names, ticket keys, people or paths in examples or tests. Use `PROJ-123`,
    `acme.atlassian.net` and `/w/...`.
 5. User-visible changes go in `plugins/tf/CHANGELOG.md`, and the version is bumped in

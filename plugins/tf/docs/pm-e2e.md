@@ -51,7 +51,7 @@ Target: local | dev | <saved target>
 - `Target`: `dev`/staging when the config has it and the PR is deployed there, else `local`.
 - With an earlier snapshot (`cases.approved.json`) and a changed ticket or spec: start from it, keep the user's
   edits, mark ⚠ the cases the change touches.
-- Check your file: `node ${CLAUDE_PLUGIN_ROOT}/scripts/cases.mjs validate <task>` must be `ok` before you return.
+- Check your file: `node <PLUGIN>/scripts/cases.mjs validate <task>` must be `ok` before you return.
 
 **Ask or assume (e2e)** — the same bar as "Clear or not", about what gets *tested*: ask when two readings of
 an expected result, a role/permission, the data, the platform, the scope or the environment are both

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// tf: read a Zalo Web conversation of the user's own account, for /tf:digest (docs/digest.md).
+// tf: read a Zalo Web conversation of the user's own account, for /tf:digest (hosts/claude/docs/digest.md).
 //
 // Zalo Web keeps message metadata in the page's IndexedDB (`zdb_<account uid>`, store `message`): conversation
 // (`toUid`, groups are `g<digits>`), sender (`fromUid`, "0" = the account itself), time (`sendDttm`, ms), type

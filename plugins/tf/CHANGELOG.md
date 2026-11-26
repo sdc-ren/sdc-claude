@@ -4,6 +4,32 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.28.0] — 2026-11-26
+
+Second step towards running tf on more than one coding agent (`plans/tf-architecture.md`): the engine and the
+prompts no longer assume Claude Code. On Claude Code a run works as before.
+
+### Changed
+- **The engine is ES modules behind a runtime port** (`engine/src/`): the executor gets "run an agent", "run in
+  parallel", "log" and the budget as arguments instead of Workflow globals, so another host can import it.
+  `engine/task-flow.js` is now **generated** from it by `hosts/claude/build.mjs` for Claude Code's Workflow
+  tool. The executor's 36 scenarios run against both forms.
+- **The prompts have one source, `content/`**: `commands/` (the `/tf:*` commands) and `roles/` (PM, lead, dev,
+  tester, reviewer), with placeholders each host fills. `skills/` and `agents/` are generated from it for Claude
+  Code; the Claude-only parts (tool lists, models) are in `hosts/claude/roles.json`. CI fails when a generated
+  file differs from its sources.
+- **Docs and guidelines name steps, not tools.** Where Claude Code uses its own tool — asking with
+  `AskUserQuestion`, opening a file, the session title, launching `Workflow`, metrics, background commands —
+  the docs now say *(host: ask)* and so on, and the command brings the host's notes (`hosts/claude/notes.md`)
+  that say how. `${CLAUDE_PLUGIN_ROOT}` in docs and guidelines is `<PLUGIN>`; each role says what `<PLUGIN>` is.
+- The workspace config the orchestrator passes on is `.tf/config.md` when it exists, else
+  `.claude/task-flow.md`, as the scripts already read it.
+- `/tf:demo`, `/tf:digest` and attachments (`--attach`, claude.ai links) read claude.ai artifacts or drive
+  Claude in Chrome, so their docs moved to `hosts/claude/docs/`.
+
+Prompt growth: each orchestrator command (`build`, `qc`, `review`, `e2e`, `address-review`) carries 8 lines of
+host notes (about 230 tokens), each role one line naming `<PLUGIN>`.
+
 ## [1.27.1] — 2026-11-26
 
 ### Fixed

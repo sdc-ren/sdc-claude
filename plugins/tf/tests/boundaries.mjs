@@ -104,6 +104,8 @@ test('the allow list has no stale entries', () => {
 const MAY_IMPORT = {
   modules: ['core/', 'modules/'],
   cli: ['core/', 'modules/', 'cli/'],
+  'engine/src': ['engine/src/'],
+  build: ['core/', 'build/'],
 }
 for (const [top, allowed] of Object.entries(MAY_IMPORT)) {
   test(`${top}/ imports only ${allowed.join(', ')}`, () => {
@@ -125,6 +127,19 @@ test('the old scripts/ entry points are only re-exports', () => {
     if (!code.every((l) => /^export \* from '\.\.\/[\w/.-]+'$/.test(l))) bad.push(rel(f))
   }
   assert.deepEqual(bad, [], 'scripts/ holds no code of its own any more: put it in core/, modules/ or hosts/')
+})
+
+// Shared text names what to do, never how one agent does it: those steps are marked *(host: …)* and each host's
+// notes say how (hosts/<agent>/notes.md). Product names in data (a claude.ai link as a source, a repo's
+// CLAUDE.md) are fine; an agent's tools, variables and commands are not.
+const HOST_OPERATIONS = /AskUserQuestion|\bmcp__\w+|CLAUDE_PLUGIN_ROOT|\$ARGUMENTS|run_in_background|`Workflow`/g
+test('docs, guidelines and content name no agent\'s tools or variables', () => {
+  const bad = []
+  for (const top of ['docs', 'guidelines', 'content']) for (const f of filesIn(top, (n) => n.endsWith('.md'))) {
+    const hits = [...new Set([...readFileSync(f, 'utf8').matchAll(HOST_OPERATIONS)].map((m) => m[0]))]
+    if (hits.length) bad.push(`${rel(f)}: ${hits.join(', ')}`)
+  }
+  assert.deepEqual(bad, [], 'say it as a *(host: …)* step and put the agent\'s way in hosts/<agent>/notes.md')
 })
 
 test('no host imports another host', () => {

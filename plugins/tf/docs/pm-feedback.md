@@ -10,7 +10,7 @@ text in `<task>/feedback-history.md` — open that only to quote it.
 1. **Triage** every point into `<task>/feedback-triage.md` before planning. A review posted as one long
    comment holds many points: split it, id them `<comment author>-<n>` (e.g. `reviewer-3`). Table:
    `id | PR | reviewer | file:line | point (one line) | P0–P3 | M | verdict | fix in repo | reason`, `M` the miss
-   category of `${CLAUDE_PLUGIN_ROOT}/guidelines/review-standard.md` the point falls in (`M1`…`M9`, `team` for a
+   category of `<PLUGIN>/guidelines/review-standard.md` the point falls in (`M1`…`M9`, `team` for a
    team agreement, `—` for a question, `new` when none fits), verdict one of
    `fix` (do it), `discuss` (we disagree — cite the ticket, a decision in board.md/config, a spec, or the
    code; never "won't fix" without a reason), `answered` (a question, no change), `out-of-scope` (belongs
@@ -41,7 +41,7 @@ text in `<task>/feedback-history.md` — open that only to quote it.
    no tester — close with `close.noTest` and the reason. One dev job per repo, then gate (its brief lists
    the point ids it must see addressed) → tester (if any) → PACKAGE (push to the same PR, refresh the
    Testing section; never a new PR while the old one is open).
-3. **Close**: write `<task>/feedback-replies.md` per `${CLAUDE_PLUGIN_ROOT}/guidelines/review-reply.md` — read it
+3. **Close**: write `<task>/feedback-replies.md` per `<PLUGIN>/guidelines/review-reply.md` — read it
    first. One `## <PR url>` block per PR that needs an answer: `### Summary` answers every review and
    conversation comment of that PR in ONE text (a section per reviewer, a row per point id), and one
    `### R<n> · resolve: yes|no` block per open thread answered in place. `fix` → what changed + commit sha

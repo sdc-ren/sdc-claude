@@ -28,10 +28,10 @@ holds the lock.
 **Status `cases`** (nothing has run; release the lock — `end-run`, then `unlock --token` — while the user reads):
 1. Show `node $S/cases.mjs preview <dir>` as it prints (one row per case: situation, expected result, platform, ⚠), then the counts: cases per
    platform, acceptance criteria without a case, ⚠, target.
-2. Questions → `AskUserQuestion` as for `clarify` (the PM's pick first, recommended; `who: po` adds "Hỏi PO").
+2. Questions → ask the user *(host: ask)* as for `clarify` (the PM's pick first, recommended; `who: po` adds "Hỏi PO").
    Answers go under `## Clarifications` in `ticket.md`, each with the cases it affects.
-3. `missingSpecs` → list them; the user attaches (`--attach`, a link — `docs/attach.md`) or says to go on.
-4. Open `<dir>/cases.md` for the user (`mcp__ccd_host__open_in_editor` when available, else its path) and wait
+3. `missingSpecs` → list them; the user attaches (*(host: attachments)*: `--attach`, a link) or says to go on.
+4. Open `<dir>/cases.md` for the user *(host: open a file)*, else give its path, and wait
    until they say it is done. They may also ask you to change it — edit cases.md as they say.
 5. Lock again (`lock <dir>`, new token), then:
    - answers or new specs that change what is tested → relaunch WITHOUT `snapshot`, `clarifyRound` from the

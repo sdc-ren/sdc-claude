@@ -45,7 +45,7 @@ nowhere else in the line.
 
 ## Checking before it goes out
 
-`node ${CLAUDE_PLUGIN_ROOT}/scripts/naming.mjs check --kind commit|pr [--key <KEY>] (--file <msg> | "<line>")`
+`node <PLUGIN>/scripts/naming.mjs check --kind commit|pr [--key <KEY>] (--file <msg> | "<line>")`
 says what is wrong with a commit message or PR title (exit 1) or nothing (exit 0). Run it on a message written
 to a file (`git commit -F`) and on the PR title before `gh pr create` / `gh pr edit --title`. The tool guard
 refuses a `git commit -m` or a `--title` that breaks these rules on its own.

@@ -7,4 +7,4 @@ disable-model-invocation: true
 
 Plugin root `<PLUGIN>` = `${CLAUDE_PLUGIN_ROOT}`.
 
-Read `${CLAUDE_PLUGIN_ROOT}/docs/digest.md` and follow it exactly, with input and flags: `$ARGUMENTS`.
+Read `${CLAUDE_PLUGIN_ROOT}/hosts/claude/docs/digest.md` and follow it exactly, with input and flags: `$ARGUMENTS`.
