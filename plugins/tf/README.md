@@ -330,8 +330,13 @@ from another config on your machine — never its repos, servers or path.
 (per repo: stack, commands, ports, env names, docs, domain folders, layout), `contracts/` (every route — Express,
 NestJS, Next, Nuxt/Nitro, Fastify — with its guards, validators and OpenAPI status, every call to it from web and
 app code — fetch, axios and clients made from it, `$fetch`/`ofetch`/`useFetch`, object-style wrappers, dio/http —
-calls that reach no route, socket.io events; each map says how much it recognised) and `ledger/` (the hand-kept
-notes in `pipeline/` sliced per repo and per topic; topics come from your config or your domain folders).
+calls that reach no route, socket.io events; each map says how much it recognised), `runtime/` (cron, queues and
+workers, jobs, events, Redis pub/sub, webhook-like routes, socket events the server emits), `states/` (state enums
+and every place a value is written), `erd/` (models and tables from Prisma, Sequelize, TypeORM, Mongoose or SQL
+migrations — columns, relations, the services that use each), `e2e/` (the flows tf wrote, their last result, the
+test ids the code defines and the flows that use them), `features/` (only what the code tags in its comments:
+feature, screen, role → the endpoint under each tag) and `ledger/` (the hand-kept notes in `pipeline/` sliced per
+repo and per topic; topics come from your config or your domain folders). A map that finds nothing is not written.
 `tf knowledge diff <root> --task <SLUG>` compares a task's worktrees with where they branched from: routes added,
 removed, guards changed, and callers the change breaks — the reviewer runs it when the config names it. Before every
 run tf only *checks* which maps are stale (seconds); the PM refreshes a map only when the task needs it — large

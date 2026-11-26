@@ -1,7 +1,7 @@
 // tf knowledge — Express routes: `router.get('/x', …)`, `router.route('/x').get(…)`, and the prefixes routers are
 // mounted under (`app.use('/api', routes)`, followed through imports from file to file).
 import { argsAt, blankComments, joinPaths } from '../scan.mjs'
-import { calls, hasDep, importsOf, middleware, paths } from './util.mjs'
+import { calls, hasDep, importsOf, middleware, paths, grepFiles } from './util.mjs'
 
 const METHODS = 'get|post|put|patch|delete|all|options|head'
 const JS = /\.(m?[jt]s|cjs)$/
@@ -11,7 +11,7 @@ export default {
   kind: 'routes',
   detect: (reader) => hasDep(reader, ['express']),
   extract(reader, { isSource }) {
-    const files = [...new Set(reader.grep(`\\.(${METHODS}|use|route)\\s*\\(`, (f) => JS.test(f) && isSource(f)).map((h) => h.file))]
+    const files = [...grepFiles(reader, `\\.(${METHODS}|use|route)\\s*\\(`, (f) => JS.test(f) && isSource(f))]
     const routes = [], mounts = [], seen = new Set()
     for (const file of files) {
       const raw = reader.read(file)

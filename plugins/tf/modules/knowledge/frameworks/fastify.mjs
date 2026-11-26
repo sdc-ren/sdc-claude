@@ -1,7 +1,7 @@
 // tf knowledge — Fastify routes: `fastify.get('/x', …)` and `fastify.route({ method, url })`. Prefixes given to
 // `register(plugin, { prefix })` are not followed (the map's coverage line says so).
 import { blankComments, normPath } from '../scan.mjs'
-import { calls, hasDep, middleware, paths } from './util.mjs'
+import { calls, hasDep, middleware, paths, grepFiles } from './util.mjs'
 
 const METHODS = 'get|post|put|patch|delete|all|options|head'
 
@@ -12,7 +12,7 @@ export default {
   limits: 'prefixes from register(plugin, { prefix }) are not followed',
   extract(reader, { isSource }) {
     const out = []
-    for (const file of new Set(reader.grep(`\\.(${METHODS}|route)\\s*\\(`, (f) => /\.(m?[jt]s|cjs)$/.test(f) && isSource(f)).map((h) => h.file))) {
+    for (const file of grepFiles(reader, `\\.(${METHODS}|route)\\s*\\(`, (f) => /\.(m?[jt]s|cjs)$/.test(f) && isSource(f))) {
       const src = blankComments(reader.read(file) || '')
       for (const c of calls(src, new RegExp(`\\b(\\w+)\\.(${METHODS})\\s*\\(`, 'g'))) {
         if (c.args.length < 2) continue

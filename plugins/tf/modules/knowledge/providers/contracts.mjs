@@ -87,6 +87,9 @@ export function join(model, knowledge = {}) {
   return { byRoute, orphans, inSpec, prefixes }
 }
 
+/** The workspace's contract model, built once per run (runtime and features read it too). */
+export const modelOf = (ctx) => (ctx.memo ? ctx.memo : (_, fn) => fn())('contracts', () => contractModel(ctx.profile.repos.map((r) => ({ key: r.key, reader: ctx.reader(r) })), ctx.knowledge))
+
 function render(ctx, model) {
   const { byRoute, orphans, inSpec, prefixes } = join(model, ctx.knowledge)
   const out = {}
@@ -166,5 +169,5 @@ export default {
     ...Object.fromEntries(ctx.profile.repos.map((r) => [r.key, ctx.reader(r).version])),
     settings: createHash('sha1').update(`${ctx.knowledge.apiPrefix || ''}|${ctx.knowledge.apiClients || ''}`).digest('hex').slice(0, 12),
   }),
-  generate: (ctx) => render(ctx, contractModel(ctx.profile.repos.map((r) => ({ key: r.key, reader: ctx.reader(r) })), ctx.knowledge)),
+  generate: (ctx) => render(ctx, modelOf(ctx)),
 }

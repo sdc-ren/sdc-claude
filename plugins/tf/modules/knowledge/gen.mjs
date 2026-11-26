@@ -17,11 +17,17 @@ import { PLUGIN_ROOT, isMain } from '../../core/main.mjs'
 import { detect } from './detect.mjs'
 import { diffCli } from './diff.mjs'
 import contracts from './providers/contracts.mjs'
+import e2e from './providers/e2e.mjs'
+import erd from './providers/erd.mjs'
+import features from './providers/features.mjs'
 import ledger from './providers/ledger.mjs'
 import repos from './providers/repos.mjs'
+import runtime from './providers/runtime.mjs'
+import states from './providers/states.mjs'
 import { openRepo } from './source.mjs'
 
-export const PROVIDERS = [repos, contracts, ledger]
+// In the order a task reads them (the README's reading order follows it).
+export const PROVIDERS = [repos, features, contracts, states, runtime, erd, ledger, e2e]
 export const DEFAULT_ENTRY = 'knowledge/README.md'
 const posix = (p) => p.split(sep).join('/')
 const readJson = (f) => { try { return JSON.parse(readFileSync(f, 'utf8')) } catch { return null } }
@@ -39,7 +45,10 @@ function context(rootIn, profile, out = '') {
   const dir = out ? resolve(out) : dirname(resolve(root, entry))
   const p = profile || detect(root)
   const readers = new Map()
+  const memo = new Map()
   return {
+    // Work two maps share (the contract model, the models, the enums) is done once per run.
+    memo: (k, fn) => { if (!memo.has(k)) memo.set(k, fn()); return memo.get(k) },
     root, profile: p, knowledge, entry, dir,
     pipelineDir: join(dirname(resolve(root, entry)), 'pipeline'), pipelineRel: posix(relative(root, join(dirname(resolve(root, entry)), 'pipeline'))),
     reader: (r) => { if (!readers.has(r.key)) readers.set(r.key, openRepo(r.abs, r.base)); return readers.get(r.key) },
@@ -64,15 +73,30 @@ export function check(rootIn, profile, out = '') {
   const m = manifestOf(ctx.dir)
   const stale = []
   for (const p of PROVIDERS) {
-    const applies = p.applies(ctx)
     const had = m && m.maps && m.maps[p.name]
-    if (!applies) { if (had) stale.push({ map: p.name, why: 'no longer applies — its files will be removed' }); continue }
+    // Sources first: they are cheap (a version per repo); whether a map applies can mean reading code.
+    const now = had ? p.sources(ctx) : {}
+    const changed = had ? Object.keys({ ...now, ...had.sources }).filter((k) => now[k] !== had.sources[k]) : []
+    if (had && !changed.length) continue
+    if (!p.applies(ctx)) { if (had) stale.push({ map: p.name, why: 'no longer applies — its files will be removed' }); continue }
     if (!had) { stale.push({ map: p.name, why: 'never generated' }); continue }
-    const now = p.sources(ctx)
-    const changed = Object.keys({ ...now, ...had.sources }).filter((k) => now[k] !== had.sources[k])
-    if (changed.length) stale.push({ map: p.name, why: `changed: ${changed.slice(0, 6).join(', ')}${changed.length > 6 ? ' …' : ''}` })
+    stale.push({ map: p.name, why: `changed: ${changed.slice(0, 6).join(', ')}${changed.length > 6 ? ' …' : ''}` })
   }
   return { entry: ctx.entry, generated: m ? m.generatedAt : '', stale }
+}
+
+// What to read for a task, in order; only the maps this workspace has.
+function order(maps) {
+  return [
+    '`repos/<repo>.md` of the repos the task touches — stack, commands, docs to read, domain folders.',
+    maps.features && '`features/README.md`, then the page of the feature, screen, role or area the task names — what the code tags there and the endpoint under each tag.',
+    maps.contracts && '`contracts/by-domain/<domain>.md` for the endpoints it touches — guards, validators, every caller (web, app, services); `contracts/orphans.md` for calls that reach no route.',
+    (maps.states || maps.runtime) && [maps.states && '`states/<enum>.md` for a status the task changes — every place a value is written', maps.runtime && '`runtime/async.md` — cron, queues, events and webhooks that also touch that data'].filter(Boolean).join('; ') + '.',
+    maps.erd && '`erd/<table>.md` for the tables it touches — columns, relations, the services that use the model.',
+    maps.ledger && '`ledger/by-repo/<repo>.md` and `ledger/topics/<topic>.md` — open findings, decisions already taken, recipes, review lessons. Grep `ledger/index.tsv` for a keyword, then open the `at` line.',
+    maps.e2e && '`e2e/flows.md` — flows already written for the screens it touches (regression candidates); `e2e/selectors.md` before changing a test id.',
+    'Verify in the code (codegraph) before deciding: a map is a starting point, not the truth.',
+  ].filter(Boolean)
 }
 
 function readme(ctx, maps) {
@@ -92,10 +116,7 @@ function readme(ctx, maps) {
     '',
     '## Reading order for a task',
     '',
-    '1. `repos/<repo>.md` of the repos the task touches — stack, commands, docs to read, domain folders.',
-    ...(maps.contracts ? ['   `contracts/by-domain/<domain>.md` for the endpoints it touches — guards, validators, every caller (web, app, services); `contracts/orphans.md` for calls that reach nothing.'] : []),
-    ...(maps.ledger ? ['2. `ledger/by-repo/<repo>.md` and `ledger/topics/<topic>.md` — open findings, decisions already taken, recipes, review lessons. Grep `ledger/index.tsv` for a keyword, then open the `at` line.'] : []),
-    `${maps.ledger ? 3 : 2}. Verify in the code (codegraph) before deciding: a map is a starting point, not the truth.`,
+    ...order(maps).map((l, i) => `${i + 1}. ${l}`),
     '',
     '## Hand-kept notes (`pipeline/`)',
     '',
