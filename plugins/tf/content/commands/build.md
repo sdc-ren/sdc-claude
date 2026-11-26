@@ -5,6 +5,8 @@ args: "<key | link(s) | words> [--approve] [--assume] [--draft] [--lang vi] [--a
 user-only: true
 ---
 
+{{fallback}}
+
 Plugin root `<PLUGIN>` = `{{root}}`.
 
 Read `{{root}}/docs/orchestrator.md` and follow it exactly, with:

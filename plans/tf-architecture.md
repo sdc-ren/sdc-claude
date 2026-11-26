@@ -220,9 +220,18 @@ process tách JSON từ câu trả lời cuối, kiểm tra theo `engine/schemas
    docs, guidelines, content. **Prompt vẫn gọi `node <PLUGIN>/scripts/…`**, không chuyển sang `tf`: `scripts/` là
    đường dẫn ổn định cho mọi host, đổi lệnh trong prompt không đem lại gì thêm.
 
-**PR 2 = bước 5–6 (1.28.0).**
+**PR 2 = bước 5–6 (1.28.0). PR 3 = bước 7 (1.29.0).**
 
-7. **hosts/process + hosts/codex**: driver, hook, đóng gói; conformance; thử thật trên Codex bản mới nhất.
+7. ✅ **runtime/ + hosts/codex/** (1.29.0). Phát hiện khi thử thật (Codex 0.155):
+   - Codex đọc thẳng `.claude-plugin/marketplace.json` và nạp `skills/` của plugin → **một bộ skill dùng chung**
+     cho mọi host (không sinh skill riêng cho Codex); mỗi skill có câu dự phòng khi host không thay
+     `${CLAUDE_PLUGIN_ROOT}`/`$ARGUMENTS`, và trỏ tới `hosts/<agent>/notes.md`.
+   - Sandbox workspace-write của Codex khóa `.git` → driver thêm `--add-dir <repo>/.git`; `--approve-for-me` thay
+     cho tắt sandbox (không dùng `danger-full-access`).
+   - Hook truyền qua `-c` không chạy (cần trust) → guard là hook của plugin (`hooks.json`, manifest trỏ tới); chưa
+     kiểm được việc Codex chạy nó.
+   - Job dài: runner chạy nền, orchestrator gọi `run.mjs wait` nhiều lần (lệnh shell của agent có giới hạn thời gian).
+   - `runtime/` là lớp dùng chung (không phải host), để Codex và Copilot cùng dùng mà không host nào import host khác.
 8. **hosts/copilot**: tương tự.
 9. Kiro, Cursor: chỉ thêm `hosts/<x>/` khi cần.
 

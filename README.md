@@ -51,7 +51,7 @@ Every command, option and the way the team works: [plugins/tf/README.md](plugins
 
 ## Requirements
 
-- Claude Code with Workflows enabled.
+- Claude Code with Workflows enabled, or the Codex CLI (see [Codex](#codex)).
 - Node ≥ 22, git, and `gh` logged in.
 - For e2e: a package in your workspace that depends on `@playwright/test`.
 - macOS, Linux or Windows (Git for Windows). A whole ticket run has only been done on macOS so far.
@@ -76,6 +76,23 @@ claude plugin install tf@sdc
 
 > **Private repository?** Claude Code uses your machine's git credentials and never prompts.
 > Run `gh auth login` and `gh auth setup-git` first (or make sure your SSH key works without a passphrase prompt).
+
+### Codex
+
+The same marketplace installs tf in [Codex](https://developers.openai.com/codex) (checked with Codex CLI 0.155):
+
+```bash
+codex plugin marketplace add sdc-ren/sdc-claude
+codex plugin add tf@sdc
+```
+
+Start a new Codex session, then call a command with `$`: `$tf:build PROJ-123`, `$tf:review <PR url>`,
+`$tf:status --doctor`. The commands never start on their own (`allow_implicit_invocation: false`).
+
+On Codex every job of a run is its own `codex exec` in Codex's sandbox (workspace-write, network on, your repos'
+`.git` writable, approvals reviewed by Codex's automatic reviewer), started in the background by
+`hosts/codex/run.mjs`. Not on Codex: `/tf:demo`, `/tf:digest` and attachments (they read claude.ai artifacts or
+drive Claude in Chrome), and run metrics. More in [plugins/tf/README.md](plugins/tf/README.md#other-coding-agents).
 
 ### Use it in a project for the whole team
 
@@ -115,7 +132,8 @@ Restart Claude Code to load the new version. Release notes: [plugins/tf/CHANGELO
 ```
 .claude-plugin/marketplace.json   marketplace "sdc" — lists the plugins below
 plugins/
-  tf/                             task-flow plugin (skills, agents, workflow, scripts, guidelines, docs)
+  tf/                             task-flow plugin: shared code and prompts, plus hosts/<agent>/ for
+                                  Claude Code (.claude-plugin/) and Codex (.codex-plugin/)
 LICENSE                           MIT
 ```
 

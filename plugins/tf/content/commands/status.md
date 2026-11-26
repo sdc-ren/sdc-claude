@@ -5,6 +5,8 @@ args: "[--doctor] [--metrics [slug]]"
 user-only: true
 ---
 
+{{fallback}}
+
 Input: `{{args}}`. `<cwd>` is the workspace root (the folder that holds `{{config}}`).
 
 1. `node {{root}}/scripts/resources.mjs list --table <cwd>` — show the table as it prints (one row per

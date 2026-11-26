@@ -500,6 +500,25 @@ The PM sizes by the change, not by the ticket's wording, and a later round by wh
 Money, auth, permissions, data migrations and read-only zones never go below M. Details:
 [docs/design.md](docs/design.md#sizing-and-models-pm-decides).
 
+## Other coding agents
+
+tf's code and prompts are shared; what one coding agent does its own way lives in `hosts/<agent>/` (its build,
+its notes, how it runs a job). The docs write those steps as *(host: …)*.
+
+| | Claude Code | Codex |
+|---|---|---|
+| Install | `/plugin install tf@sdc` | `codex plugin add tf@sdc` (same marketplace) |
+| Call a command | `/tf:build …` | `$tf:build …` |
+| Executor | the Workflow tool, jobs as subagents | `hosts/codex/run.mjs` in the background, each job a `codex exec` |
+| Asking you | `AskUserQuestion` | questions in the reply; the run waits for your answer |
+| Tool guard | hooks module (`hooks/guard.ts`) | `PreToolUse` command hook (`hooks.json`), active only in tf's jobs |
+| Models | haiku / sonnet / opus per job | your Codex model; the tier sets the reasoning effort (low / medium / high) |
+| `/tf:demo`, `/tf:digest`, attachments, metrics | yes | no |
+
+Codex jobs run in Codex's workspace-write sandbox with network on, tf's state folder and the workspace repos'
+`.git` folders writable, and approvals routed to Codex's automatic reviewer (`--approve-for-me`). Extra flags
+for every job: `TF_CODEX_ARGS='["-m","<model>"]'`; jobs at once: `TF_JOBS` (default 4).
+
 ## Workspace configuration
 
 tf reads `<workspace>/.claude/task-flow.md`. Start from [docs/config-template.md](docs/config-template.md).

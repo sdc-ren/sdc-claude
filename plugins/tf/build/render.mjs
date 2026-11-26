@@ -5,6 +5,7 @@
 //   {{config}}  the workspace config file, as the docs name it
 //   {{roles}}   the folder of the host's role files (the rendered content/roles/)
 //   {{background}} how a long command runs in the background on this host
+//   {{fallback}} what a command means on an agent that does not fill the placeholders
 //   {{notes}}   the host notes: how the *(host: …)* steps of the docs are done on this host
 // Front matter values are kept as written (quotes included), so a host writes them back unchanged.
 import { readFileSync, readdirSync } from 'node:fs'

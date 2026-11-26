@@ -5,6 +5,8 @@ argument-hint: "[<slug> | --migrate | --legacy]"
 disable-model-invocation: true
 ---
 
+Not in Claude Code? When the plugin root and the input below still read as variables, `<PLUGIN>` is the folder that holds this file's `skills/` folder, the input is what the user wrote with the command, and the host notes are `<PLUGIN>/hosts/<agent>/notes.md` for the agent you run in (`codex`, `copilot`), not the Claude Code ones.
+
 Input: `$ARGUMENTS`. `<cwd>` is the workspace root (the folder that holds `.claude/task-flow.md`).
 Every action: show the plan, then act only after a clear yes from the user.
 
