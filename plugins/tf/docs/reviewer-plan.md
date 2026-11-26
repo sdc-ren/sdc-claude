@@ -17,7 +17,7 @@ asks, then read `plan.md` and the workspace config (repo list, read-only zones, 
 5. **Design** (M: plan.md `## Design`; L: `design.md`, which you read before the plan) — missing on M/L; a
    *Data* line with no answer to "what happens when this changes later"; a neighbour the ticket or the code
    names that the design does not list; a micro-task that contradicts a decision of the design.
-6. **Thin cases** — one of the six kinds of `${CLAUDE_PLUGIN_ROOT}/agents/pm.md` "Cases that human reviewers
+6. **Thin cases** — one of the six kinds of `<PLUGIN>/content/roles/pm.md` "Cases that human reviewers
    ask for" applies to the plan and has no case: a limit, a mode, another user of shared code the plan
    modifies, a visual defect not restated as something measurable, a role that opens the screen, a value
    changed after it was locked or data written before this change.

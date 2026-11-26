@@ -27,15 +27,21 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Scripts parse
         shell: bash
-        run: for f in plugins/tf/scripts/*.mjs plugins/tf/core/*.mjs plugins/tf/modules/*/*.mjs plugins/tf/cli/*.mjs plugins/tf/hosts/*/*.mjs; do node --check "$f"; done
+        run: for f in plugins/tf/scripts/*.mjs plugins/tf/core/*.mjs plugins/tf/modules/*/*.mjs plugins/tf/cli/*.mjs plugins/tf/hosts/*/*.mjs plugins/tf/engine/src/*.mjs plugins/tf/build/*.mjs; do node --check "$f"; done
+      - name: Generated files match their sources (host builds)
+        run: node plugins/tf/hosts/claude/build.mjs --check && node --test plugins/tf/tests/build.mjs
       - name: Core layer (paths, config, naming, guard rules)
         run: node --test plugins/tf/tests/core.mjs
       - name: tf command line (every command, same output as the old scripts)
         run: node --test plugins/tf/tests/cli.mjs
       - name: Layer boundaries (imports point inward, core names no agent)
         run: node --test plugins/tf/tests/boundaries.mjs
-      - name: Executor rules (mock agents)
+      - name: Executor rules (mock agents), Workflow bundle
         run: node --test plugins/tf/tests/engine.mjs
+      - name: Executor rules (mock agents), ES module other hosts import
+        run: node --test plugins/tf/tests/engine.mjs
+        env:
+          TF_ENGINE: src
       - name: Platform layer (this operating system)
         run: node --test plugins/tf/tests/platform.mjs
       - name: Task input (any link, plain words, keys)

@@ -16,8 +16,15 @@ const expect = (a) => ({
   not: { toContain: (b) => assert.ok(!has(a, b), `expected ${JSON.stringify(a)} not to contain ${JSON.stringify(b)}`) },
 })
 
+// Two forms of the same engine, both tested: the Workflow bundle Claude Code runs (engine/task-flow.js, the
+// runtime as globals) and the ES module other hosts import (engine/src/flow.mjs, the runtime passed in).
+// TF_ENGINE=src runs every scenario on the module.
 const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), '..', 'engine', 'task-flow.js'), 'utf8').replace('export const meta', 'const meta')
 const AsyncFunction = Object.getPrototypeOf(async function () {}).constructor
+const { taskFlow } = await import('../engine/src/flow.mjs')
+const runEngine = process.env.TF_ENGINE === 'src'
+  ? (args, agent, parallel, phase, log, budget) => taskFlow(args, { agent, parallel, phase, log, budget })
+  : (args, agent, parallel, phase, log, budget) => new AsyncFunction('args', 'agent', 'parallel', 'phase', 'log', 'budget', src)(args, agent, parallel, phase, log, budget)
 
 
 
@@ -46,7 +53,7 @@ async function sim(pm, answer = std, extra = {}) {
   const args = { root: '/r', slug: 'T-1', dir: '/r/.pipeline/T-1', scripts: '/s', config: '/c', mode: 'build', worktreePaths: { be: '/wt/be', fe: '/wt/fe', mobile: '/wt/mobile' }, ...extra }
   const parallel = (fns) => Promise.all(fns.map(f => f()))
   const budget = { total: 0, remaining: () => 1e9, spent: () => 0 }
-  const out = await new AsyncFunction('args', 'agent', 'parallel', 'phase', 'log', 'budget', src)(args, agent, parallel, () => {}, (m) => logs.push(m), budget)
+  const out = await runEngine(args, agent, parallel, () => {}, (m) => logs.push(m), budget)
   return { out, ran, logs, prompts, pmPrompts, pmModels }
 }
 
@@ -320,7 +327,7 @@ test('the documented limits are the ones the executor enforces', () => {
 
 test('every plugin file a document points at exists', () => {
   const root = join(dirname(fileURLToPath(import.meta.url)), '..')
-  const docs = ['README.md', 'docs/design.md', 'docs/orchestrator.md', 'docs/pm-feedback.md', 'docs/attach.md', 'docs/config-template.md', 'agents/pm.md', 'agents/lead.md', 'agents/dev.md', 'agents/tester.md', 'agents/reviewer.md']
+  const docs = ['README.md', 'docs/design.md', 'docs/orchestrator.md', 'docs/pm-feedback.md', 'hosts/claude/docs/attach.md', 'docs/config-template.md', 'agents/pm.md', 'agents/lead.md', 'agents/dev.md', 'agents/tester.md', 'agents/reviewer.md']
   const missing = []
   for (const d of docs) {
     const text = readFileSync(join(root, d), 'utf8')

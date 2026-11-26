@@ -83,7 +83,7 @@ function classifyUrl(url, cfg) {
   const base = { ref: url, host }
   let m
   if (/^(?:www\.)?claude\.(?:ai|com)$/.test(host.replace(/^preview\./, '')) && (m = u.pathname.match(/\/(?:code\/)?artifact\/([A-Za-z0-9-]{10,})/))) {
-    return { ...base, kind: 'artifact', id: m[1], read: 'Artifact read — a Design canvas, a design system or a page (docs/attach.md)' }
+    return { ...base, kind: 'artifact', id: m[1], read: 'Artifact read — a Design canvas, a design system or a page (hosts/claude/docs/attach.md)' }
   }
   if (host === 'github.com' && (m = u.pathname.match(/^\/([\w.-]+)\/([\w.-]+)\/pull\/(\d+)/))) return { ...base, kind: 'pr', key: null, read: `gh pr view ${m[3]} --repo ${m[1]}/${m[2]}` }
   if (host === 'github.com' && (m = u.pathname.match(/^\/([\w.-]+)\/([\w.-]+)\/issues\/(\d+)/))) {

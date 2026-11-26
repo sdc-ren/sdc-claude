@@ -37,7 +37,7 @@ From OWASP Top 10:2025, ASVS, CWE Top 25 and NIST SSDF — code written by AI is
 | S6 | Dependencies | A new or bumped package exists under that exact name (AI invents look-alikes), is maintained, pinned, and free of high/critical advisories | A03, A08 |
 | S7 | Data integrity | Money and multi-row writes in one transaction; migrations with a safe `down`; imports and webhooks verify what they trust; no hand-made auth or crypto | A04, A07, A08 |
 
-**Scan first.** `node ${CLAUDE_PLUGIN_ROOT}/scripts/security-scan.mjs <worktree> --base origin/<base> --out <task>/logs/<job>-security.json`
+**Scan first.** `node <PLUGIN>/scripts/security-scan.mjs <worktree> --base origin/<base> --out <task>/logs/<job>-security.json`
 prints a short summary: secrets and sensitive log values, `gitleaks` and `semgrep` results and new
 dependencies — only on lines the change added (results elsewhere are listed as pre-existing, never the change's).
 A scanner listed `not installed` or `failed` did not run; it is never a pass.

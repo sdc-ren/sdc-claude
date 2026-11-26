@@ -1,0 +1,22 @@
+{
+  "dev": {
+    "tools": "Read, Edit, Write, Grep, Glob, Bash",
+    "model": "sonnet"
+  },
+  "lead": {
+    "tools": "Read, Edit, Write, Grep, Glob, Bash",
+    "model": "sonnet"
+  },
+  "pm": {
+    "tools": "Read, Write, Edit, Grep, Glob, Bash, mcp__codegraph__codegraph_explore",
+    "model": "opus"
+  },
+  "reviewer": {
+    "tools": "Read, Grep, Glob, Bash",
+    "model": "sonnet"
+  },
+  "tester": {
+    "tools": "Read, Write, Grep, Glob, Bash",
+    "model": "sonnet"
+  }
+}

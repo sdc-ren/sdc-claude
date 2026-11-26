@@ -11,7 +11,7 @@ to use the plugin is in `README.md`.
 ## Shape
 
 ```
-session (orchestrator, has Bash)            Workflow (thin executor, no fs)
+session (orchestrator, has Bash)            executor (engine/src; no fs — the host runs it)
   task.mjs resolve / lock / new-round   →     loop:
   ticket.md (new comments only)                 PM  → dispatch {jobs[], groups, models}
   gh PR state                                   run jobs (parallel inside a group)
@@ -45,7 +45,7 @@ The roster is a menu. The PM uses the fewest roles that satisfy the hard rules.
 | `/tf:address-review <task\|PR> [--check]` | feedback | setup, dev, tester, reviewer (none with `--check`) | triage, fixes pushed to the same PR, reply drafts |
 | `/tf:review <PR\|task>` | review | setup, reviewer | static review report + PR comment draft |
 | `/tf:e2e <PR\|task> [--cases a,b]` | e2e | setup, tester (only on approved cases) | cases.md to approve, then evidence + ticket comment draft |
-| `/tf:demo <canvas> [words]` | — (no workflow, `docs/demo.md`) | none | clickable demo of the canvas, local or one artifact |
+| `/tf:demo <canvas> [words]` | — (no workflow, `hosts/claude/docs/demo.md`) | none | clickable demo of the canvas, local or one artifact |
 
 There is no `--repos`: the PM inspects every repo the workspace config lists. Flags are in the README.
 

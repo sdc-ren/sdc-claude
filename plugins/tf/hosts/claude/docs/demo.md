@@ -11,7 +11,7 @@ behaviour the canvas does not draw. Say this in the report so nobody shows it as
 ## 1. Inputs
 
 - **The canvas** — a `https://claude.ai/artifact/…` link of type Design (pasted, picked from the band above the
-  chat input, `@`-mentioned, or picked with `--attach`: the Picker of `docs/attach.md`). Its design system is
+  chat input, `@`-mentioned, or picked with `--attach`: the Picker of `hosts/claude/docs/attach.md`). Its design system is
   already inside it (`project/ds/<folder>/`); an attached design-system artifact is only used when the canvas
   has none installed.
 - **The user's words** (optional) — what to show (e.g. "chỉ role kỹ thuật và khách hàng", "bắt đầu từ đăng nhập").

@@ -208,10 +208,20 @@ process tách JSON từ câu trả lời cuối, kiểm tra theo `engine/schemas
    script cũ.
 
 **PR 1 = bước 1–4 (1.27.0).** PR 2 = bước 5–6, PR 3 = bước 7 (Codex), PR 4 = bước 8 (Copilot).
-5. **engine/**: chia `task-flow.js`, thêm cổng Runtime, `hosts/claude/runtime-workflow.mjs`; build gộp lại một file.
-   Điều kiện qua: `tests/engine.mjs` pass, một `/tf:build` thật ra cùng kết quả.
-6. **content/ + hosts/claude/build.mjs**: dời nội dung, sinh lại plugin Claude vào `dist/claude`; diff so với plugin cũ
-   chỉ còn phần có chủ đích. Bật `boundaries.mjs` ở chế độ chặn.
+5. ✅ **engine/** (1.28.0): `engine/src/` là module ESM — `limits`, `schemas`, `meta`, `flow` (`taskFlow(args, rt)`, rt =
+   agent/parallel/phase/log/budget). Chưa chia nhỏ `flow.mjs` thêm (các luật cứng dùng chung trạng thái của một lần chạy;
+   tách thành hàm thuần là việc riêng, không cần cho host mới). `build/engine-bundle.mjs` gộp lại thành
+   `engine/task-flow.js` cho Workflow; 36 kịch bản test chạy trên cả hai dạng (`TF_ENGINE=src`).
+6. ✅ **content/ + hosts/claude/build.mjs** (1.28.0): `content/commands/`, `content/roles/` là nguồn; `skills/`, `agents/`,
+   `engine/task-flow.js` được sinh **tại chỗ** (không có `dist/`, không nhánh release — chốt quyết định 11.2: marketplace
+   giữ nguyên đường dẫn, CI kiểm file sinh ra khớp nguồn). Phần chỉ Claude có: `hosts/claude/roles.json` (tools, model),
+   `hosts/claude/notes.md` (cách làm các bước *(host: …)*), `hosts/claude/commands/` + `hosts/claude/docs/` (`demo`,
+   `digest`, attach). Docs/guidelines dùng `<PLUGIN>` và *(host: …)*; test chặn tên tool/biến của agent trong
+   docs, guidelines, content. **Prompt vẫn gọi `node <PLUGIN>/scripts/…`**, không chuyển sang `tf`: `scripts/` là
+   đường dẫn ổn định cho mọi host, đổi lệnh trong prompt không đem lại gì thêm.
+
+**PR 2 = bước 5–6 (1.28.0).**
+
 7. **hosts/process + hosts/codex**: driver, hook, đóng gói; conformance; thử thật trên Codex bản mới nhất.
 8. **hosts/copilot**: tương tự.
 9. Kiro, Cursor: chỉ thêm `hosts/<x>/` khi cần.

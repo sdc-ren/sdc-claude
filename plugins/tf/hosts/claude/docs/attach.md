@@ -50,7 +50,7 @@ Every picked, mentioned or pasted item counts as selected.
 names the artifact's type. Then by kind:
 
 - **Canvas** (type Design — screens on a canvas): the screens are source code, not pictures; keep them whole.
-  Download `project/` exactly as `docs/demo.md` steps 2–3 do (list files, read `paths`, copy to
+  Download `project/` exactly as `hosts/claude/docs/demo.md` steps 2–3 do (list files, read `paths`, copy to
   `<dir>/specs/canvas-<short-slug>/project/`, fetch missing `_blob` assets), then
   `node <PLUGIN>/scripts/canvas.mjs summary <dir>/specs/canvas-<short-slug> --url <url> > <dir>/specs/canvas-<short-slug>.md`
   (groups by role, every screen with device, size and the screens it links to, the canvas's notes) and
