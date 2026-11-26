@@ -73,3 +73,11 @@ test('config prints only the sections a role needs, plus Hard rules, and names w
   const one = spawnSync(process.execPath, [T, 'config', root, 'repos'], { encoding: 'utf8' }).stdout
   assert.match(one, /^## Repos\n- be/)
 })
+
+test('a repo at the workspace root gets a worktree folder named after the root, like any other repo', () => {
+  const root = join(mkdtempSync(join(tmpdir(), 'tf-root-')), 'shop')
+  mkdirSync(join(root, '.tf'), { recursive: true })
+  writeFileSync(join(root, '.tf', 'config.md'), '## Repos\n| key | path | base |\n|---|---|---|\n| shop | `./` | `main` |\n')
+  const r = JSON.parse(spawnSync(process.execPath, [T, 'resolve', root, 'PROJ-1 fix'], { encoding: 'utf8' }).stdout)
+  assert.equal(r.worktreePaths.shop, join(root, '.worktrees', 'PROJ-1', 'shop'))
+})

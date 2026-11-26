@@ -28,5 +28,8 @@ Every action: show the plan, then act only after a clear yes from the user.
   to the user in full, and only on their yes for that command run
   `node {{root}}/scripts/resources.mjs release <cwd> <slug> --unlisted`.
   Also run `--migrate` and `--legacy` as dry runs and mention them only when they have something to do.
+  Merged work changed the base branches: when the config's `## Knowledge` has a `Check` command, run it (with
+  `<PLUGIN>` = the plugin root, `<root>` = `<cwd>`) and say in one line which maps are now stale — refreshing is
+  the next run's job (only when it needs them).
 
 Reply in the user's language.

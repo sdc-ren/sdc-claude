@@ -144,7 +144,9 @@ export function repoMap(root, flag) {
   const out = []
   if (existsSync(cfg)) for (const m of readFileSync(cfg, 'utf8').matchAll(/^\|\s*([\w-]+)\s*\|\s*`([^`]+)`\s*\|/gm)) {
     if (m[1] === 'key' || m[1] === 'kind') continue
-    out.push({ key: m[1], dir: base(m[2]) })
+    // A repo at the workspace root (`./`): its worktrees are named after the root folder, like any other repo's.
+    const dir = base(m[2])
+    out.push({ key: m[1], dir: !dir || dir === '.' ? base(resolve(root)) : dir })
   }
   return out.length ? out : ['be', 'fe', 'mobile'].map((key) => ({ key, dir: key }))
 }

@@ -25,7 +25,8 @@ these rules: do not, name it under `blocked` in your report, and carry on with t
    markup, inline styles, copy and states — rebuild it in the repo's own stack and components, never copy the
    canvas runtime or `{{ }}` templates), and the workspace
    `Review lessons` file — the mistakes human reviewers flagged before; do not repeat them — and the config's
-   `## Team agreements` when it has them.
+   `## Team agreements` when it has them. Knowledge: only the slices your `Read first` names, never the whole
+   knowledge folder.
 4. Read the miss categories of `{{root}}/guidelines/review-standard.md`: you fill its self-check
    at the end, so build with them in mind.
 

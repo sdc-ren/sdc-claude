@@ -40,8 +40,9 @@ language; `writingLang` = `Writing language` → a `Writing language:` line in t
 
 ## 1. Pre-flight (in order)
 
-1. **Config** — read `C`. Missing → ask the user for repos, excluded and read-only paths, test policy,
-   tracker, provisioning; write it from `<PLUGIN>/docs/config-template.md`; show it.
+1. **Config** — read `C`. Missing → set the workspace up first: follow `<PLUGIN>/docs/init.md` (it detects the
+   repos and tools, asks only what it cannot detect, and writes the config), then go on with this run.
+   Commands in `C` may name `<PLUGIN>` (the plugin root) and `<root>` (`<cwd>`): substitute both.
 2. **Identity** — `node $S/task.mjs resolve <cwd> "<input>" [--name <name>]` (repos come from the config table;
    the slug is the PR's or issue's key, else `--name`, else the user's words, else the first link). It returns
    `slug`, `dir`, `round`, `nextRound`, `status`, `prs`, `worktrees`, `worktreePaths` (`.worktrees/<SLUG>/<repo dir>`),
@@ -56,6 +57,9 @@ language; `writingLang` = `Writing language` → a `Writing language:` line in t
 5. **Fresh base** — `node $S/fresh.mjs <path>:<base> …` for the config repos (report skipped checkouts in
    one line). A run works on its own task only: it never frees, archives or reports the resources of other
    tasks — cleanup happens only when the user runs `/tf:clean`.
+5b. **Knowledge** — when `C` `## Knowledge` has a `Check` command, run it (a few seconds, it writes nothing). Stale
+   maps → put `Stale knowledge maps: <names> (<why>)` in the run's `notes`; the PM refreshes one only when the task
+   needs it. `Refresh: before a run` in `C` → run `Generate` for the stale maps now instead. No `Check` line → skip.
 6f. **Feedback mode instead of step 6** — no tracker read. PRs = every PR of the task from `resolve` (`prs`, open AND merged — the
    PM needs to know which may not be pushed to — plus the input PR URL). `node $S/pr-feedback.mjs fetch <dir> <pr urls…>` → `<dir>/feedback.md` + JSON summary.
    Nothing open (`total` 0, no new reviews or comments) → tell the user in one line and stop (unlock), no
@@ -164,6 +168,11 @@ e2e only: `<PLUGIN>/docs/orchestrator-e2e.md` (the approved-cases gate, the fast
 | `escalate` | One `🛑` line with the PM's question and options. After the answer relaunch with the same args, the answer in `notes`. The PM resumes from board.md. |
 | `handoff` | Token budget low — relaunch in a new session with the same args. |
 | `error` | Report the failing stage; relaunch once; then escalate. |
+
+**Knowledge notes** (config `## Knowledge` `Ledger`, the hand-kept notes; you are their only writer): a new
+finding, a decision the user took, an env recipe this run verified → one row or line in the matching file, in the
+form the file already uses (a table: same columns; a list: one `- ` line), then `Generate --only ledger` when `C`
+names tf's generator. `C` `## Close-out` has its own ledger rule → that rule instead.
 
 **Review lessons** (config `Review lessons` file): when this round answered human review points rated
 P0–P2 (or a reviewer BLOCK), add one generalized rule per new pattern to that file (≤ 60 lines total,

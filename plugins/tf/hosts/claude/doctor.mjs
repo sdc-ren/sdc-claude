@@ -7,6 +7,7 @@
 //   - `<shell command>` — <label>        (pass = exit code 0; `<root>` is replaced by the workspace root)
 // Prints a table; exit 1 when a required check fails. Optional checks only warn.
 
+import { knowledgeOf, repoRows } from '../../core/config.mjs'
 import { configPath } from '../../core/paths.mjs'
 import { existsSync, mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs'
 import { execFileSync, execSync } from 'node:child_process'
@@ -59,6 +60,21 @@ check('plugin agents tf:pm/lead/dev/tester/reviewer', !agents.length, agents.len
 const gl = ['git', 'pr-description', 'pr-review', 'review-standard', 'ticket-comment', 'e2e-testing'].filter((g) => !existsSync(join(PLUGIN, 'guidelines', `${g}.md`)))
 check('plugin guidelines', !gl.length, gl.length ? `missing: ${gl.join(', ')}` : '')
 check(`workspace config ${relative(root, cfgPath).replace(/\\/g, '/')}`, !!cfg, cfgPath)
+
+// Knowledge: the config's Knowledge lines, its stale check, a code index per repo.
+{
+  const k = knowledgeOf(cfg)
+  const sub = (c) => c.replaceAll('<PLUGIN>', PLUGIN).replaceAll('<root>', root)
+  if (cfg && !k.entry) check('knowledge: config has no Knowledge lines in tf\'s form', false, 'run /tf:init to add them', false)
+  else if (cfg) {
+    check(`knowledge entry ${k.entry}`, existsSync(join(root, k.entry)), existsSync(join(root, k.entry)) ? '' : `missing — run ${k.generate ? sub(k.generate) : '/tf:init'}`, false)
+    if (k.check) { const r = sh(sub(k.check), 120_000); check('knowledge maps up to date', r.ok, r.ok ? '' : r.out.split('\n')[0], false) }
+  }
+  if (which('codegraph')) for (const r of repoRows(cfg)) {
+    const p = join(root, r.path)
+    if (existsSync(p)) check(`code index ${r.key} (.codegraph)`, existsSync(join(p, '.codegraph')), existsSync(join(p, '.codegraph')) ? '' : `codegraph init -y ${r.path} — or /tf:init`, false)
+  }
+}
 
 // Workspace repos from the config table: | key | `path/` | `base` …
 for (const m of cfg.matchAll(/^\|\s*([\w-]+)\s*\|\s*`([^`]+)`\s*\|\s*`([^`]+)`/gm)) {

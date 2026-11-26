@@ -50,10 +50,18 @@ No row for a repo → its test script from the repo `CLAUDE.md` / package file w
 ## Design & artifacts (optional — the `@` list already finds this workspace's items itself)
 - Design system: <title — https://claude.ai/artifact/…>   (pin a default, also listed under `@`)
 
-## Knowledge (PM reads first; orchestrator updates at close-out)
-- Known bugs: <path> · Verified env recipes: <path> · Decisions: <path>
-- Review lessons: <path> — rules learned from human PR reviews, each led by its category tag (`[M1]`…, see
-  guidelines/review-standard.md); devs and reviewers read it before every job.
+## Knowledge (PM reads the entry first; jobs get their slices; the orchestrator writes only pipeline/)
+<!-- `/tf:init` writes these lines. A workspace with its own generator puts its commands here instead. -->
+- Entry: `knowledge/README.md`
+- Generate: `node <PLUGIN>/scripts/knowledge.mjs gen <root>`
+- Check: `node <PLUGIN>/scripts/knowledge.mjs check <root>`
+- Refresh: when needed   (or: before a run)
+- Diff: <optional: a contract-diff command with <SLUG>>
+- Topics: <optional: comma-separated words the ledger is sliced by; default: the repos' domain folders>
+- Ledger: `knowledge/pipeline/` (findings, decisions, env-recipes, review-lessons — hand-kept)
+- Code index: codegraph
+- Review lessons: `knowledge/pipeline/review-lessons.md` — rules learned from human PR reviews, each led by its
+  category tag (`[M1]`…, see guidelines/review-standard.md); devs and reviewers read it before every job.
 
 ## Flows (e2e)
 - Playwright package: `<path>/package.json` (`--playwright` / `PLAYWRIGHT_FROM`).

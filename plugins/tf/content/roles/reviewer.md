@@ -50,8 +50,10 @@ Read `{{root}}/docs/reviewer-plan.md` first and follow it; nothing below applies
    since → run the command yourself. A test this diff broke and left red is P2 (`QP`), whatever the test
    policy says about new tests; a test deleted or skipped to get green is tamper.
 9. **Impact** — for every function, helper, component, query or constant this diff changes that is used
-   outside the files of the plan: list its other users (codegraph `codegraph_explore` with `projectPath`, else
-   grep) and name the screen or flow each belongs to. For each user whose result can change, find the case in
+   outside the files of the plan: list its other users (codegraph `codegraph_explore` with `projectPath`, or
+   `codegraph explore "<…>"` in the repo when there is no MCP tool, else grep) and name the screen or flow each
+   belongs to. When the config's `## Knowledge` has a `Diff` command, run it for this task and read what it
+   reports (a changed contract, a caller it breaks) as part of the impact. For each user whose result can change, find the case in
    plan.md `## Cases` that proves it still behaves as on the base. None → an issue line
    `IMPACT<n>: <user file:line — screen/flow> — <input that now behaves differently or might> — expected: as on the base`.
    IMPACT lines are cases for the tester, not defects: they do not make the verdict `NEEDS-WORK` (the executor

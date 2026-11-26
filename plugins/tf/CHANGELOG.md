@@ -4,6 +4,33 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.31.0] — 2026-11-26
+
+### Added
+- **`/tf:init`** sets a workspace up, or connects one that already has its own setup. It detects one repo or
+  several, each repo's stack, package manager, base branch, commands, ports, docs, domain folders and code index,
+  then writes or extends the config after one question (`--dry-run`, `--yes`). A workspace with its own knowledge
+  generator is only connected: tf's lines go at the top of its `## Knowledge`, every other line stays. `--from`
+  takes the shared sections' wording from another config on the machine, never its repos or its path. It offers
+  `codegraph init` for repos without an index and an `AGENTS.md` for Codex, and does only what you agree to.
+- **Knowledge maps** (`knowledge/`, entry `README.md`): `repos/` and `ledger/` from tf's generator
+  (`tf knowledge gen|check`), read from `origin/<base>`; a `manifest.json` says which map is stale. The ledger
+  reads hand-kept notes as tables (columns by header, English or Vietnamese) or lists of lines; its topics come
+  from the config or the repos' domain folders — no list built into tf.
+- A standard `## Knowledge` section: `Entry`, `Generate`, `Check`, `Refresh`, `Diff`, `Topics`, `Ledger`,
+  `Code index`.
+
+### Changed
+- Before every run the orchestrator only *checks* the maps (seconds) and tells the PM which are stale. The PM reads
+  the entry and the maps for the task before codegraph, refreshes a map only when the task needs it (M/L, or data,
+  contracts, flows, architecture, a new feature), and gives each job only its slices. A config without a Knowledge
+  section works as before.
+- The reviewer runs the config's `Diff` command when there is one. The PM and the reviewer use `codegraph explore`
+  when the host has no codegraph tool. The tester gets the config's Knowledge section.
+- A missing config starts `/tf:init` instead of a list of questions. `/tf:clean` says which maps merged work made
+  stale. `/tf:status --doctor` checks the knowledge entry, the stale check and a code index per repo.
+- One repo at the workspace root works: its worktrees are `.worktrees/<SLUG>/<repo folder>` like any other repo's.
+
 ## [1.30.0] — 2026-11-26
 
 ### Added
