@@ -45,15 +45,41 @@ function parseGrep(out, refPrefix) {
   return hits
 }
 
+// Many files of one commit in one `git cat-file --batch` (a `git show` per file costs a process each).
+function batchRead(repo, rev, paths) {
+  const out = new Map()
+  if (!paths.length) return out
+  let buf
+  try { buf = execFileSync('git', ['-C', repo, 'cat-file', '--batch'], { input: paths.map((p) => `${rev}:${p}`).join('\n') + '\n', stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, timeout: 120_000, maxBuffer: 512 << 20 }) } catch { return out }
+  let at = 0
+  for (const p of paths) {
+    const nl = buf.indexOf(10, at)
+    if (nl < 0) break
+    const head = buf.toString('utf8', at, nl)
+    const m = head.match(/^\S+ (\w+) (\d+)$/)
+    if (!m) { at = nl + 1; continue } // "<rev>:<path> missing"
+    const size = Number(m[2])
+    if (m[1] === 'blob' && size <= MAX_FILE) out.set(p, lf(buf.toString('utf8', nl + 1, nl + 1 + size)))
+    at = nl + 1 + size + 1
+  }
+  return out
+}
+
 function atRev(repo, rev, label) {
   const version = (git(repo, ['rev-parse', rev]) || '').trim()
   let list = null
   const files = () => (list ||= (git(repo, ['ls-tree', '-r', '--name-only', rev]) || '').split('\n').filter((f) => f && !SKIP.test(f)))
+  const cache = new Map()
+  const read = (p) => { if (!cache.has(p)) cache.set(p, lf(git(repo, ['show', `${rev}:${p}`], MAX_FILE))); return cache.get(p) }
   return {
     ref: label || rev, version, files,
     has: (p) => files().includes(p),
-    read: (p) => lf(git(repo, ['show', `${rev}:${p}`], MAX_FILE)),
+    read,
+    // Read many files at once into the cache; read() then answers from it.
+    prefetch: (paths) => { const want = [...new Set(paths)].filter((p) => !cache.has(p)); for (const [p, t] of batchRead(repo, rev, want)) cache.set(p, t); for (const p of want) if (!cache.has(p)) cache.set(p, null) },
     grep: (re, filter = () => true) => parseGrep(git(repo, ['grep', '-n', '-I', '-E', '-e', toERE(re), rev, '--'], 256 << 20), `${rev}:`).filter((h) => filter(h.file)),
+    // Lines holding any of many fixed strings (git's fixed-string search: far faster than a long alternation).
+    grepWords: (words, filter = () => true, wholeWord = false) => (words.length ? parseGrep(git(repo, ['grep', '-n', '-I', '-F', ...(wholeWord ? ['-w'] : []), ...words.flatMap((w) => ['-e', w]), rev, '--'], 256 << 20), `${rev}:`).filter((h) => filter(h.file)) : []),
   }
 }
 
@@ -92,6 +118,20 @@ function workingTree(dir, withUntracked) {
     files,
     has: (p) => existsSync(join(dir, p)),
     read,
+    prefetch: () => {},
+    grepWords: (words, filter = () => true, wholeWord = false) => {
+      if (!words.length) return []
+      const esc = words.map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'))
+      const rx = new RegExp(wholeWord ? `(?<![\\w$])(${esc.join('|')})(?![\\w$])` : `(${esc.join('|')})`)
+      const hits = []
+      for (const f of files()) {
+        if (!filter(f)) continue
+        const t = read(f)
+        if (!t || !rx.test(t)) continue
+        t.split('\n').forEach((text, i) => { if (rx.test(text)) hits.push({ file: f, line: i + 1, text }) })
+      }
+      return hits
+    },
     // Every file of files() (untracked ones too): the same answer as git grep, without missing new files.
     grep: (re, filter = () => true) => {
       const rx = new RegExp(re)

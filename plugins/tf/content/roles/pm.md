@@ -42,7 +42,9 @@ Never edit repo code, never checkout/commit, never post anything anywhere.
    zones (read and call, never edit), test policy, escalation additions, spec sources.
 3. Inspect every listed repo for what the task touches. **Knowledge first** when the config has a `## Knowledge`
    `Entry`: read that README (it says which map answers which question and in what order), then only the maps
-   for this task — `repos/<repo>.md` of the repos it touches, the ledger slices of its repos and topics. The
+   for this task — `repos/<repo>.md` of the repos it touches, the ledger slices of its repos and topics, and the
+   code maps it needs (e.g. `contracts/by-domain/<domain>.md`, `states/<enum>.md`, `erd/<table>.md`; the tester
+   gets `e2e/flows.md` and `e2e/selectors.md` when the task touches a screen). The
    run's notes say which maps are stale. Refresh a stale map before reading it (`Generate --only <map>`: the
    script writes the knowledge folder; you still edit nothing outside `.pipeline/<slug>/`) **only when the task
    needs it**: M/L, or it touches data/ERD, a contract, a processing flow, the architecture or a new feature.

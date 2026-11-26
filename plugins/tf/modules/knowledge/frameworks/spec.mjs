@@ -5,7 +5,7 @@ import { blankComments, joinPaths, lineAt, normPath } from '../scan.mjs'
 
 // The path part of the first server URL that has one ('/api' from 'https://host/api' or '/api').
 const serverPath = (urls) => { for (const u of urls) { const p = normPath(String(u).replace(/\{[^}]*\}/g, 'x')); if (p && p !== '/') return p } return '' }
-import { hasDep, pubDeps } from './util.mjs'
+import { grepFiles, hasDep, pubDeps, repoConstants } from './util.mjs'
 
 export const openapi = {
   name: 'OpenAPI',
@@ -58,12 +58,15 @@ export const socketio = {
   detect: (reader) => hasDep(reader, ['socket.io', 'socket.io-client', '@nestjs/websockets']) || pubDeps(reader).has('socket_io_client'),
   extract(reader, { isSource }) {
     const server = hasDep(reader, ['socket.io', '@nestjs/websockets'])
+    let cache = null
+    const consts = () => (cache ||= repoConstants(reader))
     const out = []
-    for (const file of new Set(reader.grep('\\.(emit|on|once)\\s*\\(\\s*[\'"`]', (f) => (/\.(m?[jt]sx?|cjs|vue|dart)$/.test(f) && isSource(f, /./)) || /\.dart$/.test(f)).map((h) => h.file))) {
+    for (const file of grepFiles(reader, '\\.(emit|on|once)\\s*\\(\\s*([\'"`]|[A-Z][A-Z0-9_]*\\.)', (f) => (/\.(m?[jt]sx?|cjs|vue|dart)$/.test(f) && isSource(f, /./)) || /\.dart$/.test(f))) {
       const src = blankComments(reader.read(file) || '')
-      for (const m of src.matchAll(/\b(\w+)(?:\s*\.\s*(?:to|in|of|broadcast)\s*\([^)]*\))*\s*\.\s*(emit|on|once)\s*\(\s*(['"`])([\w:./-]+)\3/g)) {
-        if (BUILTIN.has(m[4]) || /^(process|window|document|emitter|events?|bus|ee|stream|req|res|app|server|worker|queue|job|redis|sub|pub|el|element)$/i.test(m[1])) continue
-        out.push({ event: m[4], dir: m[2] === 'emit' ? 'emit' : 'on', side: server && !/\.dart$/.test(file) ? 'server' : 'client', at: `${file}:${lineAt(src, m.index)}` })
+      for (const m of src.matchAll(/\b(\w+)(?:\s*\.\s*(?:to|in|of|broadcast|except)\s*\((?:[^()]|\([^()]*\))*\))*\s*\.\s*(emit|on|once)\s*\(\s*(?:(['"`])([\w:./-]+)\3|([A-Z][A-Z0-9_]*\.[A-Z][A-Z0-9_]*))/g)) {
+        const event = m[4] || consts()[m[5]] || ''
+        if (!event || (m[4] && BUILTIN.has(event)) || /^(process|window|document|emitter|events?|bus|ee|stream|req|res|app|server|worker|queue|job|redis|sub|pub|el|element)$/i.test(m[1])) continue
+        out.push({ event, dir: m[2] === 'emit' ? 'emit' : 'on', side: server && !/\.dart$/.test(file) ? 'server' : 'client', at: `${file}:${lineAt(src, m.index)}` })
       }
     }
     return out

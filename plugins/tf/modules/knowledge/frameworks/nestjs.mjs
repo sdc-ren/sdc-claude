@@ -1,7 +1,7 @@
 // tf knowledge — NestJS routes: `@Controller('x')` + `@Get('y')` …, guards (`@UseGuards`, `@Roles`, `@Public`) on the
 // class or the method, the request DTO as validator, and `app.setGlobalPrefix('api')`.
 import { argsAt, blankComments, joinPaths, lineAt, literal } from '../scan.mjs'
-import { hasDep } from './util.mjs'
+import { hasDep, grepFiles } from './util.mjs'
 
 const HTTP = /@(Get|Post|Put|Patch|Delete|All|Options|Head)\s*\(/g
 const decoArg = (src, at) => { const { args } = argsAt(src, at); const t = args[0] ? args[0].text : ''; const l = literal(t); if (l !== null) return l; const m = t.match(/path\s*:\s*(['"`])([^'"`]*)\1/); return m ? m[2] : '' }
@@ -18,7 +18,7 @@ export default {
   extract(reader, { isSource }) {
     const global = (reader.grep('setGlobalPrefix\\s*\\(', (f) => /\.ts$/.test(f)).map((h) => (h.text.match(/setGlobalPrefix\s*\(\s*(['"`])([^'"`]+)\1/) || [])[2]).find(Boolean)) || ''
     const out = []
-    for (const file of new Set(reader.grep('@Controller\\s*\\(', (f) => /\.ts$/.test(f) && isSource(f)).map((h) => h.file))) {
+    for (const file of grepFiles(reader, '@Controller\\s*\\(', (f) => /\.ts$/.test(f) && isSource(f))) {
       const src = blankComments(reader.read(file) || '')
       for (const cm of src.matchAll(/@Controller\s*\(/g)) {
         const prefix = decoArg(src, cm.index + cm[0].length - 1)

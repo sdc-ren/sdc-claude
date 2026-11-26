@@ -120,3 +120,44 @@ export function paths(arg) {
   const l = literal(t)
   return l === null ? [] : [l]
 }
+
+/**
+ * Name constants of a whole repo: `export const EVENTS = { NEW: 'message:new' }` → { 'EVENTS.NEW': 'message:new' },
+ * `export const CHANNEL = 'room'` → { CHANNEL: 'room' }. Only plain string literals; nothing is evaluated.
+ */
+export function repoConstants(reader) {
+  if (reader._consts) return reader._consts
+  const out = {}
+  const files = new Set(reader.grep('\\b(export\\s+)?const\\s+[A-Z][A-Z0-9_]*\\s*(:[^=]+)?=', (f) => /\.(m?[jt]sx?|cjs)$/.test(f) && !/\.(test|spec|d)\.[jt]s$/.test(f)).map((h) => h.file))
+  const list = [...files].slice(0, 600)
+  if (reader.prefetch) reader.prefetch(list)
+  for (const f of list) {
+    const src = blankComments(reader.read(f) || '')
+    for (const m of src.matchAll(/\bconst\s+([A-Z][A-Z0-9_]*)\s*(?::[^=]+)?=\s*(['"`])([^'"`$\n]*)\2/g)) out[m[1]] = m[3]
+    for (const m of src.matchAll(/\bconst\s+([A-Z][A-Z0-9_]*)\s*(?::[^=]+)?=\s*\{/g)) {
+      const open = m.index + m[0].length - 1
+      const body = src.slice(open, open + 20000)
+      let depth = 0, end = 0
+      for (let i = 0; i < body.length; i++) { if (body[i] === '{') depth++; else if (body[i] === '}') { depth--; if (!depth) { end = i; break } } }
+      for (const kv of body.slice(1, end).matchAll(/(?:^|[,{\s])['"]?([A-Za-z_$][\w$]*)['"]?\s*:\s*(['"`])([^'"`$\n]*)\2/g)) out[`${m[1]}.${kv[1]}`] = kv[3]
+    }
+  }
+  return (reader._consts = out)
+}
+
+/** A name argument: a literal, or a constant the repo defines (`QUEUE_NAMES.X`, `CHANNEL`). '' when neither. */
+export function nameOf(arg, consts = {}) {
+  if (!arg) return ''
+  const t = arg.text.trim()
+  const l = literal(t)
+  if (l !== null) return l
+  const k = t.replace(/\s+/g, '')
+  return consts[k] ?? ''
+}
+
+/** The files a pattern occurs in, their text fetched in one batch so the readers that follow do not pay per file. */
+export function grepFiles(reader, re, filter) {
+  const files = [...new Set(reader.grep(re, filter).map((h) => h.file))]
+  if (reader.prefetch) reader.prefetch(files)
+  return files
+}

@@ -5,7 +5,7 @@
 //   Dart   dio / http: `dio.get('/x')`, `http.get(Uri.parse('$base/x'))`, `Uri.https(host, '/x')`
 // A path built at run time (a variable, a constant from another file) is counted as not recognised, not guessed.
 import { argsAt, blankComments, joinPaths, lineAt, literal, normPath } from '../scan.mjs'
-import { calls, enclosing, packages, pubDeps } from './util.mjs'
+import { calls, enclosing, packages, pubDeps, grepFiles } from './util.mjs'
 
 const VERBS = 'get|post|put|patch|delete|head|options|request'
 const JS = /\.(m?[jt]sx?|cjs|vue|svelte)$/
@@ -83,7 +83,7 @@ export const jsClients = {
     const re = new RegExp(`(?<![\\w.$])(${[...new Set(names)].join('|')})\\s*(?:\\.\\s*(${VERBS}))?\\s*(?:<[^>()]*>)?\\s*\\(`, 'g')
     const out = []
     let unresolved = 0
-    const files = new Set(reader.grep(`(${[...new Set(names)].join('|')})\\s*(\\.\\s*(${VERBS}))?\\s*(<[^>()]*>)?\\s*\\(`, (f) => JS.test(f) && isSource(f)).map((h) => h.file))
+    const files = grepFiles(reader, `(${[...new Set(names)].join('|')})\\s*(\\.\\s*(${VERBS}))?\\s*(<[^>()]*>)?\\s*\\(`, (f) => JS.test(f) && isSource(f))
     for (const file of files) {
       const raw = reader.read(file) || ''
       const src = blankComments(raw)
@@ -101,7 +101,7 @@ export const jsClients = {
     // Any client object: `createClient.get('/x')`, `apiClient.POST('/x')`, `http.patch('/x')` — a literal path
     // starting with '/', called on a name that says it is a client.
     const known = new Set(names)
-    for (const file of new Set(reader.grep(`\\.(${VERBS}|GET|POST|PUT|PATCH|DELETE)\\s*(<[^>()]*>)?\\s*\\(\\s*['"\`]/`, (f) => JS.test(f) && isSource(f)).map((h) => h.file))) {
+    for (const file of grepFiles(reader, `\\.(${VERBS}|GET|POST|PUT|PATCH|DELETE)\\s*(<[^>()]*>)?\\s*\\(\\s*['"\`]/`, (f) => JS.test(f) && isSource(f))) {
       const raw = reader.read(file) || ''
       const src = blankComments(raw)
       const consts = constants(src)
@@ -116,7 +116,7 @@ export const jsClients = {
     // Found from the path key back to the call, so a long generic (`client<{ a: X | (Y) }>(…)`) does not hide it.
     const OBJ_PATH = /\b(?:path|url|endpoint|uri)\s*:\s*(['"`])((?:\/|\$\{\s*[A-Za-z_$][\w$]*\s*\})[^'"`]*)\1/g
     const seenAt = new Set(out.map((c) => c.at))
-    for (const file of new Set(reader.grep(`(path|url|endpoint|uri)\\s*:\\s*['"\`](/|\\$\\{)`, (f) => JS.test(f) && isSource(f)).map((h) => h.file))) {
+    for (const file of grepFiles(reader, `(path|url|endpoint|uri)\\s*:\\s*['"\`](/|\\$\\{)`, (f) => JS.test(f) && isSource(f))) {
       const raw = reader.read(file) || ''
       const src = blankComments(raw)
       const consts = constants(src)
@@ -148,7 +148,7 @@ export const dartClients = {
     const out = []
     let unresolved = 0
     const re = new RegExp(`\\b(\\w+)\\s*\\.\\s*(${VERBS})\\s*(?:<[^>()]*>)?\\s*\\(`, 'g')
-    for (const file of new Set(reader.grep(`\\.(${VERBS})\\s*(<[^>()]*>)?\\s*\\(`, (f) => /\.dart$/.test(f) && !/(^|\/)test\//.test(f) && !/\.g\.dart$|\.freezed\.dart$/.test(f)).map((h) => h.file))) {
+    for (const file of grepFiles(reader, `\\.(${VERBS})\\s*(<[^>()]*>)?\\s*\\(`, (f) => /\.dart$/.test(f) && !/(^|\/)test\//.test(f) && !/\.g\.dart$|\.freezed\.dart$/.test(f))) {
       const raw = reader.read(file) || ''
       const src = blankComments(raw)
       const consts = constants(src)

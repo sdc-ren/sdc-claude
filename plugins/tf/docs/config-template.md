@@ -62,6 +62,8 @@ No row for a repo → its test script from the repo `CLAUDE.md` / package file w
 - Code index: codegraph
 - API prefix: <optional: the prefix routes and calls may differ by, e.g. /api/v1>
 - API clients: <optional: names of your own API call helpers tf should read, e.g. apiFetch, http>
+- State enums: <optional: regex an enum's name must match to be in the states map; default status|state|phase|stage|step>
+- Feature tags: <optional: comment tags the features map reads, e.g. @screen, @api, @role; default @feature, @screen, @role>
 - Review lessons: `knowledge/pipeline/review-lessons.md` — rules learned from human PR reviews, each led by its
   category tag (`[M1]`…, see guidelines/review-standard.md); devs and reviewers read it before every job.
 

@@ -4,6 +4,36 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.33.0] — 2026-11-26
+
+### Added
+- **Code maps `runtime`, `states`, `erd`, `e2e`, `features`** (phase 2b of `plans/tf-knowledge-phase2.md`), each
+  written only when it finds something:
+  - `runtime/` — cron (node-cron, cron, `@Cron`/`@Interval`, agenda), queues and workers (BullMQ, Bull, Nest
+    `@Processor`), jobs added to a queue, events (`@OnEvent`, `*Emitter/*Bus.emit`), Redis pub/sub, routes that look
+    like webhooks (by path), socket events the server emits. Names given through a repo constant are resolved.
+  - `states/` — state enums (TS `enum`, `as const`, `Object.freeze`, Sequelize `ENUM` columns, Prisma, Dart) whose
+    name matches `State enums` (default `status|state|phase|stage|step`), with every line that writes each value.
+  - `erd/` — models from Prisma, Sequelize (init, define, decorators, associations), TypeORM, Mongoose, or SQL
+    migrations when there is no ORM: columns, relations both ways (with a small diagram), and the service,
+    controller, route, job and repository files that use each.
+  - `e2e/` — the flows in `.pipeline/` (per task and `_regression`) with case title, screen and last result; the
+    test ids the code defines (`data-testid` incl. Vue bindings and templates, Flutter `Semantics(identifier:)`,
+    `Key`) against the ones flows use — and the ones a flow uses that the code no longer defines.
+  - `features/` — the tags the code declares in comments (`Feature tags`, default `@feature, @screen, @role`;
+    several on a line), with the endpoint under each tag; one page per tag value, or per area when there are many.
+- The knowledge README's reading order covers every map: features → contracts → states + runtime → erd → ledger →
+  e2e → verify with codegraph. The PM's brief names the code-map slices; the tester re-runs a screen's existing flow
+  as a regression candidate and checks `e2e/selectors.md` before a test id changes.
+- Optional config lines `State enums` and `Feature tags`.
+
+### Changed
+- `tf knowledge check` compares each map's sources first and reads code only for a map that changed or was never
+  written; maps that read the same code (the contract model) share it within a run. Reading many files of a base
+  branch is batched (`git cat-file --batch`), which halved a full `gen` on a large workspace.
+- socket.io: events emitted through a constant are kept even when the constant's value is a common word, and
+  `io.to(room(x)).emit(…)` is read.
+
 ## [1.32.0] — 2026-11-26
 
 ### Added

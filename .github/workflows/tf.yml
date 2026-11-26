@@ -38,6 +38,8 @@ jobs:
         run: node --test plugins/tf/tests/knowledge.mjs
       - name: Contracts map and contract diff (routes, calls, OpenAPI, sockets; LF and CRLF fixtures)
         run: node --test plugins/tf/tests/contracts.mjs
+      - name: Code maps (runtime, states, erd, e2e, features; LF and CRLF fixtures)
+        run: node --test plugins/tf/tests/maps.mjs
       - name: tf command line (every command, same output as the old scripts)
         run: node --test plugins/tf/tests/cli.mjs
       - name: Layer boundaries (imports point inward, core names no agent)

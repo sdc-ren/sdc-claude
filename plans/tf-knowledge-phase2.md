@@ -1,6 +1,6 @@
 # Kế hoạch: tri thức workspace, giai đoạn 2 — bản đồ đọc code và contract diff
 
-Trạng thái: 2a đã làm (1.32.0: contracts, diff); 2b chưa. Ngày: 2026-11-26. Nối tiếp `plans/tf-knowledge-init.md` (giai đoạn 1, đã có trong 1.31.x).
+Trạng thái: đã làm — 2a (1.32.0: contracts, diff), 2b (1.33.0: runtime, states, erd, e2e, features). Ngày: 2026-11-26. Nối tiếp `plans/tf-knowledge-init.md` (giai đoạn 1, đã có trong 1.31.x).
 
 ## 1. Mục tiêu
 
