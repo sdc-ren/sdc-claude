@@ -166,6 +166,116 @@ test('serve.mjs: starts a configured server on the task port, reuses it, stops i
   rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
 })
 
+test('serve.mjs: a server running older code, or one serve.mjs did not start, is restarted', { skip: P.IS_WIN && 'Windows cannot tell which folder a process runs from' }, async (t) => {
+  const root = tmp('stale')
+  const wt = join(root, '.worktrees', 'T-1', 'backend')
+  mkdirSync(wt, { recursive: true })
+  mkdirSync(join(root, '.claude'), { recursive: true })
+  mkdirSync(join(root, '.pipeline', 'T-1'), { recursive: true })
+  // The server reads its answer once, at boot: a change is seen only after a restart.
+  writeFileSync(join(wt, 'app.mjs'), "import { createServer } from 'node:http'\nimport { readFileSync } from 'node:fs'\nconst v = readFileSync('v.txt', 'utf8').trim()\ncreateServer((q, r) => r.end(v)).listen(Number(process.env.PORT), '127.0.0.1')\n")
+  writeFileSync(join(wt, 'v.txt'), 'one\n')
+  sh('git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm init', wt)
+  const port = await new Promise((res) => { const s = createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)) }) })
+  const cfg = { be: { dir: 'backend', port: true, cmd: `${P.nodeCmd('app.mjs')}`, timeout: 40, env: { PORT: '{port}' }, health: 'http://127.0.0.1:{port}/' } }
+  writeFileSync(join(root, '.claude', 'task-flow.md'), `# config\n\n## Servers\n\`\`\`json\n${JSON.stringify(cfg, null, 2)}\n\`\`\`\n`)
+  const env = { ...process.env, HOME: root, USERPROFILE: root }
+  node('resources.mjs', ['add', root, 'T-1', '--kind', 'port', '--id', String(port), '--release', P.freePortCmd(port)], { env })
+  t.after(() => { try { node('serve.mjs', ['stop', root, 'T-1'], { env }) } catch {} for (const pid of P.pidsOnPort(port)) if (Number(pid)) P.killTree(pid) })
+  const start = () => { let out; try { out = node('serve.mjs', ['start', root, 'T-1'], { env }) } catch (e) { out = String(e.stdout) } return JSON.parse(out.trim().split('\n').pop()) }
+  const answer = async () => (await fetch(`http://127.0.0.1:${port}/`)).text()
+
+  assert.equal(start().status, 'started')
+  assert.equal(await answer(), 'one')
+  assert.equal(start().status, 'running', 'same code: reused')
+  writeFileSync(join(wt, 'v.txt'), 'two\n') // an uncommitted edit, no watcher
+  const re = start()
+  assert.equal(re.status, 'restarted', JSON.stringify(re))
+  assert.match(re.stale, /code changed/)
+  assert.equal(await answer(), 'two')
+  assert.equal(start().status, 'running')
+
+  // A server started by hand from the task's worktree (no record): its code is unknown, so it is replaced.
+  node('serve.mjs', ['stop', root, 'T-1'], { env })
+  assert.ok(await until(() => P.pidsOnPort(port).length === 0))
+  writeFileSync(join(wt, 'v.txt'), 'three\n')
+  const byHand = track(spawn(process.execPath, ['app.mjs'], { cwd: wt, env: { ...process.env, PORT: String(port) }, stdio: 'ignore' }))
+  assert.ok(await until(() => P.pidsOnPort(port).length > 0), 'the hand-started server listens')
+  writeFileSync(join(wt, 'v.txt'), 'four\n')
+  const replaced = start()
+  assert.equal(replaced.status, 'restarted', JSON.stringify(replaced))
+  assert.match(replaced.stale, /not started by serve\.mjs/)
+  assert.ok(await until(() => !P.alive(byHand.pid)), 'the hand-started server is stopped')
+  assert.equal(await answer(), 'four')
+  rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+})
+
+test('serve.mjs list: every task server, and the ones started by hand from a task worktree; stop --pid', { skip: P.IS_WIN && 'Windows cannot tell which folder a process runs from' }, async (t) => {
+  const root = tmp('list')
+  const env = { ...process.env, HOME: root, USERPROFILE: root }
+  const wt = join(root, '.worktrees', 'T-1', 'backend')
+  const other = join(root, '.worktrees', 'T-2', 'web')
+  const outside = join(root, 'elsewhere')
+  for (const d of [wt, other, outside, join(root, '.claude'), join(root, '.pipeline', 'T-1')]) mkdirSync(d, { recursive: true })
+  writeFileSync(join(wt, 'app.mjs'), "import { createServer } from 'node:http'\ncreateServer((q, r) => r.end('ok')).listen(Number(process.env.PORT), '127.0.0.1')\n")
+  const port = await new Promise((res) => { const s = createServer().listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => res(p)) }) })
+  const cfg = { be: { dir: 'backend', port: true, cmd: `${P.nodeCmd('app.mjs')}`, timeout: 40, env: { PORT: '{port}' }, health: 'http://127.0.0.1:{port}/' } }
+  writeFileSync(join(root, '.claude', 'task-flow.md'), `# config\n\n## Servers\n\`\`\`json\n${JSON.stringify(cfg, null, 2)}\n\`\`\`\n`)
+  node('resources.mjs', ['add', root, 'T-1', '--kind', 'port', '--id', String(port), '--release', P.freePortCmd(port)], { env })
+  t.after(() => { try { node('serve.mjs', ['stop', root, 'T-1'], { env }) } catch {} for (const pid of P.pidsOnPort(port)) if (Number(pid)) P.killTree(pid) })
+  try { node('serve.mjs', ['start', root, 'T-1'], { env }) } catch {}
+  const listen = "const s = require('http').createServer().listen(0, '127.0.0.1', () => console.log(s.address().port))"
+  const spawnAt = (cwd) => new Promise((res) => { const c = track(spawn(process.execPath, ['-e', listen], { cwd, stdio: ['ignore', 'pipe', 'ignore'] })); c.stdout.once('data', (b) => res({ pid: String(c.pid), port: Number(String(b).trim()) })) })
+  const byHand = await spawnAt(other)
+  const theirs = await spawnAt(outside)
+
+  const rows = JSON.parse(node('serve.mjs', ['list', root, '--json'], { env }))
+  const be = rows.find((r) => r.recorded && r.name === 'be')
+  assert.ok(be && be.running && be.ports.includes(port), JSON.stringify(rows))
+  const hand = rows.find((r) => !r.recorded && r.pid === byHand.pid)
+  assert.ok(hand, 'a listener started by hand from a task worktree is listed')
+  assert.equal(hand.task, 'T-2')
+  assert.deepEqual(hand.ports, [byHand.port])
+  assert.ok(!rows.some((r) => r.pid === theirs.pid), 'a process outside .worktrees/ is not listed')
+  assert.match(node('serve.mjs', ['list', root], { env }), /T-2 .*by hand/)
+
+  const wrongTask = JSON.parse(node('serve.mjs', ['stop', root, 'T-1', '--pid', byHand.pid], { env }).trim())
+  assert.equal(wrongTask.status, 'error', 'another task\'s process is not touched')
+  assert.ok(P.alive(byHand.pid))
+  const out = JSON.parse(node('serve.mjs', ['stop', root, 'T-2', '--pid', theirs.pid], { env }).trim())
+  assert.equal(out.status, 'error', 'a process outside the worktree is not touched')
+  assert.equal(JSON.parse(node('serve.mjs', ['stop', root, 'T-2', '--pid', byHand.pid], { env }).trim()).status, 'stopped')
+  assert.ok(await until(() => !P.alive(byHand.pid)))
+  assert.ok(P.alive(theirs.pid))
+  assert.equal(JSON.parse(node('serve.mjs', ['stop', root, 'T-1', 'be'], { env }).trim()).status, 'stopped')
+  assert.ok(await until(() => P.pidsOnPort(port).length === 0))
+  rmSync(root, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+})
+
+test('serve.mjs: a code version is HEAD plus the uncommitted changes; a watcher only needs lockfiles', async () => {
+  const { codeVersion, reloads } = await import('../scripts/serve.mjs')
+  const wt = tmp('version')
+  assert.equal(codeVersion(wt), '', 'not a git checkout')
+  writeFileSync(join(wt, 'a.js'), '1\n')
+  writeFileSync(join(wt, 'package.json'), JSON.stringify({ scripts: { 'start:dev': 'nest start --watch', start: 'node dist/main.js' } }))
+  sh('git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm init', wt)
+  const clean = codeVersion(wt)
+  assert.match(clean, /^[0-9a-f]{12}$/)
+  writeFileSync(join(wt, 'a.js'), '2\n')
+  const edited = codeVersion(wt)
+  assert.match(edited, /^[0-9a-f]{12}\+[0-9a-f]{10}$/)
+  writeFileSync(join(wt, 'a.js'), '3\n')
+  assert.notEqual(codeVersion(wt), edited, 'the content counts, not only the name')
+  assert.equal(codeVersion(wt, { reload: true }), clean, 'a watcher reloads source edits')
+  writeFileSync(join(wt, 'package-lock.json'), '{}\n')
+  assert.notEqual(codeVersion(wt, { reload: true }), clean, 'a new lockfile needs a restart')
+  assert.equal(reloads({ cmd: 'npx nodemon' }), true)
+  assert.equal(reloads({ cmd: 'npm run start:dev' }, wt), true, 'the npm script runs a watcher')
+  assert.equal(reloads({ cmd: 'npm start' }, wt), false)
+  assert.equal(reloads({ cmd: 'npx nodemon', reload: false }), false, 'the config decides')
+  rmSync(wt, { recursive: true, force: true })
+})
+
 test('doctor and the old reaper status run on this system', () => {
   const root = tmp('doctor')
   // No workspace config in an empty folder: doctor reports that and exits 1 — its table is what we read.

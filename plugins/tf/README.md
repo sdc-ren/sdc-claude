@@ -96,6 +96,7 @@ post one.
 | [`/tf:digest`](#tfdigest) | Read your Zalo group chats for a day (or since last time) and get what was decided, what is open, what needs you |
 | [`/tf:init`](#tfinit) | Set a workspace up, or connect one that has its own setup: config, knowledge maps, code index |
 | [`/tf:status`](#tfstatus) | See what tasks hold; check the machine |
+| [`/tf:servers`](#tfservers) | See the dev servers tasks run and stop the ones you pick |
 | [`/tf:clean`](#tfclean) | Free finished tasks, migrate old layouts |
 
 ### Options shared by the task commands
@@ -357,6 +358,18 @@ tasks hold the same id.
 |---|---|
 | `--doctor` | Also check this machine and workspace: Node, git, `gh` login, plugin agents and guidelines, workspace config, repos and their base branches, Playwright, and the config's own `## Doctor` checks (DB containers, SDKs, devices…) — with how to fix each failure. Run it once on a new machine. |
 | `--metrics [slug]` | What runs cost, measured from the agents' transcripts: one line per run (plugin version, wall time, minutes per role, jobs, re-tests, tokens). With a slug: every job of that task — minutes, time in tools vs model, slowest commands. Each run is also saved to `.pipeline/<TICKET>/metrics.json` and summarised in the run report. |
+
+### `/tf:servers`
+
+```
+/tf:servers [<slug>] [--all]
+```
+
+One table of the dev servers of the workspace's tasks: task, server, port, pid, running or stopped, whether it runs
+the worktree's current code (`current`, `STALE`, `?`), how long it has been up, and who started it (`serve.mjs`, or
+`by hand` for a process listening from a task's worktree that tf did not start). You pick the ones to stop; tf
+stops only processes running from that task's worktree. A task still running starts its servers again on its next
+`serve.mjs start`, which also restarts a server whose code changed.
 
 ### `/tf:clean`
 

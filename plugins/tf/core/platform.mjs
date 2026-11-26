@@ -146,8 +146,44 @@ function linuxPidsOnPort(port) {
   // A socket held by a process we may not inspect: the port is busy, by someone else.
   return out.size ? [...out] : ['?']
 }
+// Every TCP port this user's processes listen on: [{ pid, port, cmd }]. Empty where the system has no tool to tell.
+export function listeners() {
+  const out = []
+  if (IS_WIN) {
+    for (const l of run('netstat', ['-ano', '-p', 'TCP']).split(/\r?\n/)) { const m = l.trim().match(/^TCP\s+\S+:(\d+)\s+\S+\s+LISTENING\s+(\d+)$/i); if (m) out.push({ pid: m[2], port: Number(m[1]), cmd: '' }) }
+  } else if (OS === 'linux') {
+    const ports = new Map()
+    for (const f of ['/proc/net/tcp', '/proc/net/tcp6']) {
+      let txt = ''
+      try { txt = readFileSync(f, 'utf8') } catch { continue }
+      for (const line of txt.split('\n').slice(1)) { const c = line.trim().split(/\s+/); if (c.length > 9 && c[3] === '0A') ports.set(c[9], parseInt(c[1].split(':').pop(), 16)) }
+    }
+    for (const pid of procPids()) {
+      let fds = []
+      try { fds = readdirSync(`/proc/${pid}/fd`) } catch { continue }
+      for (const fd of fds) { try { const m = readlinkSync(`/proc/${pid}/fd/${fd}`).match(/^socket:\[(\d+)\]$/); if (m && ports.has(m[1])) out.push({ pid, port: ports.get(m[1]), cmd: procCmd(pid) }) } catch {} }
+    }
+  } else {
+    let pid = ''
+    const cmds = new Map(run('ps', ['-A', '-o', 'pid=,command=']).split('\n').map((l) => l.trim().match(/^(\d+)\s+(.*)$/)).filter(Boolean).map((m) => [m[1], m[2]]))
+    for (const l of run('lsof', ['-nP', '-iTCP', '-sTCP:LISTEN', '-Fpn']).split('\n')) {
+      if (l.startsWith('p')) pid = l.slice(1)
+      else if (l.startsWith('n')) { const port = Number(l.split(':').pop()); if (port) out.push({ pid, port, cmd: cmds.get(pid) || '' }) }
+    }
+  }
+  const seen = new Set()
+  return out.filter((x) => { const k = `${x.pid}:${x.port}`; if (seen.has(k)) return false; seen.add(k); return true })
+}
 export function alive(pid) {
   try { process.kill(Number(pid), 0); return true } catch (e) { return e.code === 'EPERM' }
+}
+// Alive and not a zombie (exited, waiting for its parent to read its status).
+export function running(pid) {
+  if (!alive(pid)) return false
+  if (IS_WIN) return true
+  if (OS === 'linux') { try { const t = readFileSync(`/proc/${pid}/stat`, 'utf8'); return t.slice(t.lastIndexOf(')') + 2, t.lastIndexOf(')') + 3) !== 'Z' } catch { return false } }
+  const st = run('ps', ['-o', 'stat=', '-p', String(pid)]).trim()
+  return !!st && !st.startsWith('Z')
 }
 // Pids listening on a TCP port (strings). Empty when the port is free — or when the system has no tool to tell.
 export function pidsOnPort(port) {
@@ -165,6 +201,12 @@ export function cwdOf(pid) {
   if (IS_WIN) return ''
   if (OS === 'linux') { try { return readlinkSync(`/proc/${pid}/cwd`) } catch { return '' } }
   return (run('lsof', ['-a', '-p', String(pid), '-d', 'cwd', '-Fn']).split('\n').find((l) => l.startsWith('n')) || '').slice(1)
+}
+// Parent pid of a process; '' when unknown (Windows, or the process is gone).
+export function parentOf(pid) {
+  if (IS_WIN) return ''
+  if (OS === 'linux') return (procStat(pid) || {}).ppid || ''
+  return run('ps', ['-o', 'ppid=', '-p', String(pid)]).trim()
 }
 // Processes of the group a detached spawn started (its pid is the group id). On Windows a group cannot be
 // listed: the leader stands for it and `killGroup` takes its whole tree.

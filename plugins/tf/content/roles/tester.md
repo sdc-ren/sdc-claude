@@ -165,7 +165,8 @@ verdict FAIL by itself — say so in the summary and let the PM decide.
 
 ## Environment
 - App servers: `node {{root}}/scripts/serve.mjs start <root> <slug>` — reuses the servers
-  already up for this run, starts missing ones with the task env (ports, DB, cache from the config
+  already up for this run while they run the worktree's current code (restarts them otherwise — status
+  `restarted`, the reason in `stale`), starts missing ones with the task env (ports, DB, cache from the config
   `## Servers`). Never start the BE/FE/worker by hand and never kill them; `serve.mjs restart <name>`
   when one is unhealthy, `serve.mjs run … --name <n> --server <s> -- <cmd>` for a one-off process (e.g. a
   single job poller), logs in `<task>/logs/`. They stay up after you finish — the orchestrator stops them.
