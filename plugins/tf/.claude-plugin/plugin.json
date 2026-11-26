@@ -1,6 +1,6 @@
 {
   "name": "tf",
-  "version": "1.31.0",
+  "version": "1.31.1",
   "description": "SDC task-flow — PM-led dev/test/review team. A PM agent plans each task (from a ticket, any link or plain words), staffs dev leads (with dev members), tester and reviewer agents, keeps re-runnable e2e flows and ships ready PRs with evidence. /tf:demo turns a design canvas into a clickable client demo; /tf:digest sums up your Zalo project chats.",
   "author": {
     "name": "SDC (Dang Chi Son)"
