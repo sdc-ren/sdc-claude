@@ -52,7 +52,7 @@ export function repoRows(text) {
 // The lines of the `## Knowledge` section in tf's form (`- Entry: …`, `- Generate: …` …). A value in backticks is
 // taken from them; otherwise the text before a trailing "(…)" note. Lines a person wrote in any other form are
 // kept by `init` and ignored here.
-export const KNOWLEDGE_KEYS = { entry: 'Entry', generate: 'Generate', check: 'Check', refresh: 'Refresh', diff: 'Diff', topics: 'Topics', ledger: 'Ledger', codeIndex: 'Code index' }
+export const KNOWLEDGE_KEYS = { entry: 'Entry', generate: 'Generate', check: 'Check', refresh: 'Refresh', diff: 'Diff', topics: 'Topics', ledger: 'Ledger', codeIndex: 'Code index', apiPrefix: 'API prefix', apiClients: 'API clients', stateEnums: 'State enums', featureTags: 'Feature tags' }
 export function knowledgeOf(text) {
   const body = section(text, 'Knowledge')
   const out = {}

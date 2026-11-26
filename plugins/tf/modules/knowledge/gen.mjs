@@ -15,11 +15,13 @@ import { dirname, join, relative, resolve, sep } from 'node:path'
 import { knowledgeOf, readConfig } from '../../core/config.mjs'
 import { PLUGIN_ROOT, isMain } from '../../core/main.mjs'
 import { detect } from './detect.mjs'
+import { diffCli } from './diff.mjs'
+import contracts from './providers/contracts.mjs'
 import ledger from './providers/ledger.mjs'
 import repos from './providers/repos.mjs'
 import { openRepo } from './source.mjs'
 
-export const PROVIDERS = [repos, ledger]
+export const PROVIDERS = [repos, contracts, ledger]
 export const DEFAULT_ENTRY = 'knowledge/README.md'
 const posix = (p) => p.split(sep).join('/')
 const readJson = (f) => { try { return JSON.parse(readFileSync(f, 'utf8')) } catch { return null } }
@@ -27,17 +29,19 @@ const version = () => { try { return JSON.parse(readFileSync(join(PLUGIN_ROOT, '
 
 export const GEN_CMD = 'node <PLUGIN>/scripts/knowledge.mjs gen <root>'
 export const CHECK_CMD = 'node <PLUGIN>/scripts/knowledge.mjs check <root>'
+export const DIFF_CMD = 'node <PLUGIN>/scripts/knowledge.mjs diff <root> --task <SLUG> --out .pipeline/<SLUG>/contract-diff.md'
 
-function context(rootIn, profile) {
+function context(rootIn, profile, out = '') {
   const root = resolve(rootIn)
   const knowledge = knowledgeOf(readConfig(root))
   const entry = knowledge.entry || DEFAULT_ENTRY
-  const dir = dirname(resolve(root, entry))
+  // --out: maps written somewhere else (to compare with a workspace's own maps without touching them).
+  const dir = out ? resolve(out) : dirname(resolve(root, entry))
   const p = profile || detect(root)
   const readers = new Map()
   return {
     root, profile: p, knowledge, entry, dir,
-    pipelineDir: join(dir, 'pipeline'), pipelineRel: posix(relative(root, join(dir, 'pipeline'))),
+    pipelineDir: join(dirname(resolve(root, entry)), 'pipeline'), pipelineRel: posix(relative(root, join(dirname(resolve(root, entry)), 'pipeline'))),
     reader: (r) => { if (!readers.has(r.key)) readers.set(r.key, openRepo(r.abs, r.base)); return readers.get(r.key) },
   }
 }
@@ -55,8 +59,8 @@ export function ownable(dir) {
 }
 
 /** The maps whose sources changed since they were written (or that were never written). */
-export function check(rootIn, profile) {
-  const ctx = context(rootIn, profile)
+export function check(rootIn, profile, out = '') {
+  const ctx = context(rootIn, profile, out)
   const m = manifestOf(ctx.dir)
   const stale = []
   for (const p of PROVIDERS) {
@@ -89,6 +93,7 @@ function readme(ctx, maps) {
     '## Reading order for a task',
     '',
     '1. `repos/<repo>.md` of the repos the task touches — stack, commands, docs to read, domain folders.',
+    ...(maps.contracts ? ['   `contracts/by-domain/<domain>.md` for the endpoints it touches — guards, validators, every caller (web, app, services); `contracts/orphans.md` for calls that reach nothing.'] : []),
     ...(maps.ledger ? ['2. `ledger/by-repo/<repo>.md` and `ledger/topics/<topic>.md` — open findings, decisions already taken, recipes, review lessons. Grep `ledger/index.tsv` for a keyword, then open the `at` line.'] : []),
     `${maps.ledger ? 3 : 2}. Verify in the code (codegraph) before deciding: a map is a starting point, not the truth.`,
     '',
@@ -105,8 +110,8 @@ function readme(ctx, maps) {
 }
 
 /** Write the maps that apply (all, or `only`), the manifest and the README. Returns what it wrote and removed. */
-export function generate(rootIn, { only = [], force = false, profile } = {}) {
-  const ctx = context(rootIn, profile)
+export function generate(rootIn, { only = [], force = false, profile, out = '' } = {}) {
+  const ctx = context(rootIn, profile, out)
   if (!force && !ownable(ctx.dir)) throw new Error(`${posix(relative(ctx.root, ctx.dir))}/ holds files tf did not write — choose another folder (config "- Entry:") or pass --force`)
   const old = manifestOf(ctx.dir) || {}
   const maps = { ...(old.maps || {}) }
@@ -119,6 +124,7 @@ export function generate(rootIn, { only = [], force = false, profile } = {}) {
       delete maps[p.name]
       continue
     }
+    const t0 = Date.now()
     const files = p.generate(ctx)
     for (const [rel, text] of Object.entries(files)) {
       if (rel.startsWith('pipeline/')) throw new Error(`map ${p.name} tried to write ${rel}: pipeline/ is hand-kept`)
@@ -128,9 +134,9 @@ export function generate(rootIn, { only = [], force = false, profile } = {}) {
       written.push(rel)
     }
     for (const f of before) if (!(f in files)) { rmSync(join(ctx.dir, f), { force: true }); removed.push(f) }
-    maps[p.name] = { sources: p.sources(ctx), files: Object.keys(files), at: new Date().toISOString() }
+    maps[p.name] = { sources: p.sources(ctx), files: Object.keys(files), at: new Date().toISOString(), ms: Date.now() - t0 }
   }
-  mkdirSync(ctx.pipelineDir, { recursive: true })
+  if (!out) mkdirSync(ctx.pipelineDir, { recursive: true })
   writeFileSync(join(ctx.dir, 'README.md'), readme(ctx, maps))
   const manifest = { generator: 'tf', version: version(), generatedAt: new Date().toISOString(), entry: ctx.entry, maps }
   writeFileSync(join(ctx.dir, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)
@@ -145,16 +151,19 @@ if (isMain(import.meta.url, 'scripts/knowledge.mjs')) {
       const stale = rest.includes('--stale') ? check(root).stale.map((s) => s.map) : []
       const only = flag('only') ? flag('only').split(',').filter(Boolean) : stale
       if (rest.includes('--stale') && !stale.length) { console.log('knowledge: every map is up to date'); process.exit(0) }
-      const r = generate(root, { only, force: rest.includes('--force') })
+      const r = generate(root, { only, force: rest.includes('--force'), out: flag('out') || '' })
       console.log(`knowledge: wrote ${r.written.length} files in ${posix(relative(resolve(root), r.dir)) || '.'}/${r.removed.length ? `, removed ${r.removed.length}` : ''}`)
+    } else if (cmd === 'diff') {
+      if (!flag('task')) { console.error('knowledge diff: --task <SLUG> is required'); process.exit(2) }
+      process.exit(diffCli(root, flag('task'), flag('out') || ''))
     } else if (cmd === 'check') {
-      const r = check(root)
+      const r = check(root, undefined, flag('out') || '')
       if (!r.stale.length) { console.log(`knowledge: up to date (generated ${r.generated})`); process.exit(0) }
       for (const s of r.stale) console.log(`stale: ${s.map} — ${s.why}`)
       console.log(`refresh: node ${posix(join(PLUGIN_ROOT, 'scripts', 'knowledge.mjs'))} gen ${root} --only ${r.stale.map((s) => s.map).join(',')}`)
       process.exit(1)
     } else {
-      console.error('usage: knowledge.mjs gen <root> [--only a,b | --stale] [--force] | check <root>')
+      console.error('usage: knowledge.mjs gen <root> [--only a,b | --stale] [--force] [--out <dir>] | check <root> [--out <dir>] | diff <root> --task <SLUG> [--out <file>]')
       process.exit(2)
     }
   } catch (e) {

@@ -327,8 +327,13 @@ only). `--from` takes the wording of the shared sections (languages, test policy
 from another config on your machine — never its repos, servers or path.
 
 **Knowledge maps.** `knowledge/README.md` is the entry: which map answers which question. tf's maps: `repos/`
-(per repo: stack, commands, ports, env names, docs, domain folders, layout) and `ledger/` (the hand-kept notes in
-`pipeline/` sliced per repo and per topic; topics come from your config or your domain folders). Before every
+(per repo: stack, commands, ports, env names, docs, domain folders, layout), `contracts/` (every route — Express,
+NestJS, Next, Nuxt/Nitro, Fastify — with its guards, validators and OpenAPI status, every call to it from web and
+app code — fetch, axios and clients made from it, `$fetch`/`ofetch`/`useFetch`, object-style wrappers, dio/http —
+calls that reach no route, socket.io events; each map says how much it recognised) and `ledger/` (the hand-kept
+notes in `pipeline/` sliced per repo and per topic; topics come from your config or your domain folders).
+`tf knowledge diff <root> --task <SLUG>` compares a task's worktrees with where they branched from: routes added,
+removed, guards changed, and callers the change breaks — the reviewer runs it when the config names it. Before every
 run tf only *checks* which maps are stale (seconds); the PM refreshes a map only when the task needs it — large
 tasks, or ones that touch data, contracts, flows or the architecture — and gives each job only its slices. A
 config line `- Refresh: before a run` refreshes stale maps every run instead.

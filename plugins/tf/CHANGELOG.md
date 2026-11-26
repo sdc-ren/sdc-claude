@@ -4,6 +4,29 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.32.0] — 2026-11-26
+
+### Added
+- **Knowledge map `contracts`** (phase 2a of `plans/tf-knowledge-phase2.md`): every route the workspace serves —
+  Express (prefixes followed through imports and tsconfig path aliases), NestJS (global prefix, guards, DTOs),
+  Next.js (app and pages routers), Nuxt/Nitro, Fastify — with its guards, validators and OpenAPI status (server
+  prefixes followed), and every call to it from web and app code: fetch, axios and clients made with
+  `axios.create`, `$fetch`, `ofetch`, `useFetch`, any `*client*.get('/x')`, object-style wrappers
+  (`client<T>({ path, httpMethod })`, generics of any length), same-file path constants, Dart dio/http. A call goes
+  to the route of its own shape (`/orders/stats` to that route, not to `/orders/:id`). Pages: `by-domain/`,
+  `index.tsv`, `orphans.md` (calls that reach no route, routes nothing calls — listed, not judged), `socket.md`,
+  and a README that says how much was recognised per repo.
+- **`tf knowledge diff <root> --task <SLUG>`**: the task's worktrees (edits and new files included) against their
+  merge-base — routes added, removed, guards or validators changed, calls added or removed, socket events, and the
+  callers the change breaks (also in repos outside the task). Exit 0 / 3 / 4. `/tf:init` adds it as the config's
+  `Diff` line when a repo serves routes; the reviewer runs it and rates a broken caller P1.
+- `tf knowledge gen --out <dir>` writes the maps elsewhere (to compare with a workspace's own maps without touching
+  them); the manifest records how long each map took. Optional config lines `API prefix` and `API clients`.
+
+### Fixed
+- Searching a repo's base branch: `git grep -E` has no `\s`, `\w`, `\d` (it read `\s*` as "s*"); patterns are now
+  written in POSIX classes. Lines of CRLF files are read too.
+
 ## [1.31.1] — 2026-11-26
 
 ### Fixed

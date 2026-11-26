@@ -73,7 +73,7 @@ test('maps: repos and ledger written, pipeline/ untouched, stale when a repo or 
   repo(join(ws, 'web'), { 'package.json': '{"dependencies":{"nuxt":"3"}}', 'pnpm-lock.yaml': '' })
   write(join(ws, 'knowledge', 'pipeline', 'findings.md'), '| ID | Repo | Summary | Status |\n|---|---|---|---|\n| F-1 | api | the cart total is wrong | open |\n| F-2 | web | old | fixed |\n')
   const notes = readFileSync(join(ws, 'knowledge', 'pipeline', 'findings.md'), 'utf8')
-  assert.deepEqual(check(ws).stale.map((s) => s.map), ['repos', 'ledger'])
+  assert.deepEqual(check(ws).stale.map((s) => s.map), ['repos', 'contracts', 'ledger'])
   const g = generate(ws)
   assert.ok(g.written.includes('repos/api.md') && g.written.includes('repos/web.md') && g.written.includes('ledger/by-repo/api.md'))
   assert.equal(readFileSync(join(ws, 'knowledge', 'pipeline', 'findings.md'), 'utf8'), notes, 'hand-kept notes untouched')
@@ -85,9 +85,9 @@ test('maps: repos and ledger written, pipeline/ untouched, stale when a repo or 
   // A new commit on the base branch makes repos stale; a new note makes ledger stale.
   write(join(api, 'src', 'modules', 'pay', 'p.ts'), 'x'); git(api, 'add', '-A'); git(api, 'commit', '-qm', 'pay'); git(api, 'push', '-q', 'origin', 'main'); git(api, 'fetch', '-q', 'origin')
   write(join(ws, 'knowledge', 'pipeline', 'decisions.md'), '| ID | Q | A |\n|---|---|---|\n| D-1 | x | y |\n')
-  assert.deepEqual(check(ws).stale.map((s) => s.map), ['repos', 'ledger'])
+  assert.deepEqual(check(ws).stale.map((s) => s.map), ['repos', 'contracts', 'ledger'])
   generate(ws, { only: ['ledger'] })
-  assert.deepEqual(check(ws).stale.map((s) => s.map), ['repos'])
+  assert.deepEqual(check(ws).stale.map((s) => s.map), ['repos', 'contracts'])
 })
 
 test('maps: a knowledge/ folder tf did not write is refused', () => {
