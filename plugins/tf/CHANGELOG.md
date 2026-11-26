@@ -4,6 +4,40 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.27.0] — 2026-11-26
+
+First step towards running tf on more than one coding agent (`plans/tf-architecture.md`). Nothing changes for
+Claude Code: every script, prompt and saved command keeps working as before (checked: the old and new entry
+points give the same output and exit code on the same inputs).
+
+### Added
+- **The scripts are grouped by domain** in `modules/` — `task`, `resources`, `worktree`, `env`, `browser`, `e2e`,
+  `review`, `vcs`, `tracker`, `chat`, `design` — and what reads Claude Code's own data (`doctor`, `metrics`, the
+  artifact index and MCP server) is in `hosts/claude/`. `scripts/<name>.mjs` stays as a one-line re-export of each,
+  so every prompt, README command and saved release command still runs.
+- **`tf <command>`, one entry point for every command line**: `node <plugin>/cli/tf.mjs task resolve …` is
+  `node <plugin>/scripts/task.mjs resolve …`. `tf` lists the commands, `tf --version` prints the version;
+  `hosts/claude/tf.mjs` adds `doctor`, `metrics` and `artifacts-local`. Prompts still call the scripts; they move
+  to `tf` in a later release. The tool guard refuses posting through `tf pr-feedback` and `tf jira` as it does
+  through the scripts.
+- **`core/`, the host-neutral layer.** `platform.mjs` (macOS / Linux / Windows), `paths.mjs` (tf's state folder and
+  workspace config file), `config.mjs` (reading the config, the sections a role needs), `naming.mjs` and
+  `guard-rules.mjs` (the tool guard's rules). Nothing in it names a coding agent.
+- **Host-neutral folders are read when they exist**: the workspace config at `<root>/.tf/config.md` before
+  `<root>/.claude/task-flow.md`, and machine state at `~/.tf/` before `~/.claude/task-flow/`. The old folders stay the
+  default; nothing moves. The tool guard keeps the saved logins private in either folder.
+- **Layer boundaries are tested** (`tests/boundaries.mjs`): `core/` imports only `node:*` and itself, the files a hook
+  module loads import no `node:*`, `core/` names no agent, `modules/` and `cli/` never reach into `hosts/`, `scripts/`
+  holds only re-exports, and no host imports another. It also reports how much of the shared code still names an
+  agent (37 of 63 files today). CI runs it with the new `tests/core.mjs` and `tests/cli.mjs`.
+
+### Changed
+- **The tool guard's rules live in `core/guard-rules.mjs`**; `hooks/guard.ts` only connects them to Claude Code's
+  events, and its copy of the naming rules is gone.
+- Claude Code's data folder and transcripts are read by `hosts/claude/transcripts.mjs`.
+- `.mcp.json` and the Artifacts band run their scripts from `hosts/claude/` directly.
+- `doctor` names the workspace config file it actually found.
+
 ## [1.26.0] — 2026-11-25
 
 ### Fixed

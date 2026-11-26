@@ -156,7 +156,7 @@ test('the runtime renders holes, loops, branches, handlers, imports and links li
   }
   const box = {}
   vm.createContext(box)
-  vm.runInContext(readFileSync(join(S, 'canvas-runtime.js'), 'utf8'), box)
+  vm.runInContext(readFileSync(join(S, '..', 'modules', 'design', 'canvas-runtime.js'), 'utf8'), box)
   const ctx = box.DCRuntime.makeComponents(R, sources, '')
   const app = new ctx.components.main({ theme: 'light' })
   const flat = (e, out = []) => { if (e == null) return out; if (typeof e === 'string') { out.push(e); return out } if (typeof e.t === 'function') { flat(new e.t(e.p).render(), out); return out } out.push(e); (e.c || []).forEach((x) => flat(x, out)); return out }
