@@ -105,6 +105,20 @@ function versionOf(scripts, endMs) {
   return v ? `${v}-dev` : 'dev'
 }
 
+// Tester jobs that test again: a batch of tester jobs is the ones started side by side (one per repo or
+// platform, no PM turn or dev work between them); every tester job after the first batch is a re-test.
+// Counting "tester jobs − 1" took parallel testers for re-tests (about half of them on a 3-repo workspace).
+export function retestsOf(agents) {
+  let batches = 0, retests = 0, open = false
+  for (const a of agents) {
+    if (a.role === 'pm' || a.role === 'lead' || a.role === 'dev') { open = false; continue }
+    if (a.role !== 'tester') continue
+    if (!open) { batches++; open = true }
+    if (batches > 1) retests++
+  }
+  return retests
+}
+
 function run(wfDir) {
   const agents = []
   for (const f of ls(wfDir)) {
@@ -137,7 +151,7 @@ function run(wfDir) {
     run: baseName(wfDir), slug: first._slug, mode: first._mode, round: first._round, version: versionOf(first._scripts, end), size,
     start: new Date(start).toISOString(), end: new Date(end).toISOString(), wallMin: min(end - start),
     agentMin: Math.round(sum('min') * 10) / 10, agents: agents.length, pmTurns: count('pm'),
-    devJobs: new Set(agents.filter((a) => a.role === 'lead' || a.role === 'dev').map((a) => a.id.replace(/[a-cm]$/, ''))).size, devMembers: agents.filter((a) => /^J\d+[a-c]$/.test(a.id)).length, testerJobs: count('tester'), retests: Math.max(0, count('tester') - 1), serversByHand: sum('byHand'), byRole,
+    devJobs: new Set(agents.filter((a) => a.role === 'lead' || a.role === 'dev').map((a) => a.id.replace(/[a-cm]$/, ''))).size, devMembers: agents.filter((a) => /^J\d+[a-c]$/.test(a.id)).length, testerJobs: count('tester'), retests: retestsOf(agents), serversByHand: sum('byHand'), byRole,
     tokens: { outK: k(sum('out')), freshInK: k(sum('fresh')), cacheReadM: Math.round(sum('cacheRead') / 1e5) / 10 },
     jobs: agents.map(({ _t0, _t1, _slug, _mode, _round, _scripts, label: _l, out, fresh, cacheRead, peak, ...a }) => ({
       ...a, outK: k(out), freshInK: k(fresh), cacheReadM: Math.round(cacheRead / 1e4) / 100, peakK: k(peak),
@@ -203,10 +217,18 @@ if (isMain(import.meta.url, 'scripts/metrics.mjs')) {
     if (flag('--json')) console.log(JSON.stringify(runs.map(({ jobs, ...r }) => r), null, 2))
     else if (!runs.length) console.log('no tf runs found for this workspace')
     else printRuns(runs)
-    process.exit(0)
-  }
+  } else main(root)
+}
+
+// One task's runs. Returns instead of process.exit() after printing: exiting at once cuts JSON written to a
+// pipe at 64 KB.
+function main(root) {
+  const argv = process.argv.slice(2)
+  const flag = (n) => argv.includes(n)
+  const val = (n) => (argv.indexOf(n) >= 0 ? argv[argv.indexOf(n) + 1] : '')
+  const pos = argv.filter((x, i) => !x.startsWith('--') && !['--days', '--run'].includes(argv[i - 1]))
   let runs = runsOf(root, { slug: pos[1] })
-  if (!runs.length) { console.log(`no tf runs found for ${pos[1]}`); process.exit(0) }
+  if (!runs.length) { console.log(`no tf runs found for ${pos[1]}`); return }
   // Keep the whole history in the task folder (it survives the transcripts being pruned).
   const dir = [join(resolve(root), '.pipeline', runs[0].slug), join(resolve(root), '.pipeline', '_archive', runs[0].slug)].find(existsSync)
   if (dir && !flag('--json')) {
@@ -216,7 +238,7 @@ if (isMain(import.meta.url, 'scripts/metrics.mjs')) {
   }
   if (val('--run')) runs = runs.filter((r) => r.run === val('--run'))
   else if (flag('--last')) runs = runs.slice(-1)
-  if (flag('--json')) { console.log(JSON.stringify(runs, null, 2)); process.exit(0) }
+  if (flag('--json')) { console.log(JSON.stringify(runs, null, 2)); return }
   printRuns(runs)
   runs.forEach(printJobs)
   if (runs.length > 1) {

@@ -263,3 +263,45 @@ test('session() refuses a missing app id, a bad key or no ready check before tou
   await assert.rejects(kit.session('org', async () => {}, { appId: 'com.x' }), /ready/)
   await assert.rejects(kit.session('org', async () => {}, { appId: "com.x' ; reboot ; '", ready: { id: 'x' } }), /appId/)
 })
+
+test('options: --help prints usage and runs nothing; an unknown option or a missing value stops the run', () => {
+  const { dir } = task()
+  flow(dir, 'C1')
+  const help = run([dir, '--help'])
+  assert.equal(help.code, 0)
+  assert.match(help.out, /^usage: flow-run\.mjs/)
+  assert.ok(!existsSync(join(dir, 'flows.json')), '--help ran no flow')
+  assert.equal(run(['.', '--help']).code, 0, '--help after any task folder')
+  const bad = run([dir, '--bogus', 'C1'])
+  assert.equal(bad.code, 2)
+  assert.match(bad.err, /unknown option --bogus/)
+  assert.ok(!existsSync(join(dir, 'flows.json')), 'an unknown option ran no flow')
+  assert.equal(run([dir, '--target']).code, 2)
+  assert.equal(run([dir, '--cases', '--failed']).code, 2, 'an option is not a value')
+})
+
+test('the Playwright install comes from the config when --playwright is not given', () => {
+  const { root, dir } = task()
+  mkdirSync(join(root, '.tf'), { recursive: true })
+  mkdirSync(join(root, 'pw'), { recursive: true })
+  writeFileSync(join(root, 'pw', 'package.json'), '{}')
+  writeFileSync(join(root, '.tf', 'config.md'), '## Flows\n- Playwright package: `<root>/pw/package.json`\n')
+  writeFileSync(join(dir, 'flows', 'C1.mjs'), `import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
+writeFileSync(join(process.env.EVD_DIR, 'pw.txt'), process.env.PLAYWRIGHT_FROM || '')
+writeFileSync(join(process.env.EVD_DIR, 'C1.verdict.json'), JSON.stringify({ case: 'C1', status: 'PASS', platform: 'api', runId: process.env.RUN_ID, shots: [], marks: [], captions: {}, crop: [], error: '', durationMs: 1 }))
+`)
+  const r = run([dir, '--cases', 'C1'])
+  assert.equal(r.code, 0, r.err)
+  const evd = readFileSync(join(dir, 'evd', 'pw.txt'), 'utf8')
+  assert.equal(evd, join(root, 'pw', 'package.json'))
+})
+
+test('metrics: tester jobs side by side are one batch; only later batches are re-tests', async () => {
+  const { retestsOf } = await import('../hosts/claude/metrics.mjs')
+  const jobs = (s) => s.split(' ').map((role) => ({ role }))
+  assert.equal(retestsOf(jobs('pm setup lead lead reviewer tester tester tester pm')), 0)
+  assert.equal(retestsOf(jobs('pm tester tester pm lead reviewer tester')), 1)
+  assert.equal(retestsOf(jobs('pm tester pm tester tester')), 2, 'a run again after a PM turn, no fix, still counts')
+  assert.equal(retestsOf(jobs('pm flows lead tester')), 0, 'writing flows is not a test')
+})
