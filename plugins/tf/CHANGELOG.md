@@ -4,6 +4,16 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.30.0] — 2026-11-26
+
+### Added
+- **GitHub Copilot CLI host — not tried yet.** Copilot CLI reads Claude Code's plugin and marketplace layout, so
+  `copilot plugin marketplace add sdc-ren/sdc-claude` and `copilot plugin install tf@sdc` should install tf.
+  `hosts/copilot/`: the driver (`copilot -p … -s --no-ask-user --assisted-approval`, the commands a tf job needs
+  allowed, models per tier from `TF_COPILOT_MODELS`), `run.mjs` on the shared background runner, and the host
+  notes. Written from Copilot CLI's documentation and covered by tests with a fake `copilot`; nothing has run
+  against a real Copilot. The guard hook understands Copilot's `toolName`/`toolArgs` input and answer format.
+
 ## [1.29.0] — 2026-11-26
 
 ### Added

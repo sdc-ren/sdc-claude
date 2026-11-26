@@ -149,3 +149,39 @@ await runnerCli(${JSON.stringify(entry)}, fake)
   assert.match(result.question, /which repo/)
   assert.match(out, /PM t1/)
 })
+
+// ── Drivers against fake binaries (POSIX: the fakes are sh scripts) ──────────
+import { chmodSync } from 'node:fs'
+import { codexDriver } from '../hosts/codex/driver.mjs'
+import { ALLOWED, copilotDriver, promptArgs } from '../hosts/copilot/driver.mjs'
+
+const fakeBin = (body) => { const f = join(tmp(), 'fake'); writeFileSync(f, `#!/bin/sh\n${body}\n`); chmodSync(f, 0o755); return f }
+const posixOnly = { skip: process.platform === 'win32' && 'the fake agents are sh scripts' }
+
+test('Copilot: the job command line', () => {
+  const a = promptArgs({ prompt: 'do it', tier: 'large', models: { large: 'big-model' }, extra: ['--foo'] })
+  assert.deepEqual(a.slice(0, 5), ['-p', 'do it', '-s', '--no-ask-user', '--assisted-approval'])
+  for (const t of ALLOWED) assert.ok(a.join(' ').includes(`--allow-tool ${t}`), t)
+  assert.ok(a.join(' ').includes('--model big-model'))
+  assert.equal(a.at(-1), '--foo')
+  assert.ok(!promptArgs({ prompt: 'x', tier: 'small', models: {} }).includes('--model'), 'no model map: Copilot\'s default model')
+})
+
+test('Codex driver: final message from -o, session from thread.started, TF_JOB and TF_PLUGIN in the job', posixOnly, async () => {
+  const bin = fakeBin(`out=""; prev=""; for a in "$@"; do [ "$prev" = "-o" ] && out="$a"; prev="$a"; done
+cat > /dev/null
+echo '{"type":"thread.started","thread_id":"t-1"}'
+job=no; [ -n "$TF_JOB" ] && job=yes
+printf '{"status":"done","verdict":"NONE","summary":"%s %s"}' "$TF_PLUGIN" "$job" > "$out"`)
+  const r = await codexDriver({ plugin: '/p', bin }).run({ prompt: 'x', tier: 'small', cwd: tmp(), env: { TF_JOB: '{"id":"J1"}' }, label: 'J1' })
+  assert.equal(r.code, 0)
+  assert.equal(r.session, 't-1')
+  assert.deepEqual(JSON.parse(r.text), { status: 'done', verdict: 'NONE', summary: '/p yes' })
+})
+
+test('Copilot driver through the runtime: the answer is the printed response', posixOnly, async () => {
+  const bin = fakeBin(`echo 'Done, here it is:'; echo '{"status":"done","verdict":"PASS","summary":"ok"}'`)
+  const rt = processRuntime({ driver: copilotDriver({ plugin: PLUGIN, bin }), root: tmp(), plugin: PLUGIN })
+  const out = await rt.agent('Job J4 · role tester · repo be\nTask T-1 · mode build · round 1\n', { agentType: 'tf:tester', model: 'sonnet', label: 'J4 tester:be', schema: REPORT })
+  assert.deepEqual(out, ok('PASS', { summary: 'ok' }))
+})
