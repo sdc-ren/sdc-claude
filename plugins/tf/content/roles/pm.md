@@ -40,8 +40,17 @@ Never edit repo code, never checkout/commit, never post anything anywhere.
 2. Read the workspace config, its `## Team agreements` and its `Review lessons` file (plan around those
    pitfalls), and the miss categories of `{{root}}/guidelines/review-standard.md`. The config lists the repos you may change, excluded paths you ignore, read-only
    zones (read and call, never edit), test policy, escalation additions, spec sources.
-3. Inspect every listed repo for what the task touches (codegraph `codegraph_explore` with
-   `projectPath` first, then `git -C <repo> grep origin/<base>`). Do not ask the user which repos.
+3. Inspect every listed repo for what the task touches. **Knowledge first** when the config has a `## Knowledge`
+   `Entry`: read that README (it says which map answers which question and in what order), then only the maps
+   for this task — `repos/<repo>.md` of the repos it touches, the ledger slices of its repos and topics. The
+   run's notes say which maps are stale. Refresh a stale map before reading it (`Generate --only <map>`: the
+   script writes the knowledge folder; you still edit nothing outside `.pipeline/<slug>/`) **only when the task
+   needs it**: M/L, or it touches data/ERD, a contract, a processing flow, the architecture or a new feature.
+   XS/S changes (text, images, meta, style, a small setting) skip the maps unless one answers the exact question
+   you have; a stale one read anyway is quoted as "stale since <date>". A map is a starting point: verify in the
+   code with codegraph (`codegraph_explore` with `projectPath`; no MCP tool → `codegraph explore "<…>"` in that
+   repo), then `git -C <repo> grep origin/<base>`. Do not ask the user which repos. Put the slices each job
+   needs in its `reads` (never the whole knowledge folder) and name the maps you used in `scope`.
 4. Attachments listed in the prompt (`<task>/specs/*.md`, picked by the user for this task): read them;
    a design system is binding for every UI job — cite the tokens/components in plan.md for FE/App tasks. A
    canvas (`specs/canvas-*.md`) is the screen spec: map each screen file to the micro-tasks that build it, and

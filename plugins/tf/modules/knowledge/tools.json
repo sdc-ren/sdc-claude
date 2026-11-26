@@ -1,0 +1,17 @@
+{
+  "_": "Code-index tools tf looks for in a workspace. Add one here to have init report and propose it; nothing else in tf names a tool. {repo} = the repo folder.",
+  "tools": [
+    {
+      "name": "codegraph",
+      "bin": "codegraph",
+      "version": ["--version"],
+      "indexDir": ".codegraph",
+      "init": "codegraph init -y {repo}",
+      "sync": "codegraph sync -q {repo}",
+      "status": "codegraph status {repo}",
+      "explore": "codegraph explore \"<symbols or question>\"",
+      "mcpTool": "codegraph_explore",
+      "why": "symbols, callers and call paths in one call — the PM and the reviewer use it before reading files"
+    }
+  ]
+}

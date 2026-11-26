@@ -44,6 +44,7 @@ and opens the PR. It stops for you only when the ticket has two plausible readin
 | `/tf:e2e` | Approve the test cases, then run exactly those (bugs marked on the screenshots), or the regression suite |
 | `/tf:demo` | Turn a design canvas into a clickable demo for a client |
 | `/tf:digest` | Summarise your Zalo group chats: what was decided, what is open, what needs you |
+| `/tf:init` | Set a workspace up (or connect one that has its own setup): config, knowledge maps, code index |
 | `/tf:status` | See what tasks hold; check the machine (`--doctor`) |
 | `/tf:clean` | Free the resources of finished tasks |
 
@@ -128,8 +129,9 @@ Each teammate still installs once: `claude plugin install tf@sdc --scope project
 In your workspace (the folder that holds your repos):
 
 ```
-/tf:status --doctor   # checks tools, gh login, config, repos, Playwright, devices
-/tf:build PROJ-123    # first run offers to create .claude/task-flow.md if it is missing
+/tf:init              # detects the repos, stacks and tools; writes the config and the knowledge maps
+/tf:status --doctor   # checks tools, gh login, config, repos, Playwright, devices, knowledge, code index
+/tf:build PROJ-123
 ```
 
 ## Updating

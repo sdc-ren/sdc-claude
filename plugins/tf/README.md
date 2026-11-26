@@ -59,13 +59,14 @@ everything. **tf** organises the work like a small team:
 Then, in your workspace (the folder that holds your repos):
 
 ```
-/tf:status --doctor   # checks tools, gh login, config, repos, Playwright, devices
-/tf:build PROJ-123    # first run offers to create .claude/task-flow.md if it is missing
+/tf:init              # detects the repos, stacks and tools; writes the config and the knowledge maps
+/tf:status --doctor   # checks tools, gh login, config, repos, Playwright, devices, knowledge, code index
+/tf:build PROJ-123
 ```
 
 ## Commands
 
-Nine commands. Everything after the input is optional.
+Ten commands. Everything after the input is optional.
 
 **What you can give a task command** — any of these, alone or together:
 
@@ -93,6 +94,7 @@ post one.
 | [`/tf:e2e`](#tfe2e) | Run e2e only, or the regression suite |
 | [`/tf:demo`](#tfdemo) | Turn a design canvas into a clickable demo for a client — no repo, no PR |
 | [`/tf:digest`](#tfdigest) | Read your Zalo group chats for a day (or since last time) and get what was decided, what is open, what needs you |
+| [`/tf:init`](#tfinit) | Set a workspace up, or connect one that has its own setup: config, knowledge maps, code index |
 | [`/tf:status`](#tfstatus) | See what tasks hold; check the machine |
 | [`/tf:clean`](#tfclean) | Free finished tasks, migrate old layouts |
 
@@ -301,6 +303,35 @@ you can find it in Zalo.
 /tf:digest NhatLinh hôm qua --focus "thanh toán"
 /tf:digest all
 ```
+
+### `/tf:init`
+
+```
+/tf:init [--dry-run] [--yes] [--from <config file>] [--refresh]
+```
+
+Run it once in a workspace, and again whenever you like. It looks first — one repo or several, each repo's stack,
+package manager, base branch, commands, ports, docs and domain folders, which repos have a code index, whether
+there is a config and a knowledge folder — then shows what it would write and asks once.
+
+| The workspace has | `/tf:init` |
+|---|---|
+| nothing yet | writes `.tf/config.md` from what it found (asks only the languages, the test policy and the tracker), creates `knowledge/` with the hand-kept notes and tf's maps |
+| a config and its own knowledge generator | **only connects**: adds tf's lines at the top of the config's `## Knowledge`, pointing at that generator (its README's commands, for you to confirm); nothing else changes |
+| a config, no knowledge | adds the Knowledge lines and creates `knowledge/` |
+| knowledge, no config | writes a config whose Knowledge lines point at it |
+
+It then offers what is still missing — `codegraph init` for repos without an index, an `AGENTS.md` for Codex —
+and does only what you say yes to. One repo at the root: tf's folders go to `.git/info/exclude` (this machine
+only). `--from` takes the wording of the shared sections (languages, test policy, hard rules, close-out, doctor)
+from another config on your machine — never its repos, servers or path.
+
+**Knowledge maps.** `knowledge/README.md` is the entry: which map answers which question. tf's maps: `repos/`
+(per repo: stack, commands, ports, env names, docs, domain folders, layout) and `ledger/` (the hand-kept notes in
+`pipeline/` sliced per repo and per topic; topics come from your config or your domain folders). Before every
+run tf only *checks* which maps are stale (seconds); the PM refreshes a map only when the task needs it — large
+tasks, or ones that touch data, contracts, flows or the architecture — and gives each job only its slices. A
+config line `- Refresh: before a run` refreshes stale maps every run instead.
 
 ### `/tf:status`
 

@@ -33,6 +33,9 @@ export const COMMANDS = {
   jira: 'modules/tracker/jira.mjs',
   zalo: 'modules/chat/zalo.mjs',
   canvas: 'modules/design/canvas.mjs',
+  // workspace setup and knowledge maps
+  init: 'modules/knowledge/init.mjs',
+  knowledge: 'modules/knowledge/gen.mjs',
   // this machine
   platform: 'core/platform.mjs',
 }
