@@ -19,6 +19,7 @@ agent ([plans/tf-architecture.md](plans/tf-architecture.md)); imports only point
 | Folder | What it holds |
 |---|---|
 | `hosts/codex/` | what only Codex has: its build (`.codex-plugin/`, `hooks.json`, `skills/*/agents/openai.yaml`), host notes, the `codex exec` driver and `run.mjs` |
+| `hosts/copilot/` | GitHub Copilot CLI: host notes, the `copilot -p` driver and `run.mjs` (not tried against a real Copilot yet) |
 | `runtime/` | for hosts that run each job as a command line: the process runtime, the background runner, the guard as a command hook |
 | `hosts/claude/` | what only Claude Code has: its build, host notes, transcripts, artifacts, `doctor`, `metrics`, the `/tf:demo` and `/tf:digest` commands and their docs |
 | `content/` | the shared prompts: `commands/` (one per `/tf:*` command) and `roles/` (PM, lead, dev, tester, reviewer), with `{{root}}`-style placeholders each host fills |
