@@ -4,6 +4,13 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.27.1] — 2026-11-26
+
+### Fixed
+- **Windows: the layer-boundary test no longer fails on every `scripts/` entry point.** A Windows checkout ends lines
+  with CRLF, and the check read the trailing `\r` as code. The CI job stopped there, so 1.27.0's other suites never
+  ran on Windows; they run again. `tf help` reads each command's summary the same way.
+
 ## [1.27.0] — 2026-11-26
 
 First step towards running tf on more than one coding agent (`plans/tf-architecture.md`). Nothing changes for

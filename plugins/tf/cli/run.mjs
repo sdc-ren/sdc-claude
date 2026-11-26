@@ -23,7 +23,7 @@ export function version() {
 // The first comment line of a module, without the `tf:`-style prefix.
 function summary(file) {
   try {
-    const line = readFileSync(join(PLUGIN_ROOT, file), 'utf8').split('\n').find((l) => l.startsWith('// ')) || ''
+    const line = readFileSync(join(PLUGIN_ROOT, file), 'utf8').split(/\r?\n/).find((l) => l.startsWith('// ')) || ''
     return line.slice(3).replace(/^(?:SDC )?(?:tf|task-flow)(?: core)?(?:\s*[—:-])?\s+/i, '').slice(0, 100)
   } catch { return '' }
 }

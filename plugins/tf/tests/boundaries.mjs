@@ -46,7 +46,7 @@ const filesIn = (top, keep = (n) => CODE.test(n)) => { try { return walk(join(RO
 // Static and dynamic import specifiers of a file.
 function specifiers(file) {
   // Comment lines are not imports, even when they show one.
-  const src = readFileSync(file, 'utf8').split('\n').filter((l) => !/^\s*(?:\/\/|\*|\/\*)/.test(l)).join('\n')
+  const src = readFileSync(file, 'utf8').split(/\r?\n/).filter((l) => !/^\s*(?:\/\/|\*|\/\*)/.test(l)).join('\n')
   const out = []
   for (const m of src.matchAll(/(?:^|[\n;])\s*(?:import|export)\s+(?:type\s+)?(?:[^'";]*?\s+from\s+)?['"]([^'"]+)['"]/g)) out.push(m[1])
   for (const m of src.matchAll(/\bimport\(\s*['"]([^'"]+)['"]\s*\)/g)) out.push(m[1])
@@ -120,7 +120,7 @@ for (const [top, allowed] of Object.entries(MAY_IMPORT)) {
 test('the old scripts/ entry points are only re-exports', () => {
   const bad = []
   for (const f of filesIn('scripts')) {
-    const code = readFileSync(f, 'utf8').split('\n').filter((l) => l.trim() && !l.startsWith('//') && !l.startsWith('#!'))
+    const code = readFileSync(f, 'utf8').split(/\r?\n/).filter((l) => l.trim() && !l.startsWith('//') && !l.startsWith('#!'))
     if (rel(f) === 'scripts/platform.mjs') continue // also adds the Claude Code data folder to `info`
     if (!code.every((l) => /^export \* from '\.\.\/[\w/.-]+'$/.test(l))) bad.push(rel(f))
   }
