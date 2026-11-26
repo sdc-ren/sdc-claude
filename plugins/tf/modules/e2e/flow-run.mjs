@@ -3,7 +3,10 @@
 //
 //   node flow-run.mjs <taskDir> [--cases 21,22 | --cases-file ids.json] [--failed] [--target local|dev|<name>]
 //                     [--env K=V]… [--playwright <package.json>] [--timeout <s>] [--jobs 3] [--commit <id>]
-//                     [--changed] [--verbose]
+//                     [--changed] [--verbose] [--help]
+//
+//   --playwright the Playwright install (a package.json that has it); default: the config's `Playwright package`.
+//   Any other option is an error (exit 2): an unknown one is never read as a value.
 //
 //   --cases      internal case ids (flows/<id>.mjs). An id with no flow is an error (exit 2), never skipped.
 //   --cases-file a JSON array of internal ids (what `cases.mjs scope --out` writes).
@@ -40,22 +43,31 @@ import { spawn, execFileSync } from 'node:child_process'
 import { createHash, randomBytes } from 'node:crypto'
 import { rootOfTask } from '../../core/platform.mjs'
 import { commitOf } from '../task/task.mjs'
+import { playwrightOf } from './cases.mjs'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const argv = process.argv.slice(2)
+const USAGE = 'usage: flow-run.mjs <taskDir> [--cases a,b | --cases-file ids.json] [--failed] [--changed] [--target name] [--env K=V]… [--playwright <package.json>] [--timeout s] [--jobs n] [--commit id] [--verbose] | --list | --save-target <name> --env K=V… | --ensure-target <name> | --mark-written <id,id>'
+// Every option is known: an unknown one (`--help`, a typo) stops here instead of being read as a value and
+// running every flow of the task, which rewrites flows.json and the evidence of cases nobody asked for.
+const FLAGS = new Set(['failed', 'changed', 'verbose', 'list'])
+const VALUES = new Set(['cases', 'cases-file', 'target', 'playwright', 'timeout', 'jobs', 'commit', 'save-target', 'ensure-target', 'mark-written'])
+if (argv.some((a) => a === '--help' || a === '-h')) { console.log(USAGE); process.exit(0) }
 const dir = resolve(argv[0] || '')
-if (!argv[0] || !existsSync(dir)) { console.error('usage: flow-run.mjs <taskDir> [--cases a,b] [--failed] [--target name] [--env K=V]…'); process.exit(1) }
+if (!argv[0] || argv[0].startsWith('-') || !existsSync(dir)) { console.error(USAGE); process.exit(1) }
 const opts = { env: {} }
 for (let i = 1; i < argv.length; i++) {
   const a = argv[i]
-  if (a === '--failed') opts.failed = true
-  else if (a === '--changed') opts.changed = true
-  else if (a === '--verbose') opts.verbose = true
-  else if (a === '--list') opts.list = true
-  else if (a === '--env') { const [k, ...v] = argv[++i].split('='); opts.env[k] = v.join('=') }
-  else if (a.startsWith('--')) opts[a.slice(2)] = argv[++i]
+  const name = a.slice(2)
+  if (!a.startsWith('--')) { console.error(`flow-run: unexpected argument "${a}"\n${USAGE}`); process.exit(2) }
+  if (FLAGS.has(name)) opts[name] = true
+  else if (name === 'env' || VALUES.has(name)) {
+    const v = argv[++i]
+    if (v === undefined || v.startsWith('--')) { console.error(`flow-run: ${a} needs a value\n${USAGE}`); process.exit(2) }
+    if (name === 'env') { const [k, ...rest] = v.split('='); opts.env[k] = rest.join('=') } else opts[name] = v
+  } else { console.error(`flow-run: unknown option ${a}\n${USAGE}`); process.exit(2) }
 }
 const fail = (error, extra = {}) => { console.log(JSON.stringify({ error, ...extra }, null, 2)); process.exit(2) }
 const CASE_ID = /^[A-Za-z0-9_-]{1,64}$/
@@ -188,7 +200,8 @@ const childEnv = {
   TARGET: target,
   TF_ROOT: resolve(dir, '..', '..'),
   TF_SLUG: basename(dir),
-  ...(opts.playwright ? { PLAYWRIGHT_FROM: resolve(opts.playwright) } : {}),
+  // --playwright, else the workspace config's `Playwright package` line: nobody has to remember the flag.
+  ...((opts.playwright || playwrightOf(rootOfTask(dir))) ? { PLAYWRIGHT_FROM: opts.playwright ? resolve(opts.playwright) : playwrightOf(rootOfTask(dir)) } : {}),
 }
 const results = []
 function runCase(f) {

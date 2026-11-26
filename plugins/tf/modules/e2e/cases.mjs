@@ -185,6 +185,16 @@ export function flowsOf(taskDir) {
   return { targets: f.targets && typeof f.targets === 'object' ? f.targets : {}, cases: f.cases && typeof f.cases === 'object' ? f.cases : {} }
 }
 
+// The Playwright install the workspace config names (`## Flows` → `- Playwright package: \`<root>/x/package.json\``),
+// resolved against the workspace root; '' when the line is missing, still a template, or the file does not exist.
+export function playwrightOf(root) {
+  const cfg = readText(configPath(root))
+  const m = cfg && cfg.match(/^-\s*Playwright package\s*:\s*`([^`]+)`/im)
+  if (!m || /<path>|<[^>]*>\/package\.json$/.test(m[1].replace(/<root>/g, ''))) return ''
+  const p = resolve(root, m[1].replace(/^(<root>|\{\{root\}\})\/?/, ''))
+  return existsSync(p) ? p : ''
+}
+
 // Targets a run may use: local, the ones saved in flows.json, the ones the workspace config `## Flows` names.
 export function knownTargets(taskDir) {
   const names = new Set(['local', ...Object.keys(flowsOf(taskDir).targets)])

@@ -4,6 +4,18 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.33.1] — 2026-11-26
+
+### Fixed
+- `flow-run.mjs <task> --help` ran every flow of the task (the unknown option took the next word as its value),
+  rewriting `flows.json` and the evidence of cases nobody asked for. `--help` now prints the usage, and any unknown
+  option or a missing value stops the run (exit 2) before a flow starts.
+- `flow-run.mjs` now takes the Playwright install from the config's `Playwright package` line when `--playwright`
+  is not given. About one tester job in five lost a run to "Playwright not found".
+- `metrics.mjs`: re-tests counted every tester job after the first, so testers running side by side for each repo
+  or platform looked like re-tests (about 56% instead of 22% on a three-repo workspace). A re-test is now a tester
+  job in a later batch, after a PM turn or dev work. `--json` printed to a pipe was cut at 64 KB.
+
 ## [1.33.0] — 2026-11-26
 
 ### Added

@@ -68,7 +68,7 @@ No row for a repo → its test script from the repo `CLAUDE.md` / package file w
   category tag (`[M1]`…, see guidelines/review-standard.md); devs and reviewers read it before every job.
 
 ## Flows (e2e)
-- Playwright package: `<path>/package.json` (`--playwright` / `PLAYWRIGHT_FROM`).
+- Playwright package: `<path>/package.json` (`flow-run.mjs` uses it when no `--playwright` is given; `<root>/…` is the workspace root).
 - Targets: `local` = the task's own ports; `dev` = <shared dev URL, or "not allowed">.
 - Accounts: <where test credentials come from (env names, seed files)>.
 - Login recipe: <path#section>.
