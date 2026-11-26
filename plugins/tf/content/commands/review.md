@@ -5,6 +5,8 @@ args: "<PR url|ticket key> [--attach]"
 user-only: true
 ---
 
+{{fallback}}
+
 Plugin root `<PLUGIN>` = `{{root}}`.
 
 Read `{{root}}/docs/orchestrator.md` and follow it exactly, with:

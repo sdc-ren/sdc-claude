@@ -5,6 +5,8 @@ args: "[<slug> | --migrate | --legacy]"
 user-only: true
 ---
 
+{{fallback}}
+
 Input: `{{args}}`. `<cwd>` is the workspace root (the folder that holds `{{config}}`).
 Every action: show the plan, then act only after a clear yes from the user.
 

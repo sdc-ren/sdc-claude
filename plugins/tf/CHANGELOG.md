@@ -4,6 +4,40 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.30.0] — 2026-11-26
+
+### Added
+- **GitHub Copilot CLI host — not tried yet.** Copilot CLI reads Claude Code's plugin and marketplace layout, so
+  `copilot plugin marketplace add sdc-ren/sdc-claude` and `copilot plugin install tf@sdc` should install tf.
+  `hosts/copilot/`: the driver (`copilot -p … -s --no-ask-user --assisted-approval`, the commands a tf job needs
+  allowed, models per tier from `TF_COPILOT_MODELS`), `run.mjs` on the shared background runner, and the host
+  notes. Written from Copilot CLI's documentation and covered by tests with a fake `copilot`; nothing has run
+  against a real Copilot. The guard hook understands Copilot's `toolName`/`toolArgs` input and answer format.
+
+## [1.29.0] — 2026-11-26
+
+### Added
+- **tf runs on Codex.** The same marketplace installs it: `codex plugin marketplace add sdc-ren/sdc-claude`,
+  `codex plugin add tf@sdc`, then `$tf:build …` in Codex. Codex reads the shared `skills/`; each command says
+  what the plugin root, the input and the host notes are when the agent does not fill Claude Code's
+  placeholders. `hosts/codex/notes.md` says how Codex asks you, runs the executor and so on.
+- **A process runtime for hosts without a script runner** (`runtime/`): the engine runs in the background
+  (`run.mjs start`, then `run.mjs wait` until `RESULT`), every job is its own agent process, the answer is
+  checked against the engine's schema (`engine/src/validate.mjs`) and the same session is asked again when it
+  does not match. Codex's driver runs `codex exec` in its workspace-write sandbox with network on, tf's state
+  folder and the workspace repos' `.git` writable, and `--approve-for-me`; the tier sets the reasoning effort.
+- **The tool guard as a command hook** (`runtime/guard-hook.mjs`): the same rules as the Claude Code guard, for
+  Codex (`PreToolUse`) and Copilot-style inputs, keyed on the job the runtime starts (`TF_JOB`). Outside a tf
+  job the hook exits without starting node.
+- `hosts/codex/build.mjs` writes `.codex-plugin/plugin.json`, `hooks.json` and, per command,
+  `skills/<name>/agents/openai.yaml` so Codex never starts a tf command on its own.
+
+### Checked on Codex CLI 0.155
+Install from the marketplace, the skills Codex lists, a real `codex exec` job through the runtime (tester role,
+REPORT answer, 13 s), and a commit inside the sandbox once the repo's `.git` is writable. **Not checked:** that
+Codex runs the plugin's guard hook (hooks need Codex's trust; a hook passed on the command line was not run),
+and that `$tf:build` loads the command while implicit invocation is off.
+
 ## [1.28.0] — 2026-11-26
 
 Second step towards running tf on more than one coding agent (`plans/tf-architecture.md`): the engine and the

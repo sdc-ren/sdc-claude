@@ -5,6 +5,8 @@ args: "<task: key, link, slug> [--draft] [--attach]"
 user-only: true
 ---
 
+{{fallback}}
+
 Plugin root `<PLUGIN>` = `{{root}}`.
 
 Read `{{root}}/docs/orchestrator.md` and follow it exactly, with:

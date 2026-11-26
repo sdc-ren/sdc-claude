@@ -5,6 +5,8 @@ args: "<PR url|task> [--cases TC1,TC2] [--target local|dev] [--assume] [--attach
 user-only: true
 ---
 
+{{fallback}}
+
 Plugin root `<PLUGIN>` = `{{root}}`.
 
 Read `{{root}}/docs/orchestrator.md` and `{{root}}/docs/orchestrator-e2e.md` and follow them exactly, with:

@@ -500,6 +500,30 @@ The PM sizes by the change, not by the ticket's wording, and a later round by wh
 Money, auth, permissions, data migrations and read-only zones never go below M. Details:
 [docs/design.md](docs/design.md#sizing-and-models-pm-decides).
 
+## Other coding agents
+
+tf's code and prompts are shared; what one coding agent does its own way lives in `hosts/<agent>/` (its build,
+its notes, how it runs a job). The docs write those steps as *(host: …)*.
+
+| | Claude Code | Codex | GitHub Copilot CLI (not tried yet) |
+|---|---|---|---|
+| Install | `/plugin install tf@sdc` | `codex plugin add tf@sdc` (same marketplace) | `copilot plugin install tf@sdc` (same marketplace) |
+| Call a command | `/tf:build …` | `$tf:build …` | the name `/skills list` shows |
+| Executor | the Workflow tool, jobs as subagents | `hosts/codex/run.mjs` in the background, each job a `codex exec` | `hosts/copilot/run.mjs` in the background, each job a `copilot -p` |
+| Asking you | `AskUserQuestion` | questions in the reply; the run waits for your answer | the same as Codex |
+| Tool guard | hooks module (`hooks/guard.ts`) | `PreToolUse` command hook (`hooks.json`), active only in tf's jobs | the same hook file, if Copilot reads it |
+| Models | haiku / sonnet / opus per job | your Codex model; the tier sets the reasoning effort (low / medium / high) | Copilot's default, or `TF_COPILOT_MODELS` per tier |
+| `/tf:demo`, `/tf:digest`, attachments, metrics | yes | no | no |
+
+Codex jobs run in Codex's workspace-write sandbox with network on, tf's state folder and the workspace repos'
+`.git` folders writable, and approvals routed to Codex's automatic reviewer (`--approve-for-me`). Extra flags
+for every job: `TF_CODEX_ARGS='["-m","<model>"]'`; jobs at once: `TF_JOBS` (default 4).
+
+Copilot jobs run with `--no-ask-user`, git, node, the package managers and `gh` allowed, and everything else
+sent to Copilot's safety review (`--assisted-approval`). `TF_COPILOT_MODELS='{"large":"<model>"}'` picks
+models per tier, `TF_COPILOT_ARGS` adds flags. A prompt is passed on the command line: on Windows a very long
+job prompt may not fit.
+
 ## Workspace configuration
 
 tf reads `<workspace>/.claude/task-flow.md`. Start from [docs/config-template.md](docs/config-template.md).

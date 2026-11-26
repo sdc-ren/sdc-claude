@@ -20,7 +20,10 @@ const BANNER = `// GENERATED from engine/src/ by hosts/claude/build.mjs — edit
 // What the shared placeholders are in Claude Code: it substitutes ${CLAUDE_PLUGIN_ROOT} and $ARGUMENTS itself.
 const BASE = { root: '${CLAUDE_PLUGIN_ROOT}', args: '$ARGUMENTS', config: '.claude/task-flow.md', roles: '${CLAUDE_PLUGIN_ROOT}/agents', background: '`run_in_background`' }
 const NOTES = fill(readFileSync(join(PLUGIN_ROOT, 'hosts', 'claude', 'notes.md'), 'utf8').replace(/\r\n/g, '\n').replace(/\n+$/, ''), BASE)
-export const VARS = { ...BASE, notes: NOTES }
+// The shared skills/ folder is read by every agent that installs this plugin (Codex and Copilot read Claude
+// Code's layout); only Claude Code fills the placeholders, so each command says what to do when they were not.
+const FALLBACK = "Not in Claude Code? When the plugin root and the input below still read as variables, `<PLUGIN>` is the folder that holds this file's `skills/` folder, the input is what the user wrote with the command, and the host notes are `<PLUGIN>/hosts/<agent>/notes.md` for the agent you run in (`codex`, `copilot`), not the Claude Code ones."
+export const VARS = { ...BASE, notes: NOTES, fallback: FALLBACK }
 // Shared front matter keys → Claude Code's.
 const COMMAND_KEYS = { name: 'name', description: 'description', args: 'argument-hint', 'user-only': 'disable-model-invocation' }
 const ROLES = JSON.parse(readFileSync(join(PLUGIN_ROOT, 'hosts', 'claude', 'roles.json'), 'utf8'))

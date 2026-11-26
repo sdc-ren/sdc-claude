@@ -106,6 +106,7 @@ const MAY_IMPORT = {
   cli: ['core/', 'modules/', 'cli/'],
   'engine/src': ['engine/src/'],
   build: ['core/', 'build/'],
+  runtime: ['core/', 'engine/src/', 'runtime/'],
 }
 for (const [top, allowed] of Object.entries(MAY_IMPORT)) {
   test(`${top}/ imports only ${allowed.join(', ')}`, () => {

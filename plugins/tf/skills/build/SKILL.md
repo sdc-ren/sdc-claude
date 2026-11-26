@@ -5,6 +5,8 @@ argument-hint: "<key | link(s) | words> [--approve] [--assume] [--draft] [--lang
 disable-model-invocation: true
 ---
 
+Not in Claude Code? When the plugin root and the input below still read as variables, `<PLUGIN>` is the folder that holds this file's `skills/` folder, the input is what the user wrote with the command, and the host notes are `<PLUGIN>/hosts/<agent>/notes.md` for the agent you run in (`codex`, `copilot`), not the Claude Code ones.
+
 Plugin root `<PLUGIN>` = `${CLAUDE_PLUGIN_ROOT}`.
 
 Read `${CLAUDE_PLUGIN_ROOT}/docs/orchestrator.md` and follow it exactly, with:

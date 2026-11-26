@@ -1,0 +1,16 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": ".*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "if [ -n \"$TF_JOB\" ] && [ -n \"$TF_PLUGIN\" ]; then exec node \"$TF_PLUGIN/runtime/guard-hook.mjs\"; fi",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

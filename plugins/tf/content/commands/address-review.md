@@ -5,6 +5,8 @@ args: "<ticket key|PR url> [--check] [--lang vi]"
 user-only: true
 ---
 
+{{fallback}}
+
 Plugin root `<PLUGIN>` = `{{root}}`.
 
 Read `{{root}}/docs/orchestrator.md` and follow it exactly, with:
