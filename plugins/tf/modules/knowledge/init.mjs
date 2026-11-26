@@ -18,7 +18,7 @@ import { KNOWLEDGE_KEYS, knowledgeOf, readConfig, section } from '../../core/con
 import { PLUGIN_ROOT, isMain } from '../../core/main.mjs'
 import { CONFIG_FILE, configPath } from '../../core/paths.mjs'
 import { detect } from './detect.mjs'
-import { CHECK_CMD, DEFAULT_ENTRY, GEN_CMD, generate, ownable } from './gen.mjs'
+import { CHECK_CMD, DEFAULT_ENTRY, DIFF_CMD, GEN_CMD, generate, ownable } from './gen.mjs'
 
 const posix = (p) => p.split(sep).join('/')
 const text = (p) => { try { return readFileSync(p, 'utf8').replace(/\r\n/g, '\n') } catch { return '' } }
@@ -70,6 +70,8 @@ function knowledgeLines(p, c) {
     add('generate', `\`${GEN_CMD}\``)
     add('check', `\`${CHECK_CMD}\``)
     add('refresh', 'when needed')
+    // The contract diff, when a repo serves routes tf can read.
+    if (p.repos.some((r) => r.stack.some((s) => /^(Express|NestJS|Next\.js|Nuxt|Fastify)$/.test(s)))) add('diff', `\`${DIFF_CMD}\``)
     add('ledger', `\`${posix(join(dirname(entry), 'pipeline'))}/\``)
   }
   if (indexed) add('codeIndex', p.tools.filter((t) => t.installed).map((t) => t.name).join(', ') || 'codegraph')

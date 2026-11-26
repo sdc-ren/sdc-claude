@@ -60,6 +60,8 @@ No row for a repo → its test script from the repo `CLAUDE.md` / package file w
 - Topics: <optional: comma-separated words the ledger is sliced by; default: the repos' domain folders>
 - Ledger: `knowledge/pipeline/` (findings, decisions, env-recipes, review-lessons — hand-kept)
 - Code index: codegraph
+- API prefix: <optional: the prefix routes and calls may differ by, e.g. /api/v1>
+- API clients: <optional: names of your own API call helpers tf should read, e.g. apiFetch, http>
 - Review lessons: `knowledge/pipeline/review-lessons.md` — rules learned from human PR reviews, each led by its
   category tag (`[M1]`…, see guidelines/review-standard.md); devs and reviewers read it before every job.
 
