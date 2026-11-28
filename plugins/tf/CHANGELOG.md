@@ -4,6 +4,15 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.33.3] — 2026-11-28
+
+### Fixed
+- **Merge conflicts on a PR follow one recipe.** `guidelines/git.md` spells it out — `git pull --no-rebase origin
+  <base>`, resolve each conflict by hand keeping both sides' intent, no markers left, typecheck, `commit --no-edit`,
+  push — and forbids what runs did instead: a rebase, a separate `git merge` first, `reset --hard` to start over,
+  stripping markers with a regex, `--ours/--theirs` on a whole file unread, a force-push. The reviewer no longer
+  carries its own `git merge origin/<base>` variant; it points at that recipe.
+
 ## [1.33.2] — 2026-11-26
 
 ### Added
