@@ -4,6 +4,17 @@ All notable changes to the `tf` plugin are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) and the project uses
 [Semantic Versioning](https://semver.org/).
 
+## [1.34.0] — 2026-11-28
+
+### Added
+- **`/tf:rules-audit`** (Claude Code) — reads every instruction file the workspace loads (global and workspace
+  CLAUDE.md/AGENTS.md, repo CLAUDE.md, `.claude/task-flow.md`, memory) and reports contradictions, duplicates,
+  rules in the wrong place, stale references and text worth cutting, each with `file:line` and a proposed fix.
+  Only the fixes you pick are applied; a contradiction only with the side you choose; tf's own files never.
+- **`rules.mjs check|inventory <root>`**, also run by `/tf:status --doctor` (warnings only): a file past its word
+  budget for where it loads, `MEMORY.md` near the 200-line cut, a memory file missing from the index or a link to a
+  missing one, a rule naming a tf script or option that does not exist. A linked `AGENTS.md` → `CLAUDE.md` counts once.
+
 ## [1.33.3] — 2026-11-28
 
 ### Fixed

@@ -21,7 +21,7 @@ test('every command points at a file that exists', () => {
 test('every old script with a command line has a tf command', () => {
   // Not command lines: a library for flow scripts, the sandboxed canvas render, the MCP server.
   const notCli = new Set(['flow-kit', 'canvas-smoke', 'artifacts-mcp'])
-  const claudeOnly = new Set(['doctor', 'metrics', 'artifacts-local'])
+  const claudeOnly = new Set(['doctor', 'metrics', 'artifacts-local', 'rules'])
   const names = readdirSync(join(ROOT, 'scripts')).filter((f) => f.endsWith('.mjs')).map((f) => f.slice(0, -4))
   for (const n of names) {
     if (notCli.has(n)) continue

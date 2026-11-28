@@ -8,6 +8,7 @@ export const CLAUDE_COMMANDS = {
   ...COMMANDS,
   doctor: 'hosts/claude/doctor.mjs',
   metrics: 'hosts/claude/metrics.mjs',
+  rules: 'hosts/claude/rules.mjs',
   'artifacts-local': 'hosts/claude/artifacts-local.mjs',
 }
 
