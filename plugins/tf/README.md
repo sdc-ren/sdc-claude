@@ -98,6 +98,7 @@ post one.
 | [`/tf:status`](#tfstatus) | See what tasks hold; check the machine |
 | [`/tf:servers`](#tfservers) | See the dev servers tasks run and stop the ones you pick |
 | [`/tf:clean`](#tfclean) | Free finished tasks, migrate old layouts |
+| [`/tf:rules-audit`](#tfrules-audit) | Find contradictions, duplicates and bloat in your CLAUDE.md, config and memory |
 
 ### Options shared by the task commands
 
@@ -356,7 +357,7 @@ tasks hold the same id.
 
 | Option | Effect |
 |---|---|
-| `--doctor` | Also check this machine and workspace: Node, git, `gh` login, plugin agents and guidelines, workspace config, repos and their base branches, Playwright, and the config's own `## Doctor` checks (DB containers, SDKs, devices…) — with how to fix each failure. Run it once on a new machine. |
+| `--doctor` | Also check this machine and workspace: Node, git, `gh` login, plugin agents and guidelines, workspace config, repos and their base branches, Playwright, the instruction files' size and references (`/tf:rules-audit`), and the config's own `## Doctor` checks (DB containers, SDKs, devices…) — with how to fix each failure. Run it once on a new machine. |
 | `--metrics [slug]` | What runs cost, measured from the agents' transcripts: one line per run (plugin version, wall time, minutes per role, jobs, re-tests, tokens). With a slug: every job of that task — minutes, time in tools vs model, slowest commands. Each run is also saved to `.pipeline/<TICKET>/metrics.json` and summarised in the run report. |
 
 ### `/tf:servers`
@@ -370,6 +371,22 @@ the worktree's current code (`current`, `STALE`, `?`), how long it has been up, 
 `by hand` for a process listening from a task's worktree that tf did not start). You pick the ones to stop; tf
 stops only processes running from that task's worktree. A task still running starts its servers again on its next
 `serve.mjs start`, which also restarts a server whose code changed.
+
+### `/tf:rules-audit`
+
+```
+/tf:rules-audit [<topic>]
+```
+
+Claude Code only. Reads every instruction file the workspace loads — `~/.claude/CLAUDE.md` with its imports,
+CLAUDE.md/AGENTS.md above and in the workspace and its repos, `.claude/task-flow.md`, the workspace's memory — and
+reports, with `file:line`: contradictions (two recipes for one thing), duplicates, rules in the wrong place (a
+global rule about one project, a rule tf runs need that only memory holds), stale references, and text worth
+cutting from files every session loads. Each finding comes with a proposed fix; only the ones you pick are applied,
+a contradiction only with the side you choose, and tf's own files are never edited. A topic (`git`, `jira`) narrows
+it. The cheap part runs in `/tf:status --doctor` too: `rules.mjs check` warns when a file passes its word budget,
+`MEMORY.md` nears the 200 lines Claude Code reads, a memory file is missing from the index, or a rule names a tf
+script or option that does not exist.
 
 ### `/tf:clean`
 

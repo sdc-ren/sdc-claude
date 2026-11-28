@@ -17,6 +17,7 @@ import { fileURLToPath } from 'node:url'
 import { createRequire } from 'node:module'
 import { SH, info, okRef, which } from '../../core/platform.mjs'
 import { reaperInstalled } from '../../modules/resources/reaper.mjs'
+import { checkRules, ruleFiles } from './rules.mjs'
 
 const root = resolve(process.argv[2] || '.')
 const cfgPath = configPath(root)
@@ -93,6 +94,15 @@ if (pw) {
   let ok = false
   try { createRequire(resolve(pj))('@playwright/test'); ok = true } catch { try { createRequire(resolve(pj))('playwright'); ok = true } catch {} }
   check('Playwright (config)', ok, pj)
+}
+
+// Instruction files (CLAUDE.md, config, memory): size, dead script references, memory index. Warnings only.
+{
+  const files = ruleFiles(root)
+  const warns = checkRules(root, { files })
+  const always = files.filter((f) => ['global', 'ancestor', 'project', 'memory-index'].includes(f.scope)).reduce((n, f) => n + f.words, 0)
+  check(`rules files (${files.length}, ${always} words in every session)`, !warns.length, warns.length ? `${warns.length} warning(s) below — /tf:rules-audit proposes fixes` : '', false)
+  for (const w of warns) check(w.label, false, w.detail, false)
 }
 
 // Workspace-specific checks: ## Doctor section
