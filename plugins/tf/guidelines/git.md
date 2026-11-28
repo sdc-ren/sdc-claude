@@ -59,6 +59,10 @@ refuses a `git commit -m` or a `--title` that breaks these rules on its own.
 
 ## Fixing merge conflicts on a PR
 
-1. On the PR branch: `git pull --no-rebase origin <base>` (merge, never rebase).
-2. Resolve every conflict keeping both sides' intent; run the repo's typecheck/tests.
-3. Commit the merge (default merge message is fine), then `git push` — never force-push.
+1. On the PR branch, clean working tree: `git pull --no-rebase origin <base>` (merge, never rebase). Not
+   `git rebase`, not `pull --rebase`, not a separate `git merge` first, not `reset --hard` to start over.
+2. Read each conflict (both sides' diff and log) and resolve it by hand, keeping both sides' intent. Never
+   strip markers with a regex or bulk script; no `checkout --ours/--theirs` on a whole file without
+   reading both sides. Unsure what a side meant → stop and ask.
+3. No markers left (`git diff --check`); run the repo's typecheck/tests.
+4. `git commit --no-edit` (default merge message), then `git push` — never force-push.
